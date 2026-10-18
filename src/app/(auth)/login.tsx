@@ -1,7 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import { z } from 'zod';
 
@@ -48,9 +49,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    <KeyboardAwareScrollView
+      style={{ backgroundColor: theme.colors.background }}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      bottomOffset={24}
     >
       <View style={styles.form}>
         <Text variant="headlineMedium" style={styles.title}>
@@ -107,12 +110,12 @@ export default function LoginScreen() {
           ログイン
         </Button>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center' },
+  container: { flexGrow: 1, justifyContent: 'center' },
   form: { paddingHorizontal: 24, gap: 4 },
   title: { textAlign: 'center', marginBottom: 24 },
 });

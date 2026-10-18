@@ -2,7 +2,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Button, HelperText, List, RadioButton, Snackbar, Switch, TextInput, useTheme } from 'react-native-paper';
 import { z } from 'zod';
 
@@ -105,7 +106,11 @@ export default function AccountEditScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ title }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+      >
         <Controller
           control={control}
           name="name"
@@ -198,7 +203,7 @@ export default function AccountEditScreen() {
         {!isNew && account.data && !account.data.is_archived && (
           <HelperText type="info">非表示にしても過去の記録は残り、純資産にも含まれます</HelperText>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Snackbar visible={create.isError || update.isError} onDismiss={() => (create.reset(), update.reset())}>
         保存できませんでした。通信状態を確認してください

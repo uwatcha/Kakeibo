@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, useTheme } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
@@ -50,13 +51,15 @@ export default function RootLayout() {
   const theme = colorScheme === 'dark' ? MD3DarkTheme : MD3LightTheme;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <PaperProvider theme={theme}>
-        <AuthProvider>
-          <StatusBar style="auto" />
-          <RootNavigator />
-        </AuthProvider>
-      </PaperProvider>
-    </QueryClientProvider>
+    <KeyboardProvider>
+      <QueryClientProvider client={queryClient}>
+        <PaperProvider theme={theme}>
+          <AuthProvider>
+            <StatusBar style="auto" />
+            <RootNavigator />
+          </AuthProvider>
+        </PaperProvider>
+      </QueryClientProvider>
+    </KeyboardProvider>
   );
 }

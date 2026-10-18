@@ -1,7 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, type Resolver, useForm, type UseFormSetValue, useWatch } from 'react-hook-form';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
   Button,
   Dialog,
@@ -229,7 +230,11 @@ export default function TransactionEditScreen() {
               ),
         }}
       />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+      >
         <SegmentedButtons
           value={PRIMARY_TYPES.includes(type) ? type : OTHER}
           onValueChange={(v) => changeType(v === OTHER ? 'advance' : (v as TransactionType))}
@@ -399,7 +404,7 @@ export default function TransactionEditScreen() {
         >
           保存
         </Button>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Portal>
         <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>

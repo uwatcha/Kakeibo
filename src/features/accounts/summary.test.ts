@@ -30,6 +30,10 @@ describe('summarizeBalances', () => {
     expect(summary.netWorth).toBe(8000 + 120000 + 300000 - 15000 - 20000 + 800 + 500);
   });
 
+  it('普段使わない口座を除いた額は、負債を差し引いたうえで NISA を除く', () => {
+    expect(summary.availableNetWorth).toBe(8000 + 120000 - 15000 - 20000 + 800 + 500);
+  });
+
   it('普段使う口座と普段使わない口座を分ける', () => {
     expect(summary.everyday.map((a) => a.name)).toEqual(['財布', '銀行']);
     expect(summary.everydayTotal).toBe(128000);
@@ -57,6 +61,7 @@ describe('summarizeBalances', () => {
   it('口座がなければすべて 0', () => {
     const empty = summarizeBalances([]);
     expect(empty.netWorth).toBe(0);
+    expect(empty.availableNetWorth).toBe(0);
     expect(empty.creditCardUnpaid).toBe(0);
     expect(empty.everyday).toEqual([]);
   });

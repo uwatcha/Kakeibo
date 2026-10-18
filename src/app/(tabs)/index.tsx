@@ -4,6 +4,7 @@ import { Button, Card, Divider, FAB, List, Text, useTheme } from 'react-native-p
 
 import { QueryState } from '@/components/QueryState';
 import { ACCOUNT_KIND_INFO, isLiability } from '@/features/accounts/accountKinds';
+import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, summarizeBalances } from '@/features/accounts/summary';
 import { formatYen } from '@/lib/money';
@@ -54,12 +55,16 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="labelLarge">純資産</Text>
-            <Text variant="displaySmall">{formatYen(summary.netWorth)}</Text>
-          </Card.Content>
-        </Card>
+        <BalanceCarousel
+          pages={[
+            {
+              title: '手元の純資産',
+              caption: '純資産から普段使わない口座を除いた額',
+              amount: summary.availableNetWorth,
+            },
+            { title: '純資産', caption: 'すべての口座の合計（クレカ・借金を差し引き）', amount: summary.netWorth },
+          ]}
+        />
 
         {!hasAccounts && (
           <Card style={styles.card} mode="outlined">

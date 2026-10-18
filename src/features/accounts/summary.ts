@@ -14,6 +14,8 @@ export type AccountBalance = {
 export type BalanceSummary = {
   /** 全口座（非表示も含む）の残高合計 */
   netWorth: number;
+  /** 純資産から普段使わない口座（REQ-14）を除いた額。ホームでいちばん大きく出す */
+  availableNetWorth: number;
   /** 普段使う口座（現金・銀行・電子マネー・投資） */
   everyday: AccountBalance[];
   everydayTotal: number;
@@ -50,6 +52,8 @@ export function summarizeBalances(accounts: AccountBalance[]): BalanceSummary {
 
   return {
     netWorth: sum(accounts),
+    // 非表示にした口座も「普段使わない」ものだけ除く（純資産と同じく非表示の口座も含める）
+    availableNetWorth: sum(accounts.filter((a) => !(ASSET_KINDS.includes(a.kind) && a.isReserved))),
     everyday,
     everydayTotal: sum(everyday),
     reserved,
