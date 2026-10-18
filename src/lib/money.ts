@@ -1,8 +1,16 @@
 const yenFormatter = new Intl.NumberFormat('ja-JP');
 
-/** 円の整数を「1,234円」の形にする。負の値は「-1,234円」 */
+/** 数字と幅がそろうマイナス記号（ハイフンではなく U+2212） */
+export const MINUS = '\u2212';
+
+/** 円の整数を「1,234円」の形にする。負の値は「−1,234円」 */
 export function formatYen(amount: number): string {
-  return `${yenFormatter.format(amount)}円`;
+  return `${amount < 0 ? MINUS : ''}${yenFormatter.format(Math.abs(amount))}円`;
+}
+
+/** 増減用。0 以外は必ず符号を付ける（「+1,234円」「−1,234円」） */
+export function formatSignedYen(amount: number): string {
+  return `${amount > 0 ? '+' : ''}${formatYen(amount)}`;
 }
 
 /** 入力文字列（全角数字・カンマ可）を円の正の整数にする。不正なら null */

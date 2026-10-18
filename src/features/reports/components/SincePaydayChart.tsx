@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { ActivityIndicator, Button, Card, Text, useTheme } from 'react-native-paper';
 
+import { Amount } from '@/components/Amount';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
@@ -135,9 +136,12 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
         <View style={styles.summary}>
           <Text variant="bodyMedium">収入 {formatYen(income)}</Text>
           <Text variant="bodyMedium">支出 {formatYen(expense)}</Text>
-          <Text variant="bodyMedium" style={styles.bold}>
-            今 {formatYen(actual[todayIndex].balance)}
-          </Text>
+          <View style={styles.inline}>
+            <Text variant="bodyMedium" style={styles.bold}>
+              今{' '}
+            </Text>
+            <Amount value={actual[todayIndex].balance} variant="bodyMedium" style={styles.bold} />
+          </View>
         </View>
 
         <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
@@ -236,6 +240,7 @@ const styles = StyleSheet.create({
   gap: { gap: 8 },
   summary: { flexDirection: 'row', justifyContent: 'space-between' },
   bold: { fontWeight: 'bold' },
+  inline: { flexDirection: 'row', alignItems: 'baseline' },
   xLabel: { width: 40, marginLeft: -12 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },

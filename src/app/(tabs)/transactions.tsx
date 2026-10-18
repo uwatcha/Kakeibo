@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { Chip, Divider, FAB, IconButton, List, Text, useTheme } from 'react-native-paper';
 
+import { Amount } from '@/components/Amount';
 import { QueryState } from '@/components/QueryState';
 import type { Account } from '@/features/accounts/api';
 import { useAccounts } from '@/features/accounts/hooks';
@@ -11,7 +12,7 @@ import { categoryLabel } from '@/features/categories/tree';
 import type { Transaction } from '@/features/transactions/api';
 import { useMonthTransactions } from '@/features/transactions/hooks';
 import { groupByDate, monthTotals } from '@/features/transactions/list';
-import { amountSign, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
+import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { addMonths, formatDay, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 
@@ -44,32 +45,21 @@ function TransactionRow({
   accounts: readonly Account[];
   categories: readonly Category[];
 }) {
-  const theme = useTheme();
   const rule = TRANSACTION_RULES[t.type];
   const title =
     t.type === 'expense' || t.type === 'income'
       ? (categoryLabel(t.category_id, categories) ?? `${rule.label}（未分類）`)
       : rule.label;
   const description = [describeAccounts(t, accounts), t.payee].filter(Boolean).join('・');
-  const sign = amountSign(t.type);
-  const color =
-    t.type === 'income'
-      ? theme.colors.primary
-      : t.type === 'expense'
-        ? theme.colors.onSurface
-        : theme.colors.onSurfaceVariant;
+  // 収支に入る記録だけ符号を付ける（振替・貸し借りなどは自分のお金の置き場所が変わるだけなので符号なし）
+  const kind = t.type === 'income' ? 'income' : t.type === 'expense' ? 'expense' : 'neutral';
 
   return (
     <List.Item
       title={title}
       description={description}
       left={(props) => <List.Icon {...props} icon={rule.icon} />}
-      right={() => (
-        <Text style={[styles.amount, { color }]}>
-          {sign}
-          {formatYen(t.amount)}
-        </Text>
-      )}
+      right={() => <Amount value={t.amount} kind={kind} style={styles.amount} />}
       onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
     />
   );
@@ -104,9 +94,12 @@ export default function TransactionsScreen() {
       <View style={styles.totals}>
         <Text variant="bodyMedium">収入 {formatYen(totals.income)}</Text>
         <Text variant="bodyMedium">支出 {formatYen(totals.expense)}</Text>
-        <Text variant="bodyMedium" style={styles.bold}>
-          差額 {formatYen(totals.income - totals.expense)}
-        </Text>
+        <View style={styles.inline}>
+          <Text variant="bodyMedium" style={styles.bold}>
+            差額{' '}
+          </Text>
+          <Amount value={totals.income - totals.expense} kind="delta" variant="bodyMedium" style={styles.bold} />
+        </View>
       </View>
       {categoryFilter && (
         <View style={styles.filter}>
@@ -166,6 +159,7 @@ const styles = StyleSheet.create({
   totals: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 8, paddingHorizontal: 8 },
   filter: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8 },
   bold: { fontWeight: 'bold' },
+  inline: { flexDirection: 'row', alignItems: 'baseline' },
   amount: { alignSelf: 'center', fontVariant: ['tabular-nums'] },
   empty: { padding: 32, textAlign: 'center' },
   listContent: { paddingBottom: 96 },

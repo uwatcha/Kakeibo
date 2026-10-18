@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { PieChart } from 'react-native-gifted-charts';
 import { Card, IconButton, List, ProgressBar, Text, useTheme } from 'react-native-paper';
 
+import { Amount } from '@/components/Amount';
 import { Carousel } from '@/components/Carousel';
 import { QueryState } from '@/components/QueryState';
 import { useCategories } from '@/features/categories/hooks';
@@ -12,12 +13,12 @@ import { useCategoryExpense, useMonthComparison } from '@/features/reports/hooks
 import { SincePaydayChart } from '@/features/reports/components/SincePaydayChart';
 import { sliceColor } from '@/features/reports/palette';
 import { addMonths, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
-import { formatYen } from '@/lib/money';
+import { formatSignedYen, formatYen, MINUS } from '@/lib/money';
 
 function formatRate(rate: number | null): string {
   if (rate === null) return '';
   const percent = Math.round(rate * 100);
-  return `（${percent > 0 ? '+' : ''}${percent}%）`;
+  return `（${percent > 0 ? '+' : percent < 0 ? MINUS : ''}${Math.abs(percent)}%）`;
 }
 
 /** 収入・支出・差額と前月比のタイル */
@@ -29,13 +30,15 @@ function StatTile({ label, comparison, signed = false }: { label: string; compar
       <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
         {label}
       </Text>
-      <Text variant="titleMedium" style={styles.number} numberOfLines={1} adjustsFontSizeToFit>
-        {signed && current > 0 ? '+' : ''}
-        {formatYen(current)}
-      </Text>
+      {signed ? (
+        <Amount value={current} kind="delta" variant="titleMedium" numberOfLines={1} adjustsFontSizeToFit />
+      ) : (
+        <Text variant="titleMedium" style={styles.number} numberOfLines={1} adjustsFontSizeToFit>
+          {formatYen(current)}
+        </Text>
+      )}
       <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-        前月比 {diff > 0 ? '+' : ''}
-        {formatYen(diff)}
+        前月比 {formatSignedYen(diff)}
         {formatRate(rate)}
       </Text>
     </View>

@@ -1,12 +1,20 @@
-import { formatYen, parseNonNegativeYen, parseYen } from './money';
+import { formatSignedYen, formatYen, parseNonNegativeYen, parseYen } from './money';
 
 describe('formatYen', () => {
   it('3桁ごとにカンマを入れる', () => {
     expect(formatYen(1234567)).toBe('1,234,567円');
   });
 
-  it('負の値（負債の残高）も表示できる', () => {
-    expect(formatYen(-5000)).toBe('-5,000円');
+  it('負の値はマイナス記号（U+2212）を付ける', () => {
+    expect(formatYen(-5000)).toBe('\u22125,000円');
+  });
+});
+
+describe('formatSignedYen', () => {
+  it('増減は必ず符号を付ける', () => {
+    expect(formatSignedYen(2000)).toBe('+2,000円');
+    expect(formatSignedYen(-2000)).toBe('\u22122,000円');
+    expect(formatSignedYen(0)).toBe('0円');
   });
 });
 

@@ -1,8 +1,7 @@
-import { StyleSheet } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 
+import { Amount } from '@/components/Amount';
 import { Carousel } from '@/components/Carousel';
-import { formatYen } from '@/lib/money';
 
 type Page = { title: string; amount: number };
 
@@ -17,9 +16,7 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
           <Card>
             <Card.Content>
               <Text variant="labelLarge">{page.title}</Text>
-              <Text variant="displaySmall" style={styles.amount} numberOfLines={1} adjustsFontSizeToFit>
-                {formatYen(page.amount)}
-              </Text>
+              <Amount value={page.amount} variant="displaySmall" numberOfLines={1} adjustsFontSizeToFit />
             </Card.Content>
           </Card>
         ),
@@ -27,7 +24,3 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  amount: { fontVariant: ['tabular-nums'] },
-});

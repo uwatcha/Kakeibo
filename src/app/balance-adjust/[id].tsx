@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Button, HelperText, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 
+import { Amount } from '@/components/Amount';
 import { QueryState } from '@/components/QueryState';
 import { ACCOUNT_KIND_INFO, isLiability } from '@/features/accounts/accountKinds';
 import { planAdjustment } from '@/features/accounts/adjustment';
@@ -95,9 +96,11 @@ export default function BalanceAdjustScreen() {
         {actual !== null && (
           <View style={styles.row}>
             <Text variant="bodyLarge">差額</Text>
-            <Text variant="titleMedium" style={styles.number}>
-              {plan ? `${shownDiff > 0 ? '+' : ''}${formatYen(shownDiff)}` : 'ずれはありません'}
-            </Text>
+            {plan ? (
+              <Amount value={shownDiff} kind="delta" variant="titleMedium" />
+            ) : (
+              <Text variant="titleMedium">ずれはありません</Text>
+            )}
           </View>
         )}
 

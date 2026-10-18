@@ -184,10 +184,3 @@ export function normalizeAccounts(draft: TransactionDraft): {
     toAccountId: rule.to ? draft.toAccountId : null,
   };
 }
-
-/** 残高に対する向き。一覧で金額に付ける符号に使う（支出は -、収入は +、それ以外は付けない） */
-export function amountSign(type: TransactionType): '-' | '+' | '' {
-  if (type === 'expense') return '-';
-  if (type === 'income') return '+';
-  return '';
-}

@@ -3,20 +3,19 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Divider, FAB, List, Text, useTheme } from 'react-native-paper';
 
 import { QueryState } from '@/components/QueryState';
-import { ACCOUNT_KIND_INFO, isLiability } from '@/features/accounts/accountKinds';
+import { Amount } from '@/components/Amount';
+import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, summarizeBalances } from '@/features/accounts/summary';
 import { formatYen } from '@/lib/money';
 
 function AccountRow({ account }: { account: AccountBalance }) {
-  // 負債は「未払い・借りている額」として正の値で見せる
-  const shown = isLiability(account.kind) ? 0 - account.balance : account.balance;
   return (
     <List.Item
       title={account.name}
       left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[account.kind].icon} />}
-      right={() => <Text style={styles.amount}>{formatYen(shown)}</Text>}
+      right={() => <Amount value={account.balance} style={styles.amount} />}
       onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })}
     />
   );
@@ -26,7 +25,7 @@ function Section({ title, total, accounts }: { title: string; total: number; acc
   if (accounts.length === 0) return null;
   return (
     <Card style={styles.card} mode="contained">
-      <Card.Title title={title} right={() => <Text style={styles.sectionTotal}>{formatYen(total)}</Text>} />
+      <Card.Title title={title} right={() => <Amount value={total} style={styles.sectionTotal} />} />
       {accounts.map((a) => (
         <AccountRow key={a.id} account={a} />
       ))}
@@ -78,9 +77,9 @@ export default function HomeScreen() {
         )}
 
         <Section title="普段使う口座" total={summary.everydayTotal} accounts={summary.everyday} />
-        <Section title="クレジットカード（未払い）" total={summary.creditCardUnpaid} accounts={summary.creditCards} />
+        <Section title="クレジットカード" total={0 - summary.creditCardUnpaid} accounts={summary.creditCards} />
         <Section title="貸している・立て替え" total={summary.receivableTotal} accounts={summary.receivables} />
-        <Section title="借りている" total={summary.payableTotal} accounts={summary.payables} />
+        <Section title="借りている" total={0 - summary.payableTotal} accounts={summary.payables} />
 
         {summary.reserved.length > 0 && (
           <Card style={styles.card} mode="contained">
