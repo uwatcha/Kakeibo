@@ -7,7 +7,12 @@ import { Amount } from '@/components/Amount';
 import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
-import { type AccountBalance, summarizeBalances } from '@/features/accounts/summary';
+import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
+import { useEmployers } from '@/features/employers/hooks';
+import { nextPayday } from '@/features/employers/payday';
+import { useMovementsAfter } from '@/features/reports/hooks';
+import { spendableUntil } from '@/features/reports/spendable';
+import { toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 
 function AccountRow({ account }: { account: AccountBalance }) {
@@ -36,6 +41,9 @@ function Section({ title, total, accounts }: { title: string; total: number; acc
 export default function HomeScreen() {
   const theme = useTheme();
   const { data, isLoading, error, refetch, isRefetching } = useAccountBalances();
+  const today = toTokyoDateString();
+  const employers = useEmployers();
+  const future = useMovementsAfter(today);
 
   if (!data) {
     return (
@@ -48,6 +56,13 @@ export default function HomeScreen() {
   const summary = summarizeBalances(data);
   const hasAccounts = data.some((a) => !a.isArchived);
 
+  // 次の給料日の前日（働き先がなければ月末）までの予定を反映した、使える額
+  const next = nextPayday(employers.data?.filter((e) => !e.is_archived) ?? [], today);
+  const targets = new Set(data.filter(isAvailableAccount).map((a) => a.id));
+  const spendable = future.data
+    ? spendableUntil(summary.availableNetWorth, future.data, (id) => targets.has(id), today, next?.date ?? null)
+    : null;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView
@@ -58,6 +73,20 @@ export default function HomeScreen() {
           pages={[
             { title: '汎用資産', amount: summary.availableNetWorth },
             { title: '純資産', amount: summary.netWorth },
+            ...(spendable
+              ? [
+                  {
+                    title: next ? '給料日までに使える額' : '月末までに使える額',
+                    amount: spendable.amount,
+                    detail: [
+                      spendable.perDay !== null ? `1日あたり ${formatYen(spendable.perDay)}` : null,
+                      `あと${spendable.daysLeft}日`,
+                    ]
+                      .filter(Boolean)
+                      .join('・'),
+                  },
+                ]
+              : []),
           ]}
         />
 
