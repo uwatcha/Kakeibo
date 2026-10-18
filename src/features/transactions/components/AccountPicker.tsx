@@ -24,10 +24,7 @@ export function AccountPicker({ label, kinds, accounts, value, onChange, error }
     <View style={styles.container}>
       <Text variant="labelLarge">{label}</Text>
       {options.length === 0 ? (
-        <HelperText type="info">
-          選べる口座がありません（{kinds.map((k) => ACCOUNT_KIND_INFO[k].label).join('・')}）。設定 →
-          口座の管理から追加してください
-        </HelperText>
+        <HelperText type="info">選べる口座がありません</HelperText>
       ) : (
         <ChipGroup options={options} value={value} onChange={onChange} />
       )}

@@ -163,7 +163,7 @@ export default function ReportsScreen() {
 
       {items.length > 0 && (
         <Card mode="contained">
-          <Card.Title title="カテゴリ別の支出" subtitle="タップでその記録一覧へ" />
+          <Card.Title title="カテゴリ別の支出" />
           {/* ドーナツの凡例を兼ねる。色だけに頼らず名前・金額・割合を出す */}
           {items.map((item, index) => {
             const color = index < 5 ? sliceColor(index, false, theme.dark) : sliceColor(0, true, theme.dark);

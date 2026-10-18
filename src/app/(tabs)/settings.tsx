@@ -13,21 +13,18 @@ export default function SettingsScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <List.Item
         title="口座の管理"
-        description="追加・編集・並べ替え・非表示"
         left={(props) => <List.Icon {...props} icon="wallet" />}
         right={(props) => <List.Icon {...props} icon="chevron-right" />}
         onPress={() => router.push('/accounts')}
       />
       <List.Item
         title="カテゴリの管理"
-        description="追加・名前の変更・並べ替え・非表示"
         left={(props) => <List.Icon {...props} icon="shape" />}
         right={(props) => <List.Icon {...props} icon="chevron-right" />}
         onPress={() => router.push('/categories')}
       />
       <List.Item
         title="働き先と給料日"
-        description="給料日が休みの日なら自動で平日にずらします"
         left={(props) => <List.Icon {...props} icon="briefcase" />}
         right={(props) => <List.Icon {...props} icon="chevron-right" />}
         onPress={() => router.push('/employers')}

@@ -129,7 +129,7 @@ export default function AccountEditScreen() {
           {errors.name?.message}
         </HelperText>
 
-        <List.Subheader style={styles.subheader}>種類{isNew ? '' : '（作成後は変更できません）'}</List.Subheader>
+        <List.Subheader style={styles.subheader}>種類</List.Subheader>
         <Controller
           control={control}
           name="kind"
@@ -159,8 +159,8 @@ export default function AccountEditScreen() {
             />
           )}
         />
-        <HelperText type={errors.openingBalance ? 'error' : 'info'}>
-          {errors.openingBalance?.message ?? '使い始める日の実際の金額を入れてください'}
+        <HelperText type="error" visible={!!errors.openingBalance}>
+          {errors.openingBalance?.message}
         </HelperText>
 
         {ASSET_KINDS.includes(kind) && (
@@ -170,8 +170,6 @@ export default function AccountEditScreen() {
             render={({ field: { onChange, value } }) => (
               <List.Item
                 title="普段使わない口座"
-                description="ホームでは折りたたんだ別枠に表示します（NISA・タンス貯金など）"
-                descriptionNumberOfLines={3}
                 right={() => <Switch value={value} onValueChange={onChange} />}
                 onPress={() => onChange(!value)}
               />
@@ -199,9 +197,6 @@ export default function AccountEditScreen() {
           >
             {account.data.is_archived ? '表示に戻す' : '非表示にする'}
           </Button>
-        )}
-        {!isNew && account.data && !account.data.is_archived && (
-          <HelperText type="info">非表示にしても過去の記録は残り、純資産にも含まれます</HelperText>
         )}
       </KeyboardAwareScrollView>
 

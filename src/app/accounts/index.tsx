@@ -63,7 +63,7 @@ export default function AccountsScreen() {
         <ScrollView contentContainerStyle={styles.list}>
           {active.length === 0 && (
             <Text style={styles.empty} variant="bodyMedium">
-              右下の「＋」から口座を追加してください
+              口座がありません
             </Text>
           )}
           {active.map((a, i) => renderItem(a, i))}

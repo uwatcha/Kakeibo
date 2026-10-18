@@ -59,9 +59,6 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
       <Card mode="contained" style={style}>
         <Card.Title title={TITLE} />
         <Card.Content style={styles.gap}>
-          <Text variant="bodyMedium">
-            働き先と給料日を登録すると、給料日から次の給料日までの汎用資産の動きが出ます。
-          </Text>
           <Button mode="outlined" icon="briefcase-plus" onPress={() => router.push('/employers')}>
             働き先と給料日を登録
           </Button>
@@ -213,7 +210,7 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
               }}
             />
           ) : (
-            <Text variant="bodySmall">今日が給料日です。明日から推移が出ます。</Text>
+            <Text variant="bodySmall">今日が給料日です</Text>
           )}
         </View>
 

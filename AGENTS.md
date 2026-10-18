@@ -39,3 +39,7 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## UI text rule (Kakeibo)
+
+Never put sentences that explain a feature or an app-specific term on screens (no info HelperText, explanatory list descriptions, usage captions/subtitles, "tap + to add" guidance, empty-state nudges, or parenthetical hints in button labels). Write all such explanations in the glossary screen `src/app/info.tsx` (opened from the ⓘ icon on Home) instead. Allowed on screens: error/validation messages, confirmation dialogs, factual empty states ("この月の記録はありません"), data labels, and chart legends. See "画面の文言のルール" in CLAUDE.md.

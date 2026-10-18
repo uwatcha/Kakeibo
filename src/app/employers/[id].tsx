@@ -4,23 +4,13 @@ import { useEffect } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import {
-  Button,
-  Chip,
-  HelperText,
-  List,
-  SegmentedButtons,
-  Snackbar,
-  Text,
-  TextInput,
-  useTheme,
-} from 'react-native-paper';
+import { Button, HelperText, List, SegmentedButtons, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 import { z } from 'zod';
 
 import { QueryState } from '@/components/QueryState';
 import { useCreateEmployer, useEmployers, useUpdateEmployer } from '@/features/employers/hooks';
 import { SHIFT_LABELS } from '@/features/employers/labels';
-import { actualPayday, type PaydayShift, scheduledPayday } from '@/features/employers/payday';
+import { actualPayday, type PaydayShift } from '@/features/employers/payday';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 
 const schema = z.object({
@@ -33,14 +23,14 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-/** 今月から3か月分の給料日。ずらした日は元の日も出す */
+/** 今月から3か月分の実際の給料日 */
 function upcomingPaydays(payday: number, shift: PaydayShift, today: string) {
   const [year, month] = today.split('-').map(Number);
   return [0, 1, 2].map((delta) => {
     const index = year * 12 + (month - 1) + delta;
     const y = Math.floor(index / 12);
     const m = (index % 12) + 1;
-    return { scheduled: scheduledPayday(y, m, payday), actual: actualPayday(y, m, { payday, payday_shift: shift }) };
+    return actualPayday(y, m, { payday, payday_shift: shift });
   });
 }
 
@@ -58,7 +48,6 @@ export default function EmployerEditScreen() {
     control,
     handleSubmit,
     reset,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -157,12 +146,9 @@ export default function EmployerEditScreen() {
               />
             )}
           />
-          <Chip selected={payday === '31'} showSelectedOverlay onPress={() => setValue('payday', '31')}>
-            月末
-          </Chip>
         </View>
-        <HelperText type={errors.payday ? 'error' : 'info'}>
-          {errors.payday?.message ?? '31 は月末として扱います（30日・28日の月も月末）'}
+        <HelperText type="error" visible={!!errors.payday}>
+          {errors.payday?.message}
         </HelperText>
 
         <List.Subheader style={styles.subheader}>給料日が土日祝・年末年始のとき</List.Subheader>
@@ -184,12 +170,9 @@ export default function EmployerEditScreen() {
         {preview.length > 0 && (
           <View style={styles.preview}>
             <Text variant="labelLarge">これからの給料日</Text>
-            {preview.map((p) => (
-              <Text key={p.actual} variant="bodyMedium">
-                {formatDay(p.actual)}
-                {p.actual !== p.scheduled && (
-                  <Text style={{ color: theme.colors.onSurfaceVariant }}>（{formatDay(p.scheduled)}が休みのため）</Text>
-                )}
+            {preview.map((date) => (
+              <Text key={date} variant="bodyMedium">
+                {formatDay(date)}
               </Text>
             ))}
           </View>
@@ -213,7 +196,7 @@ export default function EmployerEditScreen() {
             onPress={() => setArchived(!employer.is_archived)}
             disabled={saving}
           >
-            {employer.is_archived ? '表示に戻す' : '非表示にする（辞めたとき）'}
+            {employer.is_archived ? '表示に戻す' : '非表示にする'}
           </Button>
         )}
       </KeyboardAwareScrollView>

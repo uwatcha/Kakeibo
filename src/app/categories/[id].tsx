@@ -78,7 +78,6 @@ export default function CategoryEditScreen() {
   }
 
   const saving = isSubmitting || update.isPending;
-  const childCount = category ? categories.data.filter((c) => c.parent_id === category.id && !c.is_archived).length : 0;
 
   return (
     <View style={[styles.container, styles.content, { backgroundColor: theme.colors.background }]}>
@@ -122,11 +121,6 @@ export default function CategoryEditScreen() {
           >
             {category.is_archived ? '表示に戻す' : '非表示にする'}
           </Button>
-          <HelperText type="info">
-            {category.is_archived
-              ? '表示に戻すと、入力画面で選べるようになります'
-              : `非表示にしても過去の記録と集計には残ります${childCount > 0 ? `。小分類（${childCount}件）は入力画面に出なくなります` : ''}`}
-          </HelperText>
         </>
       )}
 

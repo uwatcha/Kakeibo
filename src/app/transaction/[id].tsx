@@ -389,12 +389,6 @@ export default function TransactionEditScreen() {
           )}
         />
 
-        {type === 'adjustment' && (
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            アプリの残高と実際の残高のずれを合わせるための記録です。収支の集計には入りません
-          </Text>
-        )}
-
         <Button
           mode="contained"
           style={styles.save}
@@ -410,7 +404,7 @@ export default function TransactionEditScreen() {
         <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
           <Dialog.Title>この記録を削除しますか？</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">削除すると元に戻せません。残高と集計からも消えます。</Text>
+            <Text variant="bodyMedium">削除すると元に戻せません。</Text>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setConfirmDelete(false)}>キャンセル</Button>

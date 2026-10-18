@@ -29,7 +29,7 @@ export default function EmployersScreen() {
         <ScrollView contentContainerStyle={styles.list}>
           {active.length === 0 && (
             <Text style={styles.empty} variant="bodyMedium">
-              右下の「＋」から働き先を追加すると、集計に前回の給料日からの推移が出ます
+              働き先がありません
             </Text>
           )}
           {active.map((e) => {

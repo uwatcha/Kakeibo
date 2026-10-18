@@ -102,7 +102,7 @@ export default function CategoriesScreen() {
           })}
           {activeParents.length === 0 && (
             <Text style={styles.empty} variant="bodyMedium">
-              右下の「＋」から追加してください
+              カテゴリがありません
             </Text>
           )}
           {archived.length > 0 && (

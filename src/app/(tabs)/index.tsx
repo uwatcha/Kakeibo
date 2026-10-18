@@ -65,7 +65,7 @@ export default function HomeScreen() {
         {!hasAccounts && (
           <Card style={styles.card} mode="outlined">
             <Card.Content style={styles.empty}>
-              <Text variant="bodyMedium">口座がまだありません。財布や銀行口座を登録しましょう。</Text>
+              <Text variant="bodyMedium">口座がまだありません</Text>
               <Button
                 mode="contained"
                 icon="plus"
