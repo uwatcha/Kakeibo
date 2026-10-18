@@ -21,7 +21,8 @@ import { ChipGroup } from '@/components/ChipGroup';
 import { QueryState } from '@/components/QueryState';
 import { useAccounts } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
-import { findSameDayAmount, type Transaction } from '@/features/transactions/api';
+import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
+import { guessCategory } from '@/features/transactions/categoryGuess';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { DateField } from '@/features/transactions/components/DateField';
@@ -174,6 +175,18 @@ export default function TransactionEditScreen() {
 
   // 新しい記録で同じ日・同じ金額の記録があれば、保存する前に確かめる（REQ-17）
   const [duplicate, setDuplicate] = useState<{ values: FormValues; matches: Transaction[] } | null>(null);
+
+  // カテゴリが空のまま内容を入れたら、同じ内容の過去の記録でいちばん多いカテゴリを入れる（REQ-8）
+  const fillCategoryFromHistory = async (payee: string) => {
+    const currentType = getValues('type');
+    if (!TRANSACTION_RULES[currentType].categoryKind || getValues('categoryId') || payee.trim() === '') return;
+    try {
+      const guessed = guessCategory(await fetchCategoryHistory(payee.trim(), currentType));
+      if (guessed && !getValues('categoryId') && getValues('type') === currentType) setValue('categoryId', guessed);
+    } catch {
+      // 予測できなくても入力は続けられる
+    }
+  };
 
   const onSubmit = async (values: FormValues, skipDuplicateCheck = false) => {
     if (isNew && !skipDuplicateCheck) {
@@ -418,7 +431,16 @@ export default function TransactionEditScreen() {
           control={control}
           name="payee"
           render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput mode="outlined" label="内容（任意）" value={value} onChangeText={onChange} onBlur={onBlur} />
+            <TextInput
+              mode="outlined"
+              label="内容（任意）"
+              value={value}
+              onChangeText={onChange}
+              onBlur={() => {
+                onBlur();
+                fillCategoryFromHistory(value);
+              }}
+            />
           )}
         />
         <Controller

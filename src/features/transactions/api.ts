@@ -61,3 +61,20 @@ export async function findSameDayAmount(date: string, amount: number, excludeId?
   if (error) throw error;
   return data;
 }
+
+/** 同じ内容・同じ種類で過去に付けたカテゴリ（新しい順に最大20件）。カテゴリの予測用（REQ-8） */
+export async function fetchCategoryHistory(
+  payee: string,
+  type: Transaction['type'],
+): Promise<{ category_id: string | null }[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('category_id')
+    .eq('payee', payee)
+    .eq('type', type)
+    .not('category_id', 'is', null)
+    .order('date', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return data;
+}
