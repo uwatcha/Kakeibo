@@ -7,7 +7,7 @@ import { Button, HelperText, Snackbar, Text, TextInput, useTheme } from 'react-n
 import { QueryState } from '@/components/QueryState';
 import { ACCOUNT_KIND_INFO, isLiability } from '@/features/accounts/accountKinds';
 import { planAdjustment } from '@/features/accounts/adjustment';
-import { useAccount, useBalanceAsOf } from '@/features/accounts/hooks';
+import { useAccount, useAccountBalance } from '@/features/accounts/hooks';
 import { useCreateTransaction } from '@/features/transactions/hooks';
 import { toTokyoDateString } from '@/lib/date';
 import { formatYen, parseNonNegativeYen } from '@/lib/money';
@@ -17,7 +17,7 @@ export default function BalanceAdjustScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const today = toTokyoDateString();
   const account = useAccount(id);
-  const balance = useBalanceAsOf(id, today);
+  const balance = useAccountBalance(id);
   const create = useCreateTransaction();
   const [input, setInput] = useState('');
 

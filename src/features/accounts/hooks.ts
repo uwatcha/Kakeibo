@@ -6,7 +6,7 @@ import {
   createAccount,
   fetchAccount,
   fetchAccountBalances,
-  fetchBalanceAsOf,
+  fetchAccountBalance,
   fetchAccounts,
   reorderAccounts,
   updateAccount,
@@ -18,7 +18,7 @@ export const accountKeys = {
   list: () => [...accountKeys.all, 'list'] as const,
   balances: () => [...accountKeys.all, 'balances'] as const,
   detail: (id: string) => [...accountKeys.all, 'detail', id] as const,
-  balanceAsOf: (id: string, date: string) => [...accountKeys.all, 'balanceAsOf', id, date] as const,
+  balance: (id: string) => [...accountKeys.all, 'balance', id] as const,
 };
 
 export function useAccountBalances() {
@@ -37,8 +37,8 @@ export function useAccount(id: string | undefined) {
   });
 }
 
-export function useBalanceAsOf(id: string, date: string) {
-  return useQuery({ queryKey: accountKeys.balanceAsOf(id, date), queryFn: () => fetchBalanceAsOf(id, date) });
+export function useAccountBalance(id: string) {
+  return useQuery({ queryKey: accountKeys.balance(id), queryFn: () => fetchAccountBalance(id) });
 }
 
 function useInvalidateAccounts() {

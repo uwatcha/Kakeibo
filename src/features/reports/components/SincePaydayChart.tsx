@@ -87,7 +87,8 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
   const targets = new Set(accounts.filter(isAvailableAccount).map((a) => a.id));
   const actual = dailyBalances(
     summarizeBalances(accounts).availableNetWorth,
-    movements.data!,
+    // 今の残高は今日までの記録で計算されているので、未来の日付の記録は差し戻さない
+    movements.data!.filter((m) => m.date <= today),
     (id) => targets.has(id),
     last.date,
     today,
