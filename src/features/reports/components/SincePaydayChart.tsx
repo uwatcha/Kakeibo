@@ -188,7 +188,7 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
               showReferenceLine1={!!projectedEnd}
               referenceLine1Position={projectedEnd ? projectedEnd.balance - base : 0}
               referenceLine1Config={{
-                color: theme.colors.outline,
+                color: theme.colors.outlineVariant,
                 thickness: 1,
                 width: plotWidth,
                 dashWidth: 3,
