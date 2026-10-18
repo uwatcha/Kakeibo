@@ -211,31 +211,6 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
                   backgroundColor: theme.colors.surfaceVariant,
                 },
               }}
-              pointerConfig={{
-                hidePointer3: true,
-                pointerStripColor: theme.colors.outline,
-                pointerStripWidth: 1,
-                pointerColor: color,
-                radius: 5,
-                pointerLabelWidth: 132,
-                pointerLabelHeight: 48,
-                autoAdjustPointerLabelPosition: true,
-                pointerLabelComponent: (_items: unknown, _s: unknown, index: number) => {
-                  const isFuture = index > todayIndex;
-                  const value = isFuture ? projectedValues[index] : actualValues[index];
-                  return (
-                    <View style={[styles.tooltip, { backgroundColor: theme.colors.inverseSurface }]}>
-                      <Text variant="labelSmall" style={{ color: theme.colors.inverseOnSurface }}>
-                        {formatDay(dates[index] ?? today)}
-                        {isFuture ? '・予測' : ''}
-                      </Text>
-                      <Text variant="labelLarge" style={{ color: theme.colors.inverseOnSurface }}>
-                        {formatYen(value)}
-                      </Text>
-                    </View>
-                  );
-                },
-              }}
             />
           ) : (
             <Text variant="bodySmall">今日が給料日です。明日から推移が出ます。</Text>
@@ -271,7 +246,6 @@ const styles = StyleSheet.create({
   summary: { flexDirection: 'row', justifyContent: 'space-between' },
   bold: { fontWeight: 'bold' },
   xLabel: { width: 40, marginLeft: -12 },
-  tooltip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   swatch: { width: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
