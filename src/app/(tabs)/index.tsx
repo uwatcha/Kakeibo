@@ -12,7 +12,7 @@ import { useEmployers } from '@/features/employers/hooks';
 import { nextPayday } from '@/features/employers/payday';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { findShortages } from '@/features/reports/shortage';
-import { spendableUntil } from '@/features/reports/spendable';
+import { monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
 import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 
@@ -62,6 +62,10 @@ export default function HomeScreen() {
   const targets = new Set(data.filter(isAvailableAccount).map((a) => a.id));
   const spendable = future.data
     ? spendableUntil(summary.availableNetWorth, future.data, (id) => targets.has(id), today, next?.date ?? null)
+    : null;
+  // 月末の見込み（REQ-20）: 汎用資産に月末までの予定（給料日の入金も含む）を反映した額
+  const monthEndForecast = future.data
+    ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, monthEnd(today))
     : null;
 
   // この先31日の予定で残高がマイナスになる口座（REQ-25）
@@ -116,6 +120,7 @@ export default function HomeScreen() {
                   },
                 ]
               : []),
+            ...(monthEndForecast !== null ? [{ title: '月末の見込み', amount: monthEndForecast }] : []),
           ]}
         />
 
