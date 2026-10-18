@@ -8,7 +8,7 @@ import { useAccountBalances } from '@/features/accounts/hooks';
 import { isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
 import { lastPayday, nextPayday } from '@/features/employers/payday';
-import { dailyBalances } from '@/features/reports/balanceSeries';
+import { dailyBalances, projectUntil } from '@/features/reports/balanceSeries';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { SLICE_COLORS } from '@/features/reports/palette';
 import { formatDay } from '@/lib/date';
@@ -16,6 +16,7 @@ import { formatYen } from '@/lib/money';
 
 const Y_AXIS_WIDTH = 44;
 const CHART_HEIGHT = 180;
+const TITLE = '給料日からの推移';
 
 /** 軸の目盛り用（25万、3.5万、8,000） */
 function compactYen(value: number): string {
@@ -28,8 +29,21 @@ function compactYen(value: number): string {
 
 const shortDate = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 
-/** 前回の給料日から今日までの汎用資産の推移 */
-export function SincePaydayChart({ today }: { today: string }) {
+/** 凡例の線の見本 */
+function LineSwatch({ color, dashed }: { color: string; dashed?: boolean }) {
+  return (
+    <View style={styles.swatch}>
+      {dashed ? (
+        [0, 1, 2].map((i) => <View key={i} style={[styles.dash, { backgroundColor: color }]} />)
+      ) : (
+        <View style={[styles.solid, { backgroundColor: color }]} />
+      )}
+    </View>
+  );
+}
+
+/** 前回の給料日から次の給料日までの汎用資産。今日までは実績、その先はこのままの勢いでの予測（点線） */
+export function SincePaydayChart({ today, style }: { today: string; style?: object }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const employers = useEmployers();
@@ -42,10 +56,12 @@ export function SincePaydayChart({ today }: { today: string }) {
 
   if (employers.data && active.length === 0) {
     return (
-      <Card mode="contained">
-        <Card.Title title="前回の給料日からの推移" />
+      <Card mode="contained" style={style}>
+        <Card.Title title={TITLE} />
         <Card.Content style={styles.gap}>
-          <Text variant="bodyMedium">働き先と給料日を登録すると、給料日から今日までの汎用資産の動きが出ます。</Text>
+          <Text variant="bodyMedium">
+            働き先と給料日を登録すると、給料日から次の給料日までの汎用資産の動きが出ます。
+          </Text>
           <Button mode="outlined" icon="briefcase-plus" onPress={() => router.push('/employers')}>
             働き先と給料日を登録
           </Button>
@@ -57,8 +73,8 @@ export function SincePaydayChart({ today }: { today: string }) {
   const ready = employers.data && balances.data && movements.data && last;
   if (!ready) {
     return (
-      <Card mode="contained">
-        <Card.Title title="前回の給料日からの推移" />
+      <Card mode="contained" style={style}>
+        <Card.Title title={TITLE} />
         <Card.Content>
           {employers.error || balances.error || movements.error ? (
             <Text variant="bodyMedium">読み込めませんでした</Text>
@@ -72,54 +88,75 @@ export function SincePaydayChart({ today }: { today: string }) {
 
   const accounts = balances.data!;
   const targets = new Set(accounts.filter(isAvailableAccount).map((a) => a.id));
-  const points = dailyBalances(
+  const actual = dailyBalances(
     summarizeBalances(accounts).availableNetWorth,
     movements.data!,
     (id) => targets.has(id),
     last.date,
     today,
   );
+  const projection = next ? projectUntil(actual, next.date) : null;
   const sinceToday = movements.data!.filter((m) => m.date <= today);
   const income = sinceToday.filter((m) => m.type === 'income').reduce((s, m) => s + m.amount, 0);
   const expense = sinceToday.filter((m) => m.type === 'expense').reduce((s, m) => s + m.amount, 0);
 
+  // 横軸: 前回の給料日〜次の給料日。今日の点は実績と予測の両方に入る
+  const todayIndex = actual.length - 1;
+  const dates = [...actual.map((p) => p.date), ...(projection ?? []).slice(1).map((p) => p.date)];
+  const lastIndex = dates.length - 1;
+  const actualValues = dates.map((_, i) => actual[Math.min(i, todayIndex)].balance);
+  const projectedValues = dates.map((_, i) => (projection ? projection[Math.max(0, i - todayIndex)].balance : 0));
+
   // 縦軸は期間の最小値の少し下から始める（0 からだと線が上に張り付いて動きが見えない）
-  const values = points.map((p) => p.balance);
+  const values = [...actual.map((p) => p.balance), ...(projection ?? []).map((p) => p.balance)];
   const min = Math.min(...values);
   const max = Math.max(...values);
   const margin = Math.max((max - min) * 0.15, 1000);
   const base = Math.floor((min - margin) / 1000) * 1000;
   const top = Math.ceil((max + margin - base) / 1000) * 1000;
 
-  const labelEvery = Math.max(1, Math.ceil(points.length / 5));
+  // 目盛りは 前回の給料日・今日・次の給料日 の3つ。近すぎて重なるものは出さない
+  const minGap = Math.max(2, Math.ceil(dates.length * 0.18));
+  const labelFor = (i: number) => {
+    if (i === 0) return shortDate(dates[0]);
+    if (i === todayIndex && todayIndex >= minGap) return '今日';
+    if (i === lastIndex && projection && lastIndex - todayIndex >= minGap) return '給料日';
+    return '';
+  };
+
   const color = theme.dark ? SLICE_COLORS.dark[0] : SLICE_COLORS.light[0];
   const plotWidth = Math.max(0, width - Y_AXIS_WIDTH - 24);
-  const spacing = points.length > 1 ? plotWidth / (points.length - 1) : plotWidth;
+  const spacing = dates.length > 1 ? plotWidth / (dates.length - 1) : plotWidth;
   const muted = { color: theme.colors.onSurfaceVariant, fontSize: 10 };
+  const projectedEnd = projection?.[projection.length - 1];
 
   return (
-    <Card mode="contained">
-      <Card.Title
-        title="前回の給料日からの推移"
-        subtitle={`${formatDay(last.date)}（${last.employer.name}）から今日まで・汎用資産`}
-      />
+    <Card mode="contained" style={style}>
+      <Card.Title title={TITLE} subtitle={`${formatDay(last.date)}（${last.employer.name}）から・汎用資産`} />
       <Card.Content style={styles.gap}>
         <View style={styles.summary}>
           <Text variant="bodyMedium">収入 {formatYen(income)}</Text>
           <Text variant="bodyMedium">支出 {formatYen(expense)}</Text>
           <Text variant="bodyMedium" style={styles.bold}>
-            今 {formatYen(points[points.length - 1].balance)}
+            今 {formatYen(actual[todayIndex].balance)}
           </Text>
         </View>
 
         <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-          {width > 0 && points.length > 1 ? (
+          {width > 0 && dates.length > 1 ? (
             <LineChart
-              data={points.map((p, i) => ({
-                value: p.balance - base,
-                label: i === points.length - 1 ? '今日' : i % labelEvery === 0 ? shortDate(p.date) : '',
-                hideDataPoint: i !== points.length - 1,
+              data={actualValues.map((v, i) => ({
+                value: v - base,
+                label: labelFor(i),
+                hideDataPoint: i !== todayIndex,
               }))}
+              endIndex1={todayIndex}
+              data2={projection ? projectedValues.map((v) => ({ value: v - base })) : undefined}
+              startIndex2={todayIndex}
+              color2={color}
+              thickness2={2}
+              strokeDashArray2={[6, 4]}
+              hideDataPoints2
               height={CHART_HEIGHT}
               width={plotWidth}
               spacing={spacing}
@@ -144,34 +181,56 @@ export function SincePaydayChart({ today }: { today: string }) {
               endFillColor={color}
               startOpacity={0.18}
               endOpacity={0.02}
+              startFillColor2={theme.colors.surface}
+              startOpacity2={0}
+              endOpacity2={0}
               pointerConfig={{
                 pointerStripColor: theme.colors.outline,
                 pointerStripWidth: 1,
                 pointerColor: color,
                 radius: 5,
-                pointerLabelWidth: 120,
+                pointerLabelWidth: 132,
                 pointerLabelHeight: 48,
                 autoAdjustPointerLabelPosition: true,
-                pointerLabelComponent: (items: { value: number }[], _s: unknown, index: number) => (
-                  <View style={[styles.tooltip, { backgroundColor: theme.colors.inverseSurface }]}>
-                    <Text variant="labelSmall" style={{ color: theme.colors.inverseOnSurface }}>
-                      {formatDay(points[index]?.date ?? today)}
-                    </Text>
-                    <Text variant="labelLarge" style={{ color: theme.colors.inverseOnSurface }}>
-                      {formatYen(items[0].value + base)}
-                    </Text>
-                  </View>
-                ),
+                pointerLabelComponent: (_items: unknown, _s: unknown, index: number) => {
+                  const isFuture = index > todayIndex;
+                  const value = isFuture ? projectedValues[index] : actualValues[index];
+                  return (
+                    <View style={[styles.tooltip, { backgroundColor: theme.colors.inverseSurface }]}>
+                      <Text variant="labelSmall" style={{ color: theme.colors.inverseOnSurface }}>
+                        {formatDay(dates[index] ?? today)}
+                        {isFuture ? '・予測' : ''}
+                      </Text>
+                      <Text variant="labelLarge" style={{ color: theme.colors.inverseOnSurface }}>
+                        {formatYen(value)}
+                      </Text>
+                    </View>
+                  );
+                },
               }}
             />
           ) : (
-            points.length <= 1 && <Text variant="bodySmall">今日が給料日です。明日から推移が出ます。</Text>
+            <Text variant="bodySmall">今日が給料日です。明日から推移が出ます。</Text>
           )}
         </View>
 
+        {projection && (
+          <View style={styles.legend}>
+            <View style={styles.legendItem}>
+              <LineSwatch color={color} />
+              <Text variant="bodySmall">実績</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <LineSwatch color={color} dashed />
+              <Text variant="bodySmall">今までのペースが続いた場合</Text>
+            </View>
+          </View>
+        )}
+
         {next && (
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            次の給料日: {formatDay(next.date)}（{next.employer.name}）
+            次の給料日 {formatDay(next.date)}（{next.employer.name}）
+            {projectedEnd ? `の予測: ${formatYen(projectedEnd.balance)}` : ''}
           </Text>
         )}
       </Card.Content>
@@ -185,4 +244,9 @@ const styles = StyleSheet.create({
   bold: { fontWeight: 'bold' },
   xLabel: { width: 40, marginLeft: -12 },
   tooltip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  swatch: { width: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  solid: { width: 20, height: 2 },
+  dash: { width: 5, height: 2 },
 });

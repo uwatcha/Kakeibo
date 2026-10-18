@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { PieChart } from 'react-native-gifted-charts';
 import { Card, IconButton, List, ProgressBar, Text, useTheme } from 'react-native-paper';
 
+import { Carousel } from '@/components/Carousel';
 import { QueryState } from '@/components/QueryState';
 import { useCategories } from '@/features/categories/hooks';
 import { buildBreakdown, type Comparison, compare, toDonutSlices } from '@/features/reports/breakdown';
@@ -93,8 +94,6 @@ export default function ReportsScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={totals.isRefetching || expense.isRefetching} onRefresh={refetch} />}
     >
-      <SincePaydayChart today={toTokyoDateString()} />
-
       {header}
 
       <Card mode="contained">
@@ -109,68 +108,86 @@ export default function ReportsScreen() {
         </Card.Content>
       </Card>
 
-      <Card mode="contained">
-        <Card.Title title="大分類別の支出" />
-        {items.length === 0 ? (
-          <Card.Content>
-            <Text variant="bodyMedium">この月の支出はありません</Text>
-          </Card.Content>
-        ) : (
-          <>
-            <View style={styles.chart}>
-              <PieChart
-                data={slices.map((s, i) => ({
-                  value: s.amount,
-                  color: sliceColor(i, s.isOther, theme.dark),
-                  focused: s.key === selectedKey,
-                  onPress: () => setSelectedKey(s.key === selectedKey ? null : s.key),
-                }))}
-                donut
-                radius={96}
-                innerRadius={64}
-                innerCircleColor={surface}
-                strokeColor={surface}
-                strokeWidth={2}
-                centerLabelComponent={() => (
-                  <View style={styles.center}>
-                    <Text variant="labelMedium" numberOfLines={1}>
-                      {selected ? selected.name : '合計'}
-                    </Text>
-                    <Text variant="titleMedium" style={styles.number}>
-                      {formatYen(selected ? selected.amount : current.expense)}
-                    </Text>
-                    {selected && <Text variant="bodySmall">{Math.round(selected.ratio * 100)}%</Text>}
+      {/* グラフは横スワイプで切り替える。カードは高い方に高さをそろえる */}
+      <Carousel
+        pages={[
+          {
+            key: 'breakdown',
+            label: '大分類別の支出',
+            content: (
+              <Card mode="contained" style={styles.page}>
+                <Card.Title title="大分類別の支出" subtitle={formatMonth(month)} />
+                {items.length === 0 ? (
+                  <Card.Content>
+                    <Text variant="bodyMedium">この月の支出はありません</Text>
+                  </Card.Content>
+                ) : (
+                  <View style={styles.chart}>
+                    <PieChart
+                      data={slices.map((s, i) => ({
+                        value: s.amount,
+                        color: sliceColor(i, s.isOther, theme.dark),
+                        focused: s.key === selectedKey,
+                        onPress: () => setSelectedKey(s.key === selectedKey ? null : s.key),
+                      }))}
+                      donut
+                      radius={96}
+                      innerRadius={64}
+                      innerCircleColor={surface}
+                      strokeColor={surface}
+                      strokeWidth={2}
+                      centerLabelComponent={() => (
+                        <View style={styles.center}>
+                          <Text variant="labelMedium" numberOfLines={1}>
+                            {selected ? selected.name : '合計'}
+                          </Text>
+                          <Text variant="titleMedium" style={styles.number}>
+                            {formatYen(selected ? selected.amount : current.expense)}
+                          </Text>
+                          {selected && <Text variant="bodySmall">{Math.round(selected.ratio * 100)}%</Text>}
+                        </View>
+                      )}
+                    />
                   </View>
                 )}
-              />
-            </View>
+              </Card>
+            ),
+          },
+          {
+            key: 'since-payday',
+            label: '給料日からの推移',
+            content: <SincePaydayChart today={toTokyoDateString()} style={styles.page} />,
+          },
+        ]}
+      />
 
-            {/* 凡例を兼ねた全カテゴリの一覧。色だけに頼らず名前・金額・割合を出す */}
-            {items.map((item, index) => {
-              const slice = index < 5 ? slices[index] : undefined;
-              const color = slice ? sliceColor(index, false, theme.dark) : sliceColor(0, true, theme.dark);
-              return (
-                <List.Item
-                  key={item.categoryId ?? 'uncategorized'}
-                  title={item.name}
-                  titleStyle={styles.itemTitle}
-                  description={() => <ProgressBar progress={item.ratio} color={color} style={styles.bar} />}
-                  left={() => <View style={[styles.swatch, { backgroundColor: color }]} />}
-                  right={() => (
-                    <View style={styles.itemRight}>
-                      <Text style={styles.number}>{formatYen(item.amount)}</Text>
-                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                        {Math.round(item.ratio * 100)}%
-                      </Text>
-                    </View>
-                  )}
-                  onPress={() => openTransactions(item.categoryId)}
-                />
-              );
-            })}
-          </>
-        )}
-      </Card>
+      {items.length > 0 && (
+        <Card mode="contained">
+          <Card.Title title="カテゴリ別の支出" subtitle="タップでその記録一覧へ" />
+          {/* ドーナツの凡例を兼ねる。色だけに頼らず名前・金額・割合を出す */}
+          {items.map((item, index) => {
+            const color = index < 5 ? sliceColor(index, false, theme.dark) : sliceColor(0, true, theme.dark);
+            return (
+              <List.Item
+                key={item.categoryId ?? 'uncategorized'}
+                title={item.name}
+                titleStyle={styles.itemTitle}
+                description={() => <ProgressBar progress={item.ratio} color={color} style={styles.bar} />}
+                left={() => <View style={[styles.swatch, { backgroundColor: color }]} />}
+                right={() => (
+                  <View style={styles.itemRight}>
+                    <Text style={styles.number}>{formatYen(item.amount)}</Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {Math.round(item.ratio * 100)}%
+                    </Text>
+                  </View>
+                )}
+                onPress={() => openTransactions(item.categoryId)}
+              />
+            );
+          })}
+        </Card>
+      )}
     </ScrollView>
   );
 }
@@ -182,7 +199,8 @@ const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   tile: { flex: 1, gap: 2 },
   number: { fontVariant: ['tabular-nums'] },
-  chart: { alignItems: 'center', paddingVertical: 8 },
+  page: { flex: 1 },
+  chart: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   center: { alignItems: 'center', maxWidth: 110 },
   swatch: { width: 12, height: 12, borderRadius: 3, alignSelf: 'center', marginLeft: 8 },
   itemTitle: { marginBottom: 4 },

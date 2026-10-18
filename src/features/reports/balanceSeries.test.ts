@@ -1,4 +1,4 @@
-import { dailyBalances } from './balanceSeries';
+import { dailyBalances, projectUntil } from './balanceSeries';
 
 const isTarget = (id: string) => id !== 'nisa';
 const move = (date: string, amount: number, from: string | null, to: string | null) => ({
@@ -45,5 +45,35 @@ describe('dailyBalances', () => {
 
   it('記録がなければ横ばい', () => {
     expect(dailyBalances(5000, [], isTarget, '2026-10-17', '2026-10-18').map((p) => p.balance)).toEqual([5000, 5000]);
+  });
+});
+
+describe('projectUntil', () => {
+  const actual = [
+    { date: '2026-10-13', balance: 100000 },
+    { date: '2026-10-14', balance: 97000 },
+    { date: '2026-10-15', balance: 94000 },
+  ];
+
+  it('1日あたりの平均の増減で次の給料日まで直線を延ばす', () => {
+    expect(projectUntil(actual, '2026-10-18')).toEqual([
+      { date: '2026-10-15', balance: 94000 },
+      { date: '2026-10-16', balance: 91000 },
+      { date: '2026-10-17', balance: 88000 },
+      { date: '2026-10-18', balance: 85000 },
+    ]);
+  });
+
+  it('途中の上下ではなく、給料日から今日までの全体の勢いを使う', () => {
+    const bumpy = [
+      { date: '2026-10-13', balance: 100000 },
+      { date: '2026-10-14', balance: 60000 },
+      { date: '2026-10-15', balance: 90000 },
+    ];
+    expect(projectUntil(bumpy, '2026-10-16')?.at(-1)?.balance).toBe(85000);
+  });
+
+  it('今日が給料日なら予測しない', () => {
+    expect(projectUntil([{ date: '2026-10-18', balance: 1000 }], '2026-11-10')).toBeNull();
   });
 });

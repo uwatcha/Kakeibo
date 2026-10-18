@@ -36,3 +36,21 @@ export function dailyBalances(
   }
   return points.reverse();
 }
+
+/**
+ * 今日から次の給料日までの予測。前回の給料日から今日までの1日あたりの平均の増減がそのまま続くとした直線。
+ * 先頭は今日の実績と同じ点。前回の給料日が今日なら勢いが出せないので null。
+ */
+export function projectUntil(actual: readonly BalancePoint[], until: string): BalancePoint[] | null {
+  if (actual.length < 2) return null;
+  const first = actual[0];
+  const last = actual[actual.length - 1];
+  const perDay = (last.balance - first.balance) / (actual.length - 1);
+  const points: BalancePoint[] = [];
+  let k = 0;
+  for (let date = last.date; date <= until; date = addDays(date, 1)) {
+    points.push({ date, balance: Math.round(last.balance + perDay * k) });
+    k += 1;
+  }
+  return points;
+}
