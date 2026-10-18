@@ -184,6 +184,28 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
               startFillColor2={theme.colors.surface}
               startOpacity2={0}
               endOpacity2={0}
+              // 次の給料日の予測額の高さに横線を引き、金額を左の目盛りの位置に出す
+              showReferenceLine1={!!projectedEnd}
+              referenceLine1Position={projectedEnd ? projectedEnd.balance - base : 0}
+              referenceLine1Config={{
+                color: theme.colors.outline,
+                thickness: 1,
+                width: plotWidth,
+                dashWidth: 3,
+                dashGap: 3,
+                labelText: projectedEnd ? projectedEnd.balance.toLocaleString('ja-JP') : '',
+                // 線の左端が目盛りの右端なので、目盛りの幅だけ左に出す。背景で通常の目盛りの数字を隠す
+                labelTextStyle: {
+                  left: -Y_AXIS_WIDTH,
+                  top: -7,
+                  width: Y_AXIS_WIDTH - 2,
+                  textAlign: 'right',
+                  fontSize: 10,
+                  fontWeight: 'bold',
+                  color: theme.colors.onSurface,
+                  backgroundColor: theme.colors.surfaceVariant,
+                },
+              }}
               pointerConfig={{
                 pointerStripColor: theme.colors.outline,
                 pointerStripWidth: 1,
