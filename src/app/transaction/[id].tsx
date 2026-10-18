@@ -235,6 +235,17 @@ export default function TransactionEditScreen() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={24}
       >
+        {transaction.data?.recurring_rule_id && (
+          <Button
+            mode="outlined"
+            icon="autorenew"
+            onPress={() =>
+              router.push({ pathname: '/recurring/[id]', params: { id: transaction.data!.recurring_rule_id! } })
+            }
+          >
+            定期支払い: {transaction.data.payee ?? ''}
+          </Button>
+        )}
         <SegmentedButtons
           value={PRIMARY_TYPES.includes(type) ? type : OTHER}
           onValueChange={(v) => changeType(v === OTHER ? 'advance' : (v as TransactionType))}

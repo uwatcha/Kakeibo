@@ -30,6 +30,12 @@ export default function SettingsScreen() {
         onPress={() => router.push('/employers')}
       />
       <List.Item
+        title="定期支払い"
+        left={(props) => <List.Icon {...props} icon="autorenew" />}
+        right={(props) => <List.Icon {...props} icon="chevron-right" />}
+        onPress={() => router.push('/recurring')}
+      />
+      <List.Item
         title="ログイン中"
         description={session?.user.email}
         left={(props) => <List.Icon {...props} icon="account" />}

@@ -52,7 +52,9 @@ function TransactionRow({
     t.type === 'expense' || t.type === 'income'
       ? (categoryLabel(t.category_id, categories) ?? `${rule.label}（未分類）`)
       : rule.label;
-  const description = [describeAccounts(t, accounts), t.payee].filter(Boolean).join('・');
+  const description = [describeAccounts(t, accounts), t.payee, t.recurring_rule_id ? '（定期）' : null]
+    .filter(Boolean)
+    .join('・');
   // 収支に入る記録だけ符号を付ける（振替・貸し借りなどは自分のお金の置き場所が変わるだけなので符号なし）
   const kind = t.type === 'income' ? 'income' : t.type === 'expense' ? 'expense' : 'neutral';
 

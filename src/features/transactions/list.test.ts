@@ -17,6 +17,7 @@ function txn(overrides: Partial<Transaction>): Transaction {
     memo: null,
     list_price: null,
     points_used: null,
+    recurring_rule_id: null,
     created_at: '',
     updated_at: '',
     ...overrides,

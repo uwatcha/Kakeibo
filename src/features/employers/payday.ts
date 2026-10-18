@@ -24,12 +24,17 @@ export function scheduledPayday(year: number, month: number, payday: number): st
   return `${year}-${pad(month)}-${pad(Math.min(payday, lastDay))}`;
 }
 
+/** 休みの日なら向きに合わせて平日までずらす */
+export function shiftToBusinessDay(date: string, shift: 'before' | 'after'): string {
+  const step = shift === 'before' ? -1 : 1;
+  let result = date;
+  while (!isBusinessDay(result)) result = addDays(result, step);
+  return result;
+}
+
 /** その月の実際の給料日。休みの日なら向きに合わせて平日までずらす */
 export function actualPayday(year: number, month: number, rule: PaydayRule): string {
-  let date = scheduledPayday(year, month, rule.payday);
-  const step = rule.payday_shift === 'before' ? -1 : 1;
-  while (!isBusinessDay(date)) date = addDays(date, step);
-  return date;
+  return shiftToBusinessDay(scheduledPayday(year, month, rule.payday), rule.payday_shift);
 }
 
 function shiftMonth(year: number, month: number, delta: number): [number, number] {

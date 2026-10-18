@@ -9,6 +9,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, useTheme } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
+import { RecurringRunner } from '@/features/recurring/RecurringRunner';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,6 +44,8 @@ function RootNavigator() {
         <Stack.Screen name="employers/[id]" options={{ headerShown: true, title: '働き先' }} />
         <Stack.Screen name="balance-adjust/[id]" options={{ headerShown: true, title: '残高を合わせる' }} />
         <Stack.Screen name="card-settings/[id]" options={{ headerShown: true, title: 'カードの設定' }} />
+        <Stack.Screen name="recurring/index" options={{ headerShown: true, title: '定期支払い' }} />
+        <Stack.Screen name="recurring/[id]" options={{ headerShown: true, title: '定期支払い' }} />
         <Stack.Screen name="info" options={{ headerShown: true, title: '用語の説明' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
@@ -64,6 +67,7 @@ export default function RootLayout() {
           <PaperProvider theme={theme}>
             <AuthProvider>
               <StatusBar style="auto" />
+              <RecurringRunner />
               <RootNavigator />
             </AuthProvider>
           </PaperProvider>

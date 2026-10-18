@@ -191,6 +191,85 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_rules: {
+        Row: {
+          amount: number
+          category_id: string | null
+          created_at: string
+          day_of_month: number
+          from_account_id: string | null
+          generated_until: string | null
+          holiday_shift: Database["public"]["Enums"]["recurring_shift"]
+          id: string
+          interval_months: number
+          is_active: boolean
+          name: string
+          sort_order: number
+          start_date: string
+          to_account_id: string | null
+          type: Database["public"]["Enums"]["txn_type"]
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category_id?: string | null
+          created_at?: string
+          day_of_month: number
+          from_account_id?: string | null
+          generated_until?: string | null
+          holiday_shift?: Database["public"]["Enums"]["recurring_shift"]
+          id?: string
+          interval_months?: number
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          start_date: string
+          to_account_id?: string | null
+          type: Database["public"]["Enums"]["txn_type"]
+          user_id?: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          day_of_month?: number
+          from_account_id?: string | null
+          generated_until?: string | null
+          holiday_shift?: Database["public"]["Enums"]["recurring_shift"]
+          id?: string
+          interval_months?: number
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          start_date?: string
+          to_account_id?: string | null
+          type?: Database["public"]["Enums"]["txn_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_rules_user_id_category_id_fkey"
+            columns: ["user_id", "category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["user_id", "id"]
+          },
+          {
+            foreignKeyName: "recurring_rules_user_id_from_account_id_fkey"
+            columns: ["user_id", "from_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id", "id"]
+          },
+          {
+            foreignKeyName: "recurring_rules_user_id_to_account_id_fkey"
+            columns: ["user_id", "to_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -203,6 +282,7 @@ export type Database = {
           memo: string | null
           payee: string | null
           points_used: number | null
+          recurring_rule_id: string | null
           to_account_id: string | null
           type: Database["public"]["Enums"]["txn_type"]
           updated_at: string
@@ -219,6 +299,7 @@ export type Database = {
           memo?: string | null
           payee?: string | null
           points_used?: number | null
+          recurring_rule_id?: string | null
           to_account_id?: string | null
           type: Database["public"]["Enums"]["txn_type"]
           updated_at?: string
@@ -235,12 +316,20 @@ export type Database = {
           memo?: string | null
           payee?: string | null
           points_used?: number | null
+          recurring_rule_id?: string | null
           to_account_id?: string | null
           type?: Database["public"]["Enums"]["txn_type"]
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_recurring_rule_fk"
+            columns: ["user_id", "recurring_rule_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_rules"
+            referencedColumns: ["user_id", "id"]
+          },
           {
             foreignKeyName: "transactions_user_id_category_id_fkey"
             columns: ["user_id", "category_id"]
@@ -309,6 +398,7 @@ export type Database = {
         | "receivable"
       category_kind: "expense" | "income"
       payday_shift: "before" | "after"
+      recurring_shift: "none" | "before" | "after"
       txn_type:
         | "expense"
         | "income"
@@ -460,6 +550,7 @@ export const Constants = {
       ],
       category_kind: ["expense", "income"],
       payday_shift: ["before", "after"],
+      recurring_shift: ["none", "before", "after"],
       txn_type: [
         "expense",
         "income",
