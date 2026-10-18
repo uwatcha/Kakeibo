@@ -158,6 +158,39 @@ export type Database = {
           },
         ]
       }
+      employers: {
+        Row: {
+          created_at: string
+          id: string
+          is_archived: boolean
+          name: string
+          payday: number
+          payday_shift: Database["public"]["Enums"]["payday_shift"]
+          sort_order: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          name: string
+          payday: number
+          payday_shift?: Database["public"]["Enums"]["payday_shift"]
+          sort_order?: number
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          name?: string
+          payday?: number
+          payday_shift?: Database["public"]["Enums"]["payday_shift"]
+          sort_order?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -275,6 +308,7 @@ export type Database = {
         | "payable"
         | "receivable"
       category_kind: "expense" | "income"
+      payday_shift: "before" | "after"
       txn_type:
         | "expense"
         | "income"
@@ -425,6 +459,7 @@ export const Constants = {
         "receivable",
       ],
       category_kind: ["expense", "income"],
+      payday_shift: ["before", "after"],
       txn_type: [
         "expense",
         "income",

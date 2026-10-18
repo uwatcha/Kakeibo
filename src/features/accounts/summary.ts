@@ -33,6 +33,11 @@ export type BalanceSummary = {
   payableTotal: number;
 };
 
+/** 汎用資産に数える口座か（普段使わない資産の口座以外すべて） */
+export function isAvailableAccount(account: Pick<AccountBalance, 'kind' | 'isReserved'>): boolean {
+  return !(ASSET_KINDS.includes(account.kind) && account.isReserved);
+}
+
 const sum = (accounts: AccountBalance[]) => accounts.reduce((total, a) => total + a.balance, 0);
 // -0 を「-0円」と表示しないよう 0 - x で反転する
 const negate = (value: number) => 0 - value;
@@ -53,7 +58,7 @@ export function summarizeBalances(accounts: AccountBalance[]): BalanceSummary {
   return {
     netWorth: sum(accounts),
     // 非表示にした口座も「普段使わない」ものだけ除く（純資産と同じく非表示の口座も含める）
-    availableNetWorth: sum(accounts.filter((a) => !(ASSET_KINDS.includes(a.kind) && a.isReserved))),
+    availableNetWorth: sum(accounts.filter(isAvailableAccount)),
     everyday,
     everydayTotal: sum(everyday),
     reserved,

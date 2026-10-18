@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~57.0.25",
     "@expo/vector-icons": "^15.0.2",
+    "@holiday-jp/holiday_jp": "^2.5.2",
     "@hookform/resolvers": "^5.9.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "9.1.0",

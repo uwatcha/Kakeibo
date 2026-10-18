@@ -1,8 +1,9 @@
 """使用感を確かめるためのダミーデータを自分のアカウントに入れる / 消す
 
 使い方:
-  python3 scripts/seed-dummy.py <メールアドレス>           # 入れる
-  python3 scripts/seed-dummy.py <メールアドレス> --delete  # 入れたものだけ消す
+  python3 scripts/seed-dummy.py <メールアドレス>                  # 入れる
+  python3 scripts/seed-dummy.py <メールアドレス> --delete         # 入れたものだけ消す
+  python3 scripts/seed-dummy.py <メールアドレス> --add-employers  # 入れ済みのダミーに働き先だけ足す
 
 入れた口座・記録の id は scripts/.dummy-data.json に残し、--delete ではそれだけを消す。
 既存の口座「財布」があれば現金の記録にはそれを使う（口座自体は消さない）。
@@ -62,8 +63,19 @@ def delete(user_id: str) -> None:
         call("DELETE", f"/rest/v1/transactions?user_id=eq.{user_id}&id={ids(part)}")
     if state["accounts"]:
         call("DELETE", f"/rest/v1/accounts?user_id=eq.{user_id}&id={ids(state['accounts'])}")
+    if state.get("employers"):
+        call("DELETE", f"/rest/v1/employers?user_id=eq.{user_id}&id={ids(state['employers'])}")
     STATE_FILE.unlink()
-    print(f"消しました: 記録 {len(state['transactions'])} 件、口座 {len(state['accounts'])} 件")
+    print(
+        f"消しました: 記録 {len(state['transactions'])} 件、口座 {len(state['accounts'])} 件、"
+        f"働き先 {len(state.get('employers', []))} 件"
+    )
+
+
+def create_employers(user_id: str) -> list[str]:
+    """ダミーのバイト代（毎月25日）に合わせた働き先"""
+    rows = [{"user_id": user_id, "name": "バイト先", "payday": 25, "payday_shift": "before", "sort_order": 10}]
+    return [e["id"] for e in call("POST", "/rest/v1/employers", rows, prefer="return=representation")]
 
 
 def check_balances(created: list[dict], wallet: dict | None, txns: list[dict], acc: dict[str, str]) -> bool:
@@ -225,18 +237,33 @@ def seed(user_id: str) -> None:
         call("DELETE", f"/rest/v1/accounts?user_id=eq.{user_id}&id={ids}")
         sys.exit("残高がマイナスになる口座があるので中止しました（作った口座は消しました）")
     created_txns = call("POST", "/rest/v1/transactions", txns, prefer="return=representation")
+    employer_ids = create_employers(user_id)
     STATE_FILE.write_text(
-        json.dumps({"accounts": [a["id"] for a in created], "transactions": [t["id"] for t in created_txns]}, indent=2)
+        json.dumps(
+            {
+                "accounts": [a["id"] for a in created],
+                "transactions": [t["id"] for t in created_txns],
+                "employers": employer_ids,
+            },
+            indent=2,
+        )
     )
     print(f"入れました: 口座 {len(created)} 件、記録 {len(created_txns)} 件（{START} 〜 {TODAY}）")
 
 
 def main() -> None:
-    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != "--delete"):
-        sys.exit("使い方: python3 scripts/seed-dummy.py <メールアドレス> [--delete]")
+    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] not in ("--delete", "--add-employers")):
+        sys.exit("使い方: python3 scripts/seed-dummy.py <メールアドレス> [--delete | --add-employers]")
     user_id = find_user_id(sys.argv[1])
-    if len(sys.argv) == 3:
+    if len(sys.argv) == 3 and sys.argv[2] == "--delete":
         delete(user_id)
+    elif len(sys.argv) == 3:
+        state = json.loads(STATE_FILE.read_text())
+        if state.get("employers"):
+            sys.exit("働き先はすでに入っています")
+        state["employers"] = create_employers(user_id)
+        STATE_FILE.write_text(json.dumps(state, indent=2))
+        print("働き先を足しました")
     else:
         seed(user_id)
 

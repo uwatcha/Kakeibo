@@ -8,6 +8,7 @@ import { QueryState } from '@/components/QueryState';
 import { useCategories } from '@/features/categories/hooks';
 import { buildBreakdown, type Comparison, compare, toDonutSlices } from '@/features/reports/breakdown';
 import { useCategoryExpense, useMonthComparison } from '@/features/reports/hooks';
+import { SincePaydayChart } from '@/features/reports/components/SincePaydayChart';
 import { sliceColor } from '@/features/reports/palette';
 import { addMonths, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
@@ -92,6 +93,8 @@ export default function ReportsScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={totals.isRefetching || expense.isRefetching} onRefresh={refetch} />}
     >
+      <SincePaydayChart today={toTokyoDateString()} />
+
       {header}
 
       <Card mode="contained">

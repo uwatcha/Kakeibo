@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 
 import type { CategoryExpenseRow } from './breakdown';
 
@@ -21,6 +22,24 @@ export async function fetchCategoryExpense(month: string): Promise<CategoryExpen
     .from('category_monthly_expense')
     .select('category_id, amount')
     .eq('month', month);
+  if (error) throw error;
+  return data;
+}
+
+export type Movement = {
+  date: string;
+  type: Database['public']['Enums']['txn_type'];
+  amount: number;
+  from_account_id: string | null;
+  to_account_id: string | null;
+};
+
+/** date より後（未来の日付も含む）の記録。残高の推移を差し戻すのに使う */
+export async function fetchMovementsAfter(date: string): Promise<Movement[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('date, type, amount, from_account_id, to_account_id')
+    .gt('date', date);
   if (error) throw error;
   return data;
 }

@@ -26,6 +26,13 @@ export default function SettingsScreen() {
         onPress={() => router.push('/categories')}
       />
       <List.Item
+        title="働き先と給料日"
+        description="給料日が休みの日なら自動で平日にずらします"
+        left={(props) => <List.Icon {...props} icon="briefcase" />}
+        right={(props) => <List.Icon {...props} icon="chevron-right" />}
+        onPress={() => router.push('/employers')}
+      />
+      <List.Item
         title="ログイン中"
         description={session?.user.email}
         left={(props) => <List.Icon {...props} icon="account" />}
