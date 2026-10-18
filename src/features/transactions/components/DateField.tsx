@@ -20,9 +20,7 @@ export function DateField({ value, onChange }: Props) {
       DateTimePickerAndroid.open({
         value: dateStringToLocalDate(value),
         mode: 'date',
-        onChange: (event, date) => {
-          if (event.type === 'set' && date) onChange(localDateToDateString(date));
-        },
+        onValueChange: (_event, date) => onChange(localDateToDateString(date)),
       });
     } else {
       setShowInline((v) => !v);
@@ -48,7 +46,7 @@ export function DateField({ value, onChange }: Props) {
           value={dateStringToLocalDate(value)}
           mode="date"
           display="inline"
-          onChange={(_event, date) => date && onChange(localDateToDateString(date))}
+          onValueChange={(_event, date) => onChange(localDateToDateString(date))}
         />
       )}
     </View>
