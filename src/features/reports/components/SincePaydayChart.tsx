@@ -184,17 +184,20 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
               startFillColor2={theme.colors.surface}
               startOpacity2={0}
               endOpacity2={0}
-              // 次の給料日の予測額の高さに横線を引き、金額を左の目盛りの位置に出す
+              // 次の給料日の予測額の高さの横線。目盛り線と区別するため一点鎖線（長 8・間 3・短 2・間 3）
+              data3={projectedEnd ? dates.map(() => ({ value: projectedEnd.balance - base })) : undefined}
+              color3={theme.colors.outlineVariant}
+              thickness3={1.5}
+              strokeDashArray3={[8, 3, 2, 3]}
+              hideDataPoints3
+              // 金額は左の目盛りの位置に出す
               showReferenceLine1={!!projectedEnd}
               referenceLine1Position={projectedEnd ? projectedEnd.balance - base : 0}
               referenceLine1Config={{
-                color: theme.colors.outlineVariant,
+                // 線そのものは data3 で描く（一点鎖線にするため）。ここは左の目盛り位置の金額表示だけに使う
+                color: 'transparent',
                 thickness: 1,
                 width: plotWidth,
-                // 目盛り線と区別するため一点鎖線（長 8・間 3・短 2・間 3）。ライブラリは
-                // strokeDasharray を `${dashWidth},${dashGap}` で組み立てるので、dashWidth に「長,間,短」を渡す
-                dashWidth: '8,3,2' as unknown as number,
-                dashGap: 3,
                 labelText: projectedEnd ? projectedEnd.balance.toLocaleString('ja-JP') : '',
                 // 線の左端が目盛りの右端なので、目盛りの幅だけ左に出す。背景で通常の目盛りの数字を隠す
                 labelTextStyle: {
@@ -209,6 +212,7 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
                 },
               }}
               pointerConfig={{
+                hidePointer3: true,
                 pointerStripColor: theme.colors.outline,
                 pointerStripWidth: 1,
                 pointerColor: color,
