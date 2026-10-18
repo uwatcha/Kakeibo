@@ -8,6 +8,7 @@ import {
   Dialog,
   HelperText,
   IconButton,
+  List,
   Portal,
   SegmentedButtons,
   Snackbar,
@@ -42,7 +43,7 @@ import {
   validateDraft,
 } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
-import { formatYen, parseYen } from '@/lib/money';
+import { formatYen, parseNonNegativeYen, parseYen } from '@/lib/money';
 
 type FormValues = {
   type: TransactionType;
@@ -54,6 +55,9 @@ type FormValues = {
   date: string;
   payee: string;
   memo: string;
+  /** 本来の金額・利用ポイント（REQ-18）。空欄なら記録しない */
+  listPrice: string;
+  pointsUsed: string;
 };
 
 const OTHER = 'other';
@@ -80,14 +84,22 @@ export default function TransactionEditScreen() {
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 「ポイント」は、保存済みの値があれば最初から開いておく。押したら押した方を優先
+  const [pointsOpen, setPointsOpen] = useState<boolean | null>(null);
 
   // 種類ごとのルール（transactionRules.ts）で確かめる
   const resolver: Resolver<FormValues> = (values) => {
-    const errors: DraftErrors = validateDraft(
+    const errors: DraftErrors & { listPrice?: string; pointsUsed?: string } = validateDraft(
       { ...values, amount: parseYen(values.amount) },
       accounts.data ?? [],
       categories.data ?? [],
     );
+    if (values.listPrice.trim() !== '' && parseNonNegativeYen(values.listPrice) === null) {
+      errors.listPrice = '0以上の整数（円）で入力してください';
+    }
+    if (values.pointsUsed.trim() !== '' && parseNonNegativeYen(values.pointsUsed) === null) {
+      errors.pointsUsed = '0以上の整数で入力してください';
+    }
     const entries = Object.entries(errors);
     if (entries.length === 0) return { values, errors: {} };
     return {
@@ -115,6 +127,8 @@ export default function TransactionEditScreen() {
       date: toTokyoDateString(),
       payee: '',
       memo: '',
+      listPrice: '',
+      pointsUsed: '',
     },
   });
   const type = useWatch({ control, name: 'type' });
@@ -135,6 +149,8 @@ export default function TransactionEditScreen() {
       date: t.date,
       payee: t.payee ?? '',
       memo: t.memo ?? '',
+      listPrice: t.list_price === null ? '' : String(t.list_price),
+      pointsUsed: t.points_used === null ? '' : String(t.points_used),
     });
   }, [transaction.data, reset]);
 
@@ -181,6 +197,8 @@ export default function TransactionEditScreen() {
       date: values.date,
       payee: values.payee.trim() || null,
       memo: values.memo.trim() || null,
+      list_price: values.listPrice.trim() === '' ? null : parseNonNegativeYen(values.listPrice),
+      points_used: values.pointsUsed.trim() === '' ? null : parseNonNegativeYen(values.pointsUsed),
     };
     try {
       if (isNew) {
@@ -226,6 +244,9 @@ export default function TransactionEditScreen() {
   }
 
   const saving = isSubmitting || remove.isPending;
+  const pointsExpanded =
+    pointsOpen ??
+    (transaction.data ? transaction.data.list_price !== null || transaction.data.points_used !== null : false);
   const accountList = accounts.data!;
 
   return (
@@ -415,6 +436,44 @@ export default function TransactionEditScreen() {
           )}
         />
 
+        <List.Accordion
+          title="ポイント"
+          left={(props) => <List.Icon {...props} icon="ticket-percent" />}
+          expanded={pointsExpanded}
+          onPress={() => setPointsOpen(!pointsExpanded)}
+          style={styles.accordion}
+        >
+          <View style={styles.pointsRow}>
+            {(
+              [
+                ['listPrice', '本来の金額'],
+                ['pointsUsed', '利用ポイント'],
+              ] as const
+            ).map(([name, label]) => (
+              <Controller
+                key={name}
+                control={control}
+                name={name}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <TextInput
+                    mode="outlined"
+                    label={label}
+                    keyboardType="number-pad"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    error={!!errors[name]}
+                    style={styles.pointsInput}
+                  />
+                )}
+              />
+            ))}
+          </View>
+          {!!(errors.listPrice ?? errors.pointsUsed) && (
+            <HelperText type="error">{(errors.listPrice ?? errors.pointsUsed)?.message}</HelperText>
+          )}
+        </List.Accordion>
+
         <Button
           mode="contained"
           style={styles.save}
@@ -475,6 +534,9 @@ export default function TransactionEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  accordion: { paddingHorizontal: 0 },
+  pointsRow: { flexDirection: 'row', gap: 8 },
+  pointsInput: { flex: 1 },
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 48, gap: 12 },
   amount: { fontSize: 24 },
