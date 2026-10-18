@@ -57,3 +57,22 @@ export async function reorderAccounts(orderedIds: string[]): Promise<void> {
   const failed = results.find((r) => r.error);
   if (failed?.error) throw failed.error;
 }
+
+/** 口座の今日の終わり時点の残高（未来の日付の記録は含めない） */
+export async function fetchBalanceAsOf(accountId: string, date: string): Promise<number> {
+  const [balance, future] = await Promise.all([
+    supabase.from('account_balances').select('balance').eq('id', accountId).single(),
+    supabase
+      .from('transactions')
+      .select('amount, from_account_id, to_account_id')
+      .gt('date', date)
+      .or(`from_account_id.eq.${accountId},to_account_id.eq.${accountId}`),
+  ]);
+  if (balance.error) throw balance.error;
+  if (future.error) throw future.error;
+  const futureEffect = future.data.reduce(
+    (sum, t) => sum + (t.to_account_id === accountId ? t.amount : 0) - (t.from_account_id === accountId ? t.amount : 0),
+    0,
+  );
+  return (balance.data.balance ?? 0) - futureEffect;
+}

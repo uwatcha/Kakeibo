@@ -40,6 +40,7 @@ function RootNavigator() {
         <Stack.Screen name="categories/[id]" options={{ headerShown: true, title: 'カテゴリ' }} />
         <Stack.Screen name="employers/index" options={{ headerShown: true, title: '働き先と給料日' }} />
         <Stack.Screen name="employers/[id]" options={{ headerShown: true, title: '働き先' }} />
+        <Stack.Screen name="balance-adjust/[id]" options={{ headerShown: true, title: '残高を合わせる' }} />
         <Stack.Screen name="info" options={{ headerShown: true, title: '用語の説明' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>

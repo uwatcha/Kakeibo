@@ -187,6 +187,17 @@ export default function AccountEditScreen() {
           保存
         </Button>
 
+        {!isNew && account.data && !account.data.is_archived && (
+          <Button
+            mode="outlined"
+            style={styles.button}
+            icon="scale-balance"
+            onPress={() => router.push({ pathname: '/balance-adjust/[id]', params: { id } })}
+            disabled={saving}
+          >
+            残高を合わせる
+          </Button>
+        )}
         {!isNew && account.data && (
           <Button
             mode="outlined"
