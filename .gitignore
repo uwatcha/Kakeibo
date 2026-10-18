@@ -45,3 +45,6 @@ example
 # Supabase
 supabase/.branches
 supabase/.temp
+
+# Python
+__pycache__/
