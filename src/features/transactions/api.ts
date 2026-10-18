@@ -52,3 +52,12 @@ export async function searchTransactions(filter: string): Promise<Transaction[]>
   if (error) throw error;
   return data;
 }
+
+/** 同じ日・同じ金額の記録（重複入力の確認用）。excludeId は編集中の記録 */
+export async function findSameDayAmount(date: string, amount: number, excludeId?: string): Promise<Transaction[]> {
+  let query = supabase.from('transactions').select('*').eq('date', date).eq('amount', amount).limit(5);
+  if (excludeId) query = query.neq('id', excludeId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}

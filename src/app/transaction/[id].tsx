@@ -20,6 +20,7 @@ import { ChipGroup } from '@/components/ChipGroup';
 import { QueryState } from '@/components/QueryState';
 import { useAccounts } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
+import { findSameDayAmount, type Transaction } from '@/features/transactions/api';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { DateField } from '@/features/transactions/components/DateField';
@@ -40,8 +41,8 @@ import {
   type TransactionType,
   validateDraft,
 } from '@/features/transactions/transactionRules';
-import { toTokyoDateString } from '@/lib/date';
-import { parseYen } from '@/lib/money';
+import { formatDay, toTokyoDateString } from '@/lib/date';
+import { formatYen, parseYen } from '@/lib/money';
 
 type FormValues = {
   type: TransactionType;
@@ -155,7 +156,21 @@ export default function TransactionEditScreen() {
     if (isNew) applyLastUsed(setValue, next, lastUsed.current);
   };
 
-  const onSubmit = async (values: FormValues) => {
+  // 新しい記録で同じ日・同じ金額の記録があれば、保存する前に確かめる（REQ-17）
+  const [duplicate, setDuplicate] = useState<{ values: FormValues; matches: Transaction[] } | null>(null);
+
+  const onSubmit = async (values: FormValues, skipDuplicateCheck = false) => {
+    if (isNew && !skipDuplicateCheck) {
+      try {
+        const matches = await findSameDayAmount(values.date, parseYen(values.amount)!);
+        if (matches.length > 0) {
+          setDuplicate({ values, matches });
+          return;
+        }
+      } catch {
+        // 確かめられなくても保存は続ける
+      }
+    }
     const { fromAccountId, toAccountId } = normalizeAccounts({ ...values, amount: parseYen(values.amount) });
     const row = {
       type: values.type,
@@ -403,7 +418,7 @@ export default function TransactionEditScreen() {
         <Button
           mode="contained"
           style={styles.save}
-          onPress={() => handleSubmit(onSubmit)()}
+          onPress={() => handleSubmit((values) => onSubmit(values))()}
           loading={isSubmitting}
           disabled={saving}
         >
@@ -412,6 +427,29 @@ export default function TransactionEditScreen() {
       </KeyboardAwareScrollView>
 
       <Portal>
+        <Dialog visible={duplicate !== null} onDismiss={() => setDuplicate(null)}>
+          <Dialog.Title>同じ日・同じ金額の記録があります</Dialog.Title>
+          <Dialog.Content>
+            {duplicate?.matches.map((m) => (
+              <Text key={m.id} variant="bodyMedium">
+                {formatDay(m.date)} {TRANSACTION_RULES[m.type].label} {formatYen(m.amount)}
+                {m.payee ? `（${m.payee}）` : ''}
+              </Text>
+            ))}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDuplicate(null)}>やめる</Button>
+            <Button
+              onPress={() => {
+                const values = duplicate!.values;
+                setDuplicate(null);
+                onSubmit(values, true);
+              }}
+            >
+              保存する
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
         <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
           <Dialog.Title>この記録を削除しますか？</Dialog.Title>
           <Dialog.Content>

@@ -4,15 +4,16 @@ import { Button, Card, Divider, FAB, List, Text, useTheme } from 'react-native-p
 
 import { QueryState } from '@/components/QueryState';
 import { Amount } from '@/components/Amount';
-import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
+import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
 import { nextPayday } from '@/features/employers/payday';
 import { useMovementsAfter } from '@/features/reports/hooks';
+import { findShortages } from '@/features/reports/shortage';
 import { spendableUntil } from '@/features/reports/spendable';
-import { toTokyoDateString } from '@/lib/date';
+import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 
 function AccountRow({ account }: { account: AccountBalance }) {
@@ -63,12 +64,40 @@ export default function HomeScreen() {
     ? spendableUntil(summary.availableNetWorth, future.data, (id) => targets.has(id), today, next?.date ?? null)
     : null;
 
+  // この先31日の予定で残高がマイナスになる口座（REQ-25）
+  const shortages = future.data
+    ? findShortages(
+        new Map(data.filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived).map((a) => [a.id, a.balance])),
+        future.data,
+        today,
+        addDays(today, 31),
+      )
+    : [];
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
+        {shortages.length > 0 && (
+          <Card style={styles.card} mode="outlined">
+            <Card.Title
+              title="足りなくなる口座"
+              left={(props) => <List.Icon {...props} icon="alert" color={theme.colors.error} />}
+            />
+            {shortages.map((s) => (
+              <List.Item
+                key={s.accountId}
+                title={data.find((a) => a.id === s.accountId)?.name}
+                description={formatDay(s.date)}
+                right={() => <Amount value={s.lowest} style={styles.amount} />}
+                onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: s.accountId } })}
+              />
+            ))}
+          </Card>
+        )}
+
         <BalanceCarousel
           pages={[
             { title: '汎用資産', amount: summary.availableNetWorth },
