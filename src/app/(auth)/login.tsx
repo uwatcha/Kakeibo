@@ -14,6 +14,21 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+function loginErrorMessage(code: string | undefined): string {
+  switch (code) {
+    case 'invalid_credentials':
+      return 'メールアドレスかパスワードが違います';
+    case 'email_provider_disabled':
+      return 'メールでのログインがサーバー側で無効になっています';
+    case 'over_request_rate_limit':
+      return '試行回数が多すぎます。しばらく待ってからやり直してください';
+    case undefined:
+      return 'サーバーに接続できませんでした。通信状態を確認してください';
+    default:
+      return `ログインできませんでした（${code}）`;
+  }
+}
+
 export default function LoginScreen() {
   const theme = useTheme();
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +44,7 @@ export default function LoginScreen() {
   const onSubmit = async ({ email, password }: FormValues) => {
     setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError('ログインできませんでした。メールアドレスとパスワードを確認してください');
+    if (error) setError(loginErrorMessage(error.code));
   };
 
   return (
