@@ -4,7 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
-import { MD3DarkTheme, MD3LightTheme, PaperProvider } from 'react-native-paper';
+import { MD3DarkTheme, MD3LightTheme, PaperProvider, useTheme } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 
@@ -14,6 +14,7 @@ const queryClient = new QueryClient();
 
 function RootNavigator() {
   const { session, isLoading } = useAuth();
+  const theme = useTheme();
 
   useEffect(() => {
     if (!isLoading) SplashScreen.hideAsync();
@@ -22,9 +23,17 @@ function RootNavigator() {
   if (isLoading) return null;
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        headerStyle: { backgroundColor: theme.colors.elevation.level2 },
+        headerTintColor: theme.colors.onSurface,
+      }}
+    >
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="accounts/index" options={{ headerShown: true, title: '口座の管理' }} />
+        <Stack.Screen name="accounts/[id]" options={{ headerShown: true, title: '口座' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="(auth)" />

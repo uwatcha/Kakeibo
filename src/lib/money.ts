@@ -14,3 +14,11 @@ export function parseYen(input: string): number | null {
   const value = Number(normalized);
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
+
+/** 初期残高などの入力用。空欄は 0、0 以上の整数を返す。不正なら null */
+export function parseNonNegativeYen(input: string): number | null {
+  const trimmed = input.trim();
+  if (trimmed === '') return 0;
+  if (/^[0０]+$/.test(trimmed)) return 0;
+  return parseYen(trimmed);
+}

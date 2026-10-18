@@ -1,0 +1,32 @@
+import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Text } from 'react-native-paper';
+
+type Props = {
+  isLoading: boolean;
+  error: Error | null;
+  onRetry: () => void;
+};
+
+/** 読み込み中・エラー時の共通表示。どちらでもなければ何も出さない */
+export function QueryState({ isLoading, error, onRetry }: Props) {
+  if (isLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text variant="bodyMedium">読み込めませんでした</Text>
+        <Button onPress={onRetry}>再読み込み</Button>
+      </View>
+    );
+  }
+  return null;
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 24 },
+});

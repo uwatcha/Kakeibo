@@ -1,4 +1,4 @@
-import { formatYen, parseYen } from './money';
+import { formatYen, parseNonNegativeYen, parseYen } from './money';
 
 describe('formatYen', () => {
   it('3桁ごとにカンマを入れる', () => {
@@ -22,5 +22,21 @@ describe('parseYen', () => {
 
   it.each(['', '0', '-100', '12.5', 'abc'])('%s は不正', (input) => {
     expect(parseYen(input)).toBeNull();
+  });
+});
+
+describe('parseNonNegativeYen', () => {
+  it.each([
+    ['', 0],
+    ['  ', 0],
+    ['0', 0],
+    ['０', 0],
+    ['12,000', 12000],
+  ])('%s → %d', (input, expected) => {
+    expect(parseNonNegativeYen(input)).toBe(expected);
+  });
+
+  it.each(['-1', 'abc', '1.5'])('%s は不正', (input) => {
+    expect(parseNonNegativeYen(input)).toBeNull();
   });
 });

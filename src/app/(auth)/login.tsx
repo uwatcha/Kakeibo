@@ -98,7 +98,12 @@ export default function LoginScreen() {
           {errors.password?.message ?? error}
         </HelperText>
 
-        <Button mode="contained" onPress={() => handleSubmit(onSubmit)()} loading={isSubmitting} disabled={isSubmitting}>
+        <Button
+          mode="contained"
+          onPress={() => handleSubmit(onSubmit)()}
+          loading={isSubmitting}
+          disabled={isSubmitting}
+        >
           ログイン
         </Button>
       </View>
