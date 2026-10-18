@@ -19,10 +19,12 @@ import {
 
 import { ChipGroup } from '@/components/ChipGroup';
 import { QueryState } from '@/components/QueryState';
+import { StatusBadge } from '@/components/StatusBadge';
 import { useAccounts } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
 import { guessCategory } from '@/features/transactions/categoryGuess';
+import { isConfirmedOnSave, recordStatus } from '@/features/transactions/confirmation';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { DateField } from '@/features/transactions/components/DateField';
@@ -45,6 +47,7 @@ import {
 } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen, parseNonNegativeYen, parseYen } from '@/lib/money';
+import { warningColors } from '@/theme';
 
 type FormValues = {
   type: TransactionType;
@@ -212,6 +215,7 @@ export default function TransactionEditScreen() {
       memo: values.memo.trim() || null,
       list_price: values.listPrice.trim() === '' ? null : parseNonNegativeYen(values.listPrice),
       points_used: values.pointsUsed.trim() === '' ? null : parseNonNegativeYen(values.pointsUsed),
+      is_confirmed: isConfirmedOnSave(values.date, toTokyoDateString()),
     };
     try {
       if (isNew) {
@@ -220,6 +224,15 @@ export default function TransactionEditScreen() {
       } else {
         await update.mutateAsync({ id, values: row });
       }
+      router.back();
+    } catch {
+      // Snackbar で知らせる
+    }
+  };
+
+  const onConfirm = async () => {
+    try {
+      await update.mutateAsync({ id, values: { is_confirmed: true } });
       router.back();
     } catch {
       // Snackbar で知らせる
@@ -284,6 +297,15 @@ export default function TransactionEditScreen() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={24}
       >
+        {transaction.data && recordStatus(transaction.data, toTokyoDateString()) === 'unconfirmed' && (
+          <View style={[styles.confirmBar, { backgroundColor: warningColors(theme.dark).background }]}>
+            <StatusBadge status="unconfirmed" />
+            <View style={styles.confirmSpacer} />
+            <Button mode="contained" icon="check" onPress={onConfirm} loading={update.isPending} disabled={saving}>
+              確認した
+            </Button>
+          </View>
+        )}
         {transaction.data?.recurring_rule_id && (
           <Button
             mode="outlined"
@@ -556,6 +578,8 @@ export default function TransactionEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  confirmBar: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 8, paddingLeft: 12 },
+  confirmSpacer: { flex: 1 },
   accordion: { paddingHorizontal: 0 },
   pointsRow: { flexDirection: 'row', gap: 8 },
   pointsInput: { flex: 1 },

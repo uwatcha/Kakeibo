@@ -281,6 +281,7 @@ export type Database = {
           date: string
           from_account_id: string | null
           id: string
+          is_confirmed: boolean
           list_price: number | null
           memo: string | null
           payee: string | null
@@ -298,6 +299,7 @@ export type Database = {
           date?: string
           from_account_id?: string | null
           id?: string
+          is_confirmed?: boolean
           list_price?: number | null
           memo?: string | null
           payee?: string | null
@@ -315,6 +317,7 @@ export type Database = {
           date?: string
           from_account_id?: string | null
           id?: string
+          is_confirmed?: boolean
           list_price?: number | null
           memo?: string | null
           payee?: string | null

@@ -8,6 +8,7 @@ import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
+import { StatusBadge } from '@/components/StatusBadge';
 import { SectionCard } from '@/components/SectionCard';
 import type { Account } from '@/features/accounts/api';
 import { useAccounts } from '@/features/accounts/hooks';
@@ -18,6 +19,7 @@ import { categoryLabel } from '@/features/categories/tree';
 import type { Transaction } from '@/features/transactions/api';
 import { useMonthTransactions, useSearchTransactions } from '@/features/transactions/hooks';
 import { type DaySection, groupByDate, monthTotals } from '@/features/transactions/list';
+import { recordStatus } from '@/features/transactions/confirmation';
 import { buildSearchFilter } from '@/features/transactions/search';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { addMonths, formatDay, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
@@ -55,6 +57,7 @@ function TransactionRow({
 }) {
   const theme = useTheme();
   const rule = TRANSACTION_RULES[t.type];
+  const unconfirmed = recordStatus(t, toTokyoDateString()) === 'unconfirmed';
   const isFlow = t.type === 'expense' || t.type === 'income';
   const category = isFlow ? (categoryLabel(t.category_id, categories) ?? `${rule.label}（未分類）`) : rule.label;
   // 内容があればそれを主にし、カテゴリ（種類）と口座は小さく下に出す
@@ -75,6 +78,7 @@ function TransactionRow({
       title={title}
       subtitle={
         <View style={styles.subtitle}>
+          {unconfirmed && <StatusBadge status="unconfirmed" />}
           {t.recurring_rule_id && (
             <MaterialCommunityIcons
               name="autorenew"
@@ -121,14 +125,7 @@ function DayCard({
         <Text variant="labelLarge" style={[styles.dayLabel, { color: theme.colors.onSurfaceVariant }]}>
           {formatDay(section.date)}
         </Text>
-        {planned && (
-          <View style={[styles.plannedBadge, { backgroundColor: theme.colors.secondaryContainer }]}>
-            <MaterialCommunityIcons name="calendar-clock" size={14} color={theme.colors.onSecondaryContainer} />
-            <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer }}>
-              予定
-            </Text>
-          </View>
-        )}
+        {planned && <StatusBadge status="planned" />}
       </View>
       <SectionCard dashed={planned}>
         {section.data.map((t) => (
@@ -348,14 +345,6 @@ const styles = StyleSheet.create({
   amount: { fontWeight: '700' },
   day: { gap: 6 },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  plannedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
   future: { gap: 16, marginBottom: 16 },
   dayLabel: { paddingHorizontal: 4, fontWeight: '700' },
   empty: { padding: 32, textAlign: 'center' },

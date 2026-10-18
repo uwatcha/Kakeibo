@@ -10,6 +10,7 @@ function txn(overrides: Partial<Transaction>): Transaction {
     type: 'expense',
     date: '2026-10-18',
     amount: 100,
+    is_confirmed: true,
     from_account_id: 'wallet',
     to_account_id: null,
     category_id: null,

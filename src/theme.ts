@@ -89,3 +89,8 @@ export function positiveColor(isDark: boolean): string {
 export function positiveContainer(isDark: boolean): string {
   return isDark ? '#1f3a2b' : '#e1f1e7';
 }
+
+/** 「未確認」など、見落としてほしくない印の色（赤ほど強くない橙） */
+export function warningColors(isDark: boolean): { background: string; color: string } {
+  return isDark ? { background: '#4d3300', color: '#ffd08a' } : { background: '#ffe2b8', color: '#7a4300' };
+}

@@ -21,6 +21,7 @@ describe('transactionsToCsv', () => {
       points_used: null,
       recurring_rule_id: null,
       updated_at: '',
+      is_confirmed: true,
     };
     const csv = transactionsToCsv(
       [

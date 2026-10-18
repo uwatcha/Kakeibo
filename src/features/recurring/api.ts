@@ -44,6 +44,8 @@ async function generateForRule(rule: RecurringRule, today: string): Promise<numb
         date,
         payee: rule.name,
         recurring_rule_id: rule.id,
+        // 自動で入れた記録は、人が確認するまで未確認
+        is_confirmed: false,
       })),
       { onConflict: 'recurring_rule_id,date', ignoreDuplicates: true },
     );
