@@ -18,7 +18,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.uwatcha.kakeibo"
+      "package": "com.uwatcha.kakeibo",
+      "runtimeVersion": {
+        "policy": "fingerprint"
+      }
     },
     "web": {
       "output": "single",
@@ -47,6 +50,9 @@
         "projectId": "a1638cc9-e051-410d-b2fd-3170e73c7016"
       }
     },
-    "owner": "uwatcha"
+    "owner": "uwatcha",
+    "updates": {
+      "url": "https://u.expo.dev/a1638cc9-e051-410d-b2fd-3170e73c7016"
+    }
   }
 }
