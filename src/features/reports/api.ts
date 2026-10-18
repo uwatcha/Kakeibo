@@ -27,7 +27,9 @@ export async function fetchCategoryExpense(month: string): Promise<CategoryExpen
 }
 
 export type Movement = {
+  id: string;
   date: string;
+  payee: string | null;
   type: Database['public']['Enums']['txn_type'];
   amount: number;
   from_account_id: string | null;
@@ -38,7 +40,7 @@ export type Movement = {
 export async function fetchMovementsAfter(date: string): Promise<Movement[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('date, type, amount, from_account_id, to_account_id')
+    .select('id, date, type, amount, payee, from_account_id, to_account_id')
     .gt('date', date);
   if (error) throw error;
   return data;

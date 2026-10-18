@@ -16,9 +16,11 @@ import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
 import { nextPayday } from '@/features/employers/payday';
+import type { Movement } from '@/features/reports/api';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { findShortages } from '@/features/reports/shortage';
 import { monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
+import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { SPACING } from '@/theme';
@@ -102,6 +104,11 @@ export default function HomeScreen() {
     ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, monthEnd(today))
     : null;
 
+  const accountName = (id: string | null) => data.find((a) => a.id === id)?.name ?? '';
+  // 支払い先が口座（クレカ・貸し借りの相手）ならその名前、なければ内容、それもなければ記録の種類
+  const causeLabel = (m: Movement) =>
+    (m.to_account_id ? accountName(m.to_account_id) : null) || m.payee || TRANSACTION_RULES[m.type].label;
+
   // この先31日の予定で残高がマイナスになる口座（REQ-25）
   const shortages = future.data
     ? findShortages(
@@ -126,8 +133,20 @@ export default function HomeScreen() {
             {shortages.map((s) => (
               <ListRow
                 key={s.accountId}
-                title={data.find((a) => a.id === s.accountId)?.name ?? ''}
-                subtitle={formatDay(s.date)}
+                title={accountName(s.accountId)}
+                subtitle={
+                  <View>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {formatDay(s.date)}
+                    </Text>
+                    {/* その日に足りなくなる原因の支払い */}
+                    {s.causes.map((m) => (
+                      <Text key={m.id} variant="bodySmall" numberOfLines={1}>
+                        {causeLabel(m)} {formatYen(m.amount)}
+                      </Text>
+                    ))}
+                  </View>
+                }
                 right={<Amount value={s.lowest} variant="bodyLarge" />}
                 onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: s.accountId } })}
               />

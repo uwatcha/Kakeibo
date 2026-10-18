@@ -23,7 +23,12 @@ describe('findShortages', () => {
 
   it('途中でマイナスになる口座と日付、いちばん低い残高', () => {
     expect(findShortages(balances, movements, '2026-10-18', '2026-11-18')).toEqual([
-      { accountId: 'bank', date: '2026-10-27', lowest: -12000 },
+      {
+        accountId: 'bank',
+        date: '2026-10-27',
+        lowest: -12000,
+        causes: [move('2026-10-27', 36000, 'bank', 'card')],
+      },
     ]);
   });
 
