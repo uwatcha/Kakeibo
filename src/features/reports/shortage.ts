@@ -45,8 +45,7 @@ export function findShortages<M extends Movement>(
       if (!found) {
         const causes = upcoming.filter((m) => m.date === date && m.from_account_id === accountId);
         result.set(accountId, { accountId, date, lowest: balance, causes });
-      }
-      else if (balance < found.lowest) found.lowest = balance;
+      } else if (balance < found.lowest) found.lowest = balance;
     }
   }
   return [...result.values()].sort((a, b) => a.date.localeCompare(b.date));
