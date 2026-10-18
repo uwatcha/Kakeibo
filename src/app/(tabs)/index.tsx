@@ -1,10 +1,14 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, Divider, FAB, List, Text, useTheme } from 'react-native-paper';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { Button, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
-import { QueryState } from '@/components/QueryState';
+import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
+import { ListRow } from '@/components/ListRow';
+import { QueryState } from '@/components/QueryState';
+import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
 import { AvailableAccountsSheet } from '@/features/accounts/components/AvailableAccountsSheet';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
@@ -17,13 +21,14 @@ import { findShortages } from '@/features/reports/shortage';
 import { monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
 import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
+import { SPACING } from '@/theme';
 
 function AccountRow({ account }: { account: AccountBalance }) {
   return (
-    <List.Item
+    <ListRow
       title={account.name}
-      left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[account.kind].icon} />}
-      right={() => <Amount value={account.balance} style={styles.amount} />}
+      icon={ACCOUNT_KIND_INFO[account.kind].icon}
+      right={<Amount value={account.balance} variant="bodyLarge" />}
       onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })}
     />
   );
@@ -32,12 +37,38 @@ function AccountRow({ account }: { account: AccountBalance }) {
 function Section({ title, total, accounts }: { title: string; total: number; accounts: AccountBalance[] }) {
   if (accounts.length === 0) return null;
   return (
-    <Card style={styles.card} mode="contained">
-      <Card.Title title={title} right={() => <Amount value={total} style={styles.sectionTotal} />} />
+    <SectionCard title={title} right={<Amount value={total} variant="titleMedium" style={styles.total} />}>
       {accounts.map((a) => (
         <AccountRow key={a.id} account={a} />
       ))}
-    </Card>
+    </SectionCard>
+  );
+}
+
+/** 普段使わない口座。見出しを押すと開く */
+function ReservedSection({ total, accounts }: { total: number; accounts: AccountBalance[] }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  if (accounts.length === 0) return null;
+  return (
+    <SectionCard>
+      <TouchableRipple onPress={() => setOpen(!open)} accessibilityState={{ expanded: open }}>
+        <View style={styles.collapsibleHeader}>
+          <Text variant="titleMedium" style={styles.total}>
+            普段使わない口座
+          </Text>
+          <MaterialCommunityIcons
+            name={open ? 'chevron-up' : 'chevron-down'}
+            size={22}
+            color={theme.colors.onSurfaceVariant}
+            style={styles.collapsibleIcon}
+          />
+          {/* 合計は他のカードの合計と右端をそろえる */}
+          <Amount value={total} variant="titleMedium" style={styles.total} />
+        </View>
+      </TouchableRipple>
+      {open && accounts.map((a) => <AccountRow key={a.id} account={a} />)}
+    </SectionCard>
   );
 }
 
@@ -88,21 +119,20 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
         {shortages.length > 0 && (
-          <Card style={styles.card} mode="outlined">
-            <Card.Title
-              title="足りなくなる口座"
-              left={(props) => <List.Icon {...props} icon="alert" color={theme.colors.error} />}
-            />
+          <SectionCard
+            title="足りなくなる口座"
+            left={<MaterialCommunityIcons name="alert" size={22} color={theme.colors.error} />}
+          >
             {shortages.map((s) => (
-              <List.Item
+              <ListRow
                 key={s.accountId}
-                title={data.find((a) => a.id === s.accountId)?.name}
-                description={formatDay(s.date)}
-                right={() => <Amount value={s.lowest} style={styles.amount} />}
+                title={data.find((a) => a.id === s.accountId)?.name ?? ''}
+                subtitle={formatDay(s.date)}
+                right={<Amount value={s.lowest} variant="bodyLarge" />}
                 onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: s.accountId } })}
               />
             ))}
-          </Card>
+          </SectionCard>
         )}
 
         <BalanceCarousel
@@ -132,18 +162,16 @@ export default function HomeScreen() {
         />
 
         {!hasAccounts && (
-          <Card style={styles.card} mode="outlined">
-            <Card.Content style={styles.empty}>
-              <Text variant="bodyMedium">口座がまだありません</Text>
-              <Button
-                mode="contained"
-                icon="plus"
-                onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: 'new' } })}
-              >
-                口座を追加
-              </Button>
-            </Card.Content>
-          </Card>
+          <SectionCard style={styles.empty}>
+            <Text variant="bodyMedium">口座がまだありません</Text>
+            <Button
+              mode="contained"
+              icon="plus"
+              onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: 'new' } })}
+            >
+              口座を追加
+            </Button>
+          </SectionCard>
         )}
 
         <Section title="普段使う口座" total={summary.everydayTotal} accounts={summary.everyday} />
@@ -151,25 +179,10 @@ export default function HomeScreen() {
         <Section title="貸している・立て替え" total={summary.receivableTotal} accounts={summary.receivables} />
         <Section title="借りている" total={0 - summary.payableTotal} accounts={summary.payables} />
 
-        {summary.reserved.length > 0 && (
-          <Card style={styles.card} mode="contained">
-            <List.Accordion
-              title="普段使わない口座"
-              description={formatYen(summary.reservedTotal)}
-              style={styles.accordion}
-            >
-              <Divider />
-              {summary.reserved.map((a) => (
-                <AccountRow key={a.id} account={a} />
-              ))}
-            </List.Accordion>
-          </Card>
-        )}
+        <ReservedSection total={summary.reservedTotal} accounts={summary.reserved} />
       </ScrollView>
       {hasAccounts && (
-        <FAB
-          icon="plus"
-          style={styles.fab}
+        <AddFab
           accessibilityLabel="記録する"
           onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
         />
@@ -181,11 +194,15 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, gap: 12, paddingBottom: 96 },
-  card: { overflow: 'hidden' },
-  amount: { alignSelf: 'center', fontVariant: ['tabular-nums'] },
-  sectionTotal: { marginRight: 16, fontWeight: 'bold', fontVariant: ['tabular-nums'] },
-  empty: { gap: 12 },
-  accordion: { backgroundColor: 'transparent' },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
+  content: { paddingHorizontal: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 96 },
+  total: { fontWeight: '700' },
+  empty: { gap: 12, padding: 16 },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.row,
+    paddingVertical: 10,
+  },
+  collapsibleIcon: { flex: 1 },
 });

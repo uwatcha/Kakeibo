@@ -71,6 +71,6 @@ export function Carousel({ pages }: { pages: CarouselPage[] }) {
 }
 
 const styles = StyleSheet.create({
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingTop: 8 },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingTop: 10 },
   dot: { width: 8, height: 8, borderRadius: 4 },
 });

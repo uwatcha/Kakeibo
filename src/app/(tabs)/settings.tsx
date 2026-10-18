@@ -1,11 +1,15 @@
-import { router } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { type Href, router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, List, Snackbar, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, Snackbar, useTheme } from 'react-native-paper';
 
+import { ListRow } from '@/components/ListRow';
+import { SectionCard } from '@/components/SectionCard';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { exportBackupJson, exportTransactionsCsv } from '@/features/export/exportData';
 import { supabase } from '@/lib/supabase';
+import { SPACING } from '@/theme';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -24,11 +28,17 @@ export default function SettingsScreen() {
     }
   };
 
+  const chevron = <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.onSurfaceVariant} />;
+
+  const navItem = (title: string, icon: string, href: Href) => (
+    <ListRow title={title} icon={icon} right={chevron} onPress={() => router.push(href)} />
+  );
+
   const exportItem = (kind: 'csv' | 'backup', title: string, icon: string) => (
-    <List.Item
+    <ListRow
       title={title}
-      left={(props) => <List.Icon {...props} icon={icon} />}
-      right={(props) => (exporting === kind ? <ActivityIndicator {...props} /> : null)}
+      icon={icon}
+      right={exporting === kind ? <ActivityIndicator size={20} /> : null}
       disabled={exporting !== null}
       onPress={() => runExport(kind)}
     />
@@ -36,41 +46,21 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <ScrollView>
-        <List.Item
-          title="口座の管理"
-          left={(props) => <List.Icon {...props} icon="wallet" />}
-          right={(props) => <List.Icon {...props} icon="chevron-right" />}
-          onPress={() => router.push('/accounts')}
-        />
-        <List.Item
-          title="カテゴリの管理"
-          left={(props) => <List.Icon {...props} icon="shape" />}
-          right={(props) => <List.Icon {...props} icon="chevron-right" />}
-          onPress={() => router.push('/categories')}
-        />
-        <List.Item
-          title="働き先と給料日"
-          left={(props) => <List.Icon {...props} icon="briefcase" />}
-          right={(props) => <List.Icon {...props} icon="chevron-right" />}
-          onPress={() => router.push('/employers')}
-        />
-        <List.Item
-          title="定期支払い"
-          left={(props) => <List.Icon {...props} icon="autorenew" />}
-          right={(props) => <List.Icon {...props} icon="chevron-right" />}
-          onPress={() => router.push('/recurring')}
-        />
-        <List.Section title="データ">
+      <ScrollView contentContainerStyle={styles.content}>
+        <SectionCard>
+          {navItem('口座の管理', 'wallet', '/accounts')}
+          {navItem('カテゴリの管理', 'shape', '/categories')}
+          {navItem('働き先と給料日', 'briefcase', '/employers')}
+          {navItem('定期支払い', 'autorenew', '/recurring')}
+        </SectionCard>
+        <SectionCard title="データ">
           {exportItem('csv', '記録を CSV で書き出す', 'file-delimited')}
           {exportItem('backup', 'バックアップを書き出す', 'database-export')}
-        </List.Section>
-        <List.Item
-          title="ログイン中"
-          description={session?.user.email}
-          left={(props) => <List.Icon {...props} icon="account" />}
-        />
-        <Button mode="outlined" style={styles.logout} onPress={() => supabase.auth.signOut()}>
+        </SectionCard>
+        <SectionCard>
+          <ListRow title="ログイン中" subtitle={session?.user.email} icon="account" />
+        </SectionCard>
+        <Button mode="outlined" onPress={() => supabase.auth.signOut()}>
           ログアウト
         </Button>
       </ScrollView>
@@ -83,5 +73,5 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  logout: { margin: 16 },
+  content: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap },
 });

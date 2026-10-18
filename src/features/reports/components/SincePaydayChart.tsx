@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { ActivityIndicator, Button, Card, Text, useTheme } from 'react-native-paper';
 
@@ -14,6 +14,7 @@ import { useMovementsAfter } from '@/features/reports/hooks';
 import { SLICE_COLORS } from '@/features/reports/palette';
 import { formatDay } from '@/lib/date';
 import { formatYen } from '@/lib/money';
+import { RADIUS } from '@/theme';
 
 const Y_AXIS_WIDTH = 44;
 const CHART_HEIGHT = 180;
@@ -44,7 +45,7 @@ function LineSwatch({ color, dashed }: { color: string; dashed?: boolean }) {
 }
 
 /** 前回の給料日から次の給料日までの汎用資産。今日までは実績、その先はこのままの勢いでの予測（点線） */
-export function SincePaydayChart({ today, style }: { today: string; style?: object }) {
+export function SincePaydayChart({ today, style }: { today: string; style?: StyleProp<ViewStyle> }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const employers = useEmployers();
@@ -57,8 +58,8 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
 
   if (employers.data && active.length === 0) {
     return (
-      <Card mode="contained" style={style}>
-        <Card.Title title={TITLE} />
+      <Card mode="elevated" elevation={1} style={[styles.card, style]}>
+        <Card.Title title={TITLE} titleStyle={styles.title} />
         <Card.Content style={styles.gap}>
           <Button mode="outlined" icon="briefcase-plus" onPress={() => router.push('/employers')}>
             働き先と給料日を登録
@@ -71,8 +72,8 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
   const ready = employers.data && balances.data && movements.data && last;
   if (!ready) {
     return (
-      <Card mode="contained" style={style}>
-        <Card.Title title={TITLE} />
+      <Card mode="elevated" elevation={1} style={[styles.card, style]}>
+        <Card.Title title={TITLE} titleStyle={styles.title} />
         <Card.Content>
           {employers.error || balances.error || movements.error ? (
             <Text variant="bodyMedium">読み込めませんでした</Text>
@@ -130,8 +131,12 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
   const projectedEnd = projection?.[projection.length - 1];
 
   return (
-    <Card mode="contained" style={style}>
-      <Card.Title title={TITLE} subtitle={`${formatDay(last.date)}（${last.employer.name}）から・汎用資産`} />
+    <Card mode="elevated" elevation={1} style={[styles.card, style]}>
+      <Card.Title
+        title={TITLE}
+        titleStyle={styles.title}
+        subtitle={`${formatDay(last.date)}（${last.employer.name}）から・汎用資産`}
+      />
       <Card.Content style={styles.gap}>
         <View style={styles.summary}>
           <Text variant="bodyMedium">収入 {formatYen(income)}</Text>
@@ -237,6 +242,8 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
 }
 
 const styles = StyleSheet.create({
+  card: { borderRadius: RADIUS.card },
+  title: { fontWeight: '700' },
   gap: { gap: 8 },
   summary: { flexDirection: 'row', justifyContent: 'space-between' },
   bold: { fontWeight: 'bold' },

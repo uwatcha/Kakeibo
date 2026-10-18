@@ -19,9 +19,16 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: theme.colors.primary,
-        tabBarStyle: { backgroundColor: theme.colors.elevation.level2 },
-        headerStyle: { backgroundColor: theme.colors.elevation.level2 },
+        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
+        tabBarStyle: { backgroundColor: theme.colors.surface, borderTopWidth: 0, elevation: 8 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        // 大きな太字の見出しを左に置き、ヘッダーと画面の背景をつなげる
+        headerStyle: { backgroundColor: theme.colors.background },
+        headerShadowVisible: false,
         headerTintColor: theme.colors.onSurface,
+        headerTitleAlign: 'left',
+        headerTitleStyle: { fontSize: 26, fontWeight: '800' },
+        sceneStyle: { backgroundColor: theme.colors.background },
       }}
     >
       <Tabs.Screen
@@ -29,12 +36,11 @@ export default function TabsLayout() {
         options={{
           title: 'ホーム',
           tabBarIcon: tabIcon('home'),
-          // 用語の説明は目立たないようヘッダーの小さなアイコンから開く
+          // 用語の説明はヘッダーの小さなアイコンから開く
           headerRight: () => (
             <IconButton
               icon="information-outline"
-              size={20}
-              iconColor={theme.colors.onSurfaceVariant}
+              iconColor={theme.colors.primary}
               accessibilityLabel="用語の説明"
               onPress={() => router.push('/info')}
             />

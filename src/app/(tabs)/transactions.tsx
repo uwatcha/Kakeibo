@@ -1,22 +1,28 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
-import { Chip, Divider, FAB, IconButton, List, Searchbar, Text, useTheme } from 'react-native-paper';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { Chip, IconButton, Searchbar, Text, useTheme } from 'react-native-paper';
 
+import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
+import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
+import { SectionCard } from '@/components/SectionCard';
 import type { Account } from '@/features/accounts/api';
 import { useAccounts } from '@/features/accounts/hooks';
 import type { Category } from '@/features/categories/api';
 import { useCategories } from '@/features/categories/hooks';
+import { categoryIcon } from '@/features/categories/icons';
 import { categoryLabel } from '@/features/categories/tree';
 import type { Transaction } from '@/features/transactions/api';
 import { useMonthTransactions, useSearchTransactions } from '@/features/transactions/hooks';
-import { groupByDate, monthTotals } from '@/features/transactions/list';
+import { type DaySection, groupByDate, monthTotals } from '@/features/transactions/list';
 import { buildSearchFilter } from '@/features/transactions/search';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { addMonths, formatDay, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
+import { positiveColor, positiveContainer, SPACING } from '@/theme';
 
 /** 大分類で絞り込む（その大分類の小分類も含む）。'none' は未分類の支出 */
 function filterByCategory(
@@ -47,25 +53,89 @@ function TransactionRow({
   accounts: readonly Account[];
   categories: readonly Category[];
 }) {
+  const theme = useTheme();
   const rule = TRANSACTION_RULES[t.type];
-  const title =
-    t.type === 'expense' || t.type === 'income'
-      ? (categoryLabel(t.category_id, categories) ?? `${rule.label}（未分類）`)
-      : rule.label;
-  const description = [describeAccounts(t, accounts), t.payee, t.recurring_rule_id ? '（定期）' : null]
-    .filter(Boolean)
-    .join('・');
+  const isFlow = t.type === 'expense' || t.type === 'income';
+  const category = isFlow ? (categoryLabel(t.category_id, categories) ?? `${rule.label}（未分類）`) : rule.label;
+  // 内容があればそれを主にし、カテゴリ（種類）と口座は小さく下に出す
+  const title = t.payee || category;
+  const subtitle = [t.payee ? category : null, describeAccounts(t, accounts)].filter(Boolean).join('・');
   // 収支に入る記録だけ符号を付ける（振替・貸し借りなどは自分のお金の置き場所が変わるだけなので符号なし）
   const kind = t.type === 'income' ? 'income' : t.type === 'expense' ? 'expense' : 'neutral';
+  const icon = isFlow ? categoryIcon(t.category_id, categories, rule.icon) : rule.icon;
+  const iconColors =
+    kind === 'income'
+      ? { background: positiveContainer(theme.dark), color: positiveColor(theme.dark) }
+      : kind === 'expense'
+        ? { background: theme.colors.primaryContainer, color: theme.colors.primary }
+        : { background: theme.colors.surfaceVariant, color: theme.colors.onSurfaceVariant };
 
   return (
-    <List.Item
+    <ListRow
       title={title}
-      description={description}
-      left={(props) => <List.Icon {...props} icon={rule.icon} />}
-      right={() => <Amount value={t.amount} kind={kind} style={styles.amount} />}
+      subtitle={
+        <View style={styles.subtitle}>
+          {t.recurring_rule_id && (
+            <MaterialCommunityIcons
+              name="autorenew"
+              size={14}
+              color={theme.colors.onSurfaceVariant}
+              accessibilityLabel="定期"
+            />
+          )}
+          <Text
+            variant="bodySmall"
+            numberOfLines={1}
+            style={[styles.subtitleText, { color: theme.colors.onSurfaceVariant }]}
+          >
+            {subtitle}
+          </Text>
+        </View>
+      }
+      icon={icon}
+      iconBackground={iconColors.background}
+      iconColor={iconColors.color}
+      right={<Amount value={t.amount} kind={kind} variant="bodyLarge" style={styles.amount} />}
       onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
     />
+  );
+}
+
+/** 1日分の記録を1枚のカードにまとめる */
+function DayCard({
+  section,
+  accounts,
+  categories,
+}: {
+  section: DaySection;
+  accounts: readonly Account[];
+  categories: readonly Category[];
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.day}>
+      <Text variant="labelLarge" style={[styles.dayLabel, { color: theme.colors.onSurfaceVariant }]}>
+        {formatDay(section.date)}
+      </Text>
+      <SectionCard>
+        {section.data.map((t) => (
+          <TransactionRow key={t.id} transaction={t} accounts={accounts} categories={categories} />
+        ))}
+      </SectionCard>
+    </View>
+  );
+}
+
+/** 月の収入・支出・差額。ラベルは小さく、金額を大きく */
+function MonthTotal({ label, children }: { label: string; children: React.ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.totalCell}>
+      <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+        {label}
+      </Text>
+      {children}
+    </View>
   );
 }
 
@@ -120,17 +190,19 @@ export default function TransactionsScreen() {
           autoFocus
           icon="arrow-left"
           onIconPress={closeSearch}
-          style={styles.searchbar}
+          style={[styles.searchbar, { backgroundColor: theme.colors.surface }]}
         />
       ) : (
-        <>
+        <SectionCard style={styles.summary}>
           <View style={styles.monthBar}>
             <IconButton
               icon="chevron-left"
               accessibilityLabel="前の月"
               onPress={() => setMonth(addMonths(month, -1))}
             />
-            <Text variant="titleMedium">{formatMonth(month)}</Text>
+            <Text variant="titleMedium" style={styles.month}>
+              {formatMonth(month)}
+            </Text>
             <IconButton
               icon="chevron-right"
               accessibilityLabel="次の月"
@@ -138,31 +210,43 @@ export default function TransactionsScreen() {
             />
             <IconButton
               icon="magnify"
+              iconColor={theme.colors.primary}
               accessibilityLabel="記録を検索"
               style={styles.searchButton}
               onPress={() => setSearching(true)}
             />
           </View>
           <View style={styles.totals}>
-            <Text variant="bodyMedium">収入 {formatYen(totals.income)}</Text>
-            <Text variant="bodyMedium">支出 {formatYen(totals.expense)}</Text>
-            <View style={styles.inline}>
-              <Text variant="bodyMedium" style={styles.bold}>
-                差額{' '}
+            <MonthTotal label="収入">
+              <Text variant="titleMedium" style={styles.totalAmount} numberOfLines={1} adjustsFontSizeToFit>
+                {formatYen(totals.income)}
               </Text>
-              <Amount value={totals.income - totals.expense} kind="delta" variant="bodyMedium" style={styles.bold} />
-            </View>
+            </MonthTotal>
+            <MonthTotal label="支出">
+              <Text variant="titleMedium" style={styles.totalAmount} numberOfLines={1} adjustsFontSizeToFit>
+                {formatYen(totals.expense)}
+              </Text>
+            </MonthTotal>
+            <MonthTotal label="差額">
+              <Amount
+                value={totals.income - totals.expense}
+                kind="delta"
+                variant="titleMedium"
+                style={styles.totalAmount}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              />
+            </MonthTotal>
           </View>
-        </>
+          {categoryFilter && (
+            <View style={styles.filter}>
+              <Chip icon="filter" compact onClose={() => router.setParams({ categoryId: undefined })}>
+                {filterLabel ?? 'カテゴリ'}の支出だけ表示中
+              </Chip>
+            </View>
+          )}
+        </SectionCard>
       )}
-      {!searching && categoryFilter && (
-        <View style={styles.filter}>
-          <Chip icon="filter" onClose={() => router.setParams({ categoryId: undefined })}>
-            {filterLabel ?? 'カテゴリ'}の支出だけ表示中
-          </Chip>
-        </View>
-      )}
-      <Divider />
 
       {!ready ? (
         <QueryState
@@ -176,31 +260,21 @@ export default function TransactionsScreen() {
           }}
         />
       ) : (
-        <SectionList
-          sections={groupByDate(filtered)}
-          keyExtractor={(t) => t.id}
-          renderSectionHeader={({ section }) => (
-            <List.Subheader style={{ backgroundColor: theme.colors.background }}>
-              {formatDay(section.date)}
-            </List.Subheader>
-          )}
-          renderItem={({ item }) => (
-            <TransactionRow transaction={item} accounts={accounts.data!} categories={categories.data!} />
-          )}
+        <FlatList
+          data={groupByDate(filtered)}
+          keyExtractor={(section) => section.date}
+          renderItem={({ item }) => <DayCard section={item} accounts={accounts.data!} categories={categories.data!} />}
           ListEmptyComponent={
-            <Text style={styles.empty} variant="bodyMedium">
+            <Text style={[styles.empty, { color: theme.colors.onSurfaceVariant }]} variant="bodyMedium">
               {searching ? (term === '' ? '' : '一致する記録はありません') : 'この月の記録はありません'}
             </Text>
           }
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={transactions.isRefetching} onRefresh={transactions.refetch} />}
-          stickySectionHeadersEnabled
         />
       )}
 
-      <FAB
-        icon="plus"
-        style={styles.fab}
+      <AddFab
         accessibilityLabel="記録する"
         onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
       />
@@ -210,15 +284,20 @@ export default function TransactionsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  summary: { marginHorizontal: SPACING.screen, marginTop: 4, paddingBottom: 14 },
   monthBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  month: { fontWeight: '700', minWidth: 96, textAlign: 'center' },
   searchButton: { position: 'absolute', right: 4 },
-  searchbar: { margin: 8 },
-  totals: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 8, paddingHorizontal: 8 },
-  filter: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8 },
-  bold: { fontWeight: 'bold' },
-  inline: { flexDirection: 'row', alignItems: 'baseline' },
-  amount: { alignSelf: 'center', fontVariant: ['tabular-nums'] },
+  searchbar: { marginHorizontal: SPACING.screen, marginTop: 4, marginBottom: 4 },
+  totals: { flexDirection: 'row', paddingHorizontal: SPACING.row, gap: 8 },
+  totalCell: { flex: 1, alignItems: 'center', gap: 2 },
+  totalAmount: { fontWeight: '700' },
+  filter: { flexDirection: 'row', justifyContent: 'center', paddingTop: 10 },
+  subtitle: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  subtitleText: { flexShrink: 1 },
+  amount: { fontWeight: '700' },
+  day: { gap: 6 },
+  dayLabel: { paddingHorizontal: 4, fontWeight: '700' },
   empty: { padding: 32, textAlign: 'center' },
-  listContent: { paddingBottom: 96 },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
+  listContent: { padding: SPACING.screen, gap: 16, paddingBottom: 96 },
 });

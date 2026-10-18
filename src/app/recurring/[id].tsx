@@ -18,7 +18,9 @@ import {
 } from 'react-native-paper';
 
 import { Amount } from '@/components/Amount';
+import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
+import { SectionCard } from '@/components/SectionCard';
 import { useAccounts } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import type { RecurringRule } from '@/features/recurring/api';
@@ -397,23 +399,23 @@ export default function RecurringRuleScreen() {
 
         {rule && (
           <>
-            <List.Section title={`追加した記録（${generated.data?.length ?? 0}件）`}>
+            <SectionCard title={`追加した記録（${generated.data?.length ?? 0}件）`}>
               {generated.data?.map((t) => (
-                <List.Item
+                <ListRow
                   key={t.id}
                   title={formatDay(t.date)}
-                  description={t.date > today ? '予定' : undefined}
-                  right={() => (
+                  subtitle={t.date > today ? '予定' : undefined}
+                  right={
                     <Amount
                       value={t.amount}
                       kind={t.type === 'income' ? 'income' : t.type === 'expense' ? 'expense' : 'neutral'}
-                      style={styles.amount}
+                      variant="bodyLarge"
                     />
-                  )}
+                  }
                   onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
                 />
               ))}
-            </List.Section>
+            </SectionCard>
             <Button
               mode="outlined"
               icon="delete-sweep"
@@ -487,6 +489,5 @@ const styles = StyleSheet.create({
   subheader: { paddingHorizontal: 0 },
   dayInput: { width: 140 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
-  amount: { alignSelf: 'center' },
   button: { marginTop: 8 },
 });

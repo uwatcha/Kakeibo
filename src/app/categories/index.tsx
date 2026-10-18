@@ -1,14 +1,19 @@
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { FAB, IconButton, List, SegmentedButtons, Snackbar, Text, useTheme } from 'react-native-paper';
+import { IconButton, SegmentedButtons, Snackbar, Text, useTheme } from 'react-native-paper';
 import ReorderableList, { reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 
+import { AddFab } from '@/components/AddFab';
 import { DragHandle } from '@/components/DragHandle';
+import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
+import { SectionCard } from '@/components/SectionCard';
 import type { Category } from '@/features/categories/api';
 import { useCategories, useReorderCategories } from '@/features/categories/hooks';
+import { categoryIcon } from '@/features/categories/icons';
 import type { CategoryKind } from '@/features/transactions/transactionRules';
+import { RADIUS, SPACING } from '@/theme';
 
 function openCategory(params: { id: string; kind?: CategoryKind; parentId?: string }) {
   router.push({ pathname: '/categories/[id]', params });
@@ -27,13 +32,13 @@ function ParentCell({
   const theme = useTheme();
   const drag = useReorderableDrag();
   return (
-    <View style={{ backgroundColor: theme.colors.background }}>
-      <List.Item
+    <View style={[styles.tile, { backgroundColor: theme.colors.surface }]}>
+      <ListRow
         title={parent.name}
-        titleStyle={styles.parentTitle}
+        icon={categoryIcon(parent.id, [parent], 'shape')}
         onPress={() => openCategory({ id: parent.id })}
         onLongPress={drag}
-        right={() => (
+        right={
           <View style={styles.row}>
             <IconButton
               icon="plus"
@@ -43,14 +48,15 @@ function ParentCell({
             />
             <DragHandle label={parent.name} />
           </View>
-        )}
+        }
       />
       {subcategories.map((child) => (
-        <List.Item
+        <ListRow
           key={child.id}
           title={child.name}
+          icon="subdirectory-arrow-right"
+          iconColor={theme.colors.onSurfaceVariant}
           style={styles.child}
-          left={(props) => <List.Icon {...props} icon="subdirectory-arrow-right" />}
           onPress={() => openCategory({ id: child.id })}
         />
       ))}
@@ -112,23 +118,23 @@ export default function CategoriesScreen() {
           }
           ListFooterComponent={
             archived.length > 0 ? (
-              <List.Section title="非表示にしたカテゴリ">
+              <SectionCard title="非表示にしたカテゴリ" style={styles.archived}>
                 {archived.map((c) => {
                   const parent = parents.find((p) => p.id === c.parent_id);
                   return (
-                    <List.Item
+                    <ListRow
                       key={c.id}
                       title={parent ? `${parent.name} / ${c.name}` : c.name}
                       onPress={() => openCategory({ id: c.id })}
                     />
                   );
                 })}
-              </List.Section>
+              </SectionCard>
             ) : null
           }
         />
       )}
-      <FAB icon="plus" label="大分類を追加" style={styles.fab} onPress={() => openCategory({ id: 'new', kind })} />
+      <AddFab label="大分類を追加" onPress={() => openCategory({ id: 'new', kind })} />
       <Snackbar visible={reorder.isError} onDismiss={reorder.reset}>
         並べ替えを保存できませんでした
       </Snackbar>
@@ -138,11 +144,11 @@ export default function CategoriesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  segment: { margin: 16, marginBottom: 8 },
-  list: { paddingBottom: 96 },
+  segment: { marginHorizontal: SPACING.screen, marginTop: 4, marginBottom: 12 },
+  list: { paddingHorizontal: SPACING.screen, paddingBottom: 96 },
+  tile: { borderRadius: RADIUS.tile, overflow: 'hidden', marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  parentTitle: { fontWeight: 'bold' },
   child: { paddingLeft: 16 },
+  archived: { marginTop: 8 },
   empty: { padding: 24, textAlign: 'center' },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
 });

@@ -2,6 +2,7 @@ import { type StyleProp, StyleSheet, type TextStyle } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 
 import { formatSignedYen, formatYen, MINUS } from '@/lib/money';
+import { positiveColor } from '@/theme';
 
 /**
  * 金額の見せ方（プラスかマイナスかを色と符号の両方で示す。色だけに頼らない）
@@ -23,7 +24,7 @@ type Props = {
 export function useAmountColors() {
   const theme = useTheme();
   return {
-    positive: theme.dark ? '#6cc58a' : '#1b7f3b',
+    positive: positiveColor(theme.dark),
     negative: theme.colors.error,
     muted: theme.colors.onSurfaceVariant,
   };

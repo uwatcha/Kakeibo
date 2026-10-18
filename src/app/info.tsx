@@ -1,8 +1,10 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Divider, List, Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 
+import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO, type AccountKind } from '@/features/accounts/accountKinds';
 import { TRANSACTION_RULES, type TransactionType } from '@/features/transactions/transactionRules';
+import { SPACING } from '@/theme';
 
 type Term = { term: string; description: string };
 
@@ -180,7 +182,17 @@ const OTHER_TERMS: Term[] = [
 ];
 
 function TermItem({ term, description }: Term) {
-  return <List.Item title={term} titleStyle={styles.term} description={description} descriptionNumberOfLines={0} />;
+  const theme = useTheme();
+  return (
+    <View style={styles.term}>
+      <Text variant="titleSmall" style={styles.termTitle}>
+        {term}
+      </Text>
+      <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+        {description}
+      </Text>
+    </View>
+  );
 }
 
 export default function InfoScreen() {
@@ -188,40 +200,36 @@ export default function InfoScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: theme.colors.background }} contentContainerStyle={styles.content}>
-      <List.Section title="残高">
+      <SectionCard title="残高">
         {BALANCE_TERMS.map((t) => (
           <TermItem key={t.term} {...t} />
         ))}
-      </List.Section>
-      <Divider />
-      <List.Section title="口座の種類">
+      </SectionCard>
+      <SectionCard title="口座の種類">
         {(Object.keys(ACCOUNT_DESCRIPTIONS) as AccountKind[]).map((kind) => (
           <TermItem key={kind} term={ACCOUNT_KIND_INFO[kind].label} description={ACCOUNT_DESCRIPTIONS[kind]} />
         ))}
-      </List.Section>
-      <Divider />
-      <List.Section title="記録の種類">
+      </SectionCard>
+      <SectionCard title="記録の種類">
         {(Object.keys(TYPE_DESCRIPTIONS) as TransactionType[]).map((type) => (
           <TermItem key={type} term={TRANSACTION_RULES[type].label} description={TYPE_DESCRIPTIONS[type]} />
         ))}
-      </List.Section>
-      <Divider />
-      <List.Section title="そのほか">
+      </SectionCard>
+      <SectionCard title="そのほか">
         {OTHER_TERMS.map((t) => (
           <TermItem key={t.term} {...t} />
         ))}
-      </List.Section>
-      <View style={styles.footer}>
-        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          金額はすべて円単位、日付は日本時間です。
-        </Text>
-      </View>
+      </SectionCard>
+      <Text variant="bodySmall" style={[styles.footer, { color: theme.colors.onSurfaceVariant }]}>
+        金額はすべて円単位、日付は日本時間です。
+      </Text>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 32 },
-  term: { fontWeight: 'bold' },
-  footer: { paddingHorizontal: 16 },
+  content: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 32 },
+  term: { paddingHorizontal: SPACING.row, paddingVertical: 8, gap: 2 },
+  termTitle: { fontWeight: '700' },
+  footer: { paddingHorizontal: 4 },
 });

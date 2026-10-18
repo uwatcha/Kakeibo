@@ -1,14 +1,18 @@
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { FAB, List, Snackbar, Text, useTheme } from 'react-native-paper';
+import { Snackbar, Text, useTheme } from 'react-native-paper';
 import ReorderableList, { reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 
+import { AddFab } from '@/components/AddFab';
 import { DragHandle } from '@/components/DragHandle';
+import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
+import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
 import type { Account } from '@/features/accounts/api';
 import { useAccounts, useReorderAccounts } from '@/features/accounts/hooks';
+import { RADIUS, SPACING } from '@/theme';
 
 function openAccount(id: string) {
   router.push({ pathname: '/accounts/[id]', params: { id } });
@@ -23,15 +27,16 @@ function DraggableRow({ account }: { account: Account }) {
   const theme = useTheme();
   const drag = useReorderableDrag();
   return (
-    <List.Item
-      title={account.name}
-      description={describe(account)}
-      style={{ backgroundColor: theme.colors.background }}
-      left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[account.kind].icon} />}
-      right={() => <DragHandle label={account.name} />}
-      onPress={() => openAccount(account.id)}
-      onLongPress={drag}
-    />
+    <View style={[styles.tile, { backgroundColor: theme.colors.surface }]}>
+      <ListRow
+        title={account.name}
+        subtitle={describe(account)}
+        icon={ACCOUNT_KIND_INFO[account.kind].icon}
+        right={<DragHandle label={account.name} />}
+        onPress={() => openAccount(account.id)}
+        onLongPress={drag}
+      />
+    </View>
   );
 }
 
@@ -73,22 +78,23 @@ export default function AccountsScreen() {
           }
           ListFooterComponent={
             archived.length > 0 ? (
-              <List.Section title="非表示にした口座">
+              <SectionCard title="非表示にした口座" style={styles.archived}>
                 {archived.map((a) => (
-                  <List.Item
+                  <ListRow
                     key={a.id}
                     title={a.name}
-                    description={describe(a)}
-                    left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[a.kind].icon} />}
+                    subtitle={describe(a)}
+                    icon={ACCOUNT_KIND_INFO[a.kind].icon}
+                    iconColor={theme.colors.onSurfaceVariant}
                     onPress={() => openAccount(a.id)}
                   />
                 ))}
-              </List.Section>
+              </SectionCard>
             ) : null
           }
         />
       )}
-      <FAB icon="plus" label="口座を追加" style={styles.fab} onPress={() => openAccount('new')} />
+      <AddFab label="口座を追加" onPress={() => openAccount('new')} />
       <Snackbar visible={reorder.isError} onDismiss={reorder.reset}>
         並べ替えを保存できませんでした
       </Snackbar>
@@ -98,7 +104,8 @@ export default function AccountsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  list: { paddingBottom: 96 },
+  list: { padding: SPACING.screen, paddingTop: 4, paddingBottom: 96 },
+  tile: { borderRadius: RADIUS.tile, overflow: 'hidden', marginBottom: 8 },
+  archived: { marginTop: 8 },
   empty: { padding: 24, textAlign: 'center' },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
 });

@@ -43,3 +43,7 @@ Docs: https://docs.expo.dev/eas/index.md
 ## UI text rule (Kakeibo)
 
 Never put sentences that explain a feature or an app-specific term on screens (no info HelperText, explanatory list descriptions, usage captions/subtitles, "tap + to add" guidance, empty-state nudges, or parenthetical hints in button labels). Write all such explanations in the glossary screen `src/app/info.tsx` (opened from the ⓘ icon on Home) instead. Allowed on screens: error/validation messages, confirmation dialogs, factual empty states ("この月の記録はありません"), data labels, and chart legends. See "画面の文言のルール" in CLAUDE.md.
+
+## Visual design (Kakeibo)
+
+Follow DESIGN.md (colors, corner radius, spacing, shared components). Build lists with `SectionCard` + `ListRow` from `src/components`, keep amounts right-aligned with the same 16px padding, and use `AddFab` for add buttons. Theme values live in `src/theme.ts`.

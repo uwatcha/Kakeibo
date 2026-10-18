@@ -6,10 +6,11 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { MD3DarkTheme, MD3LightTheme, PaperProvider, useTheme } from 'react-native-paper';
+import { PaperProvider, useTheme } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { RecurringRunner } from '@/features/recurring/RecurringRunner';
+import { themes } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,8 +30,12 @@ function RootNavigator() {
     <Stack
       screenOptions={{
         headerShown: false,
-        headerStyle: { backgroundColor: theme.colors.elevation.level2 },
+        // ヘッダーは画面の背景と同じ色にして境目の線を消す
+        headerStyle: { backgroundColor: theme.colors.background },
+        headerShadowVisible: false,
         headerTintColor: theme.colors.onSurface,
+        headerTitleStyle: { fontWeight: '700' },
+        contentStyle: { backgroundColor: theme.colors.background },
       }}
     >
       <Stack.Protected guard={!!session}>
@@ -57,7 +62,7 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const theme = colorScheme === 'dark' ? MD3DarkTheme : MD3LightTheme;
+  const theme = colorScheme === 'dark' ? themes.dark : themes.light;
 
   return (
     // ドラッグ＆ドロップ（react-native-reorderable-list）などのジェスチャーに必要

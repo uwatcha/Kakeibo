@@ -1,12 +1,16 @@
 import { router, Stack } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { FAB, List, Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 
+import { AddFab } from '@/components/AddFab';
+import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
+import { SectionCard } from '@/components/SectionCard';
 import { useEmployers } from '@/features/employers/hooks';
 import { paydayLabel } from '@/features/employers/labels';
 import { nextPayday } from '@/features/employers/payday';
 import { formatDay, toTokyoDateString } from '@/lib/date';
+import { SPACING } from '@/theme';
 
 function openEmployer(id: string) {
   router.push({ pathname: '/employers/[id]', params: { id } });
@@ -27,41 +31,49 @@ export default function EmployersScreen() {
         <QueryState isLoading={isLoading} error={error} onRetry={refetch} />
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
-          {active.length === 0 && (
+          {active.length === 0 ? (
             <Text style={styles.empty} variant="bodyMedium">
               働き先がありません
             </Text>
+          ) : (
+            <SectionCard>
+              {active.map((e) => {
+                const next = nextPayday([e], today);
+                return (
+                  <ListRow
+                    key={e.id}
+                    title={e.name}
+                    subtitle={`${paydayLabel(e)}・次回 ${next ? formatDay(next.date) : '―'}`}
+                    icon="briefcase"
+                    onPress={() => openEmployer(e.id)}
+                  />
+                );
+              })}
+            </SectionCard>
           )}
-          {active.map((e) => {
-            const next = nextPayday([e], today);
-            return (
-              <List.Item
-                key={e.id}
-                title={e.name}
-                description={`${paydayLabel(e)}\n次回: ${next ? formatDay(next.date) : '―'}`}
-                descriptionNumberOfLines={2}
-                left={(props) => <List.Icon {...props} icon="briefcase" />}
-                onPress={() => openEmployer(e.id)}
-              />
-            );
-          })}
           {archived.length > 0 && (
-            <List.Section title="非表示にした働き先">
+            <SectionCard title="非表示にした働き先">
               {archived.map((e) => (
-                <List.Item key={e.id} title={e.name} description={paydayLabel(e)} onPress={() => openEmployer(e.id)} />
+                <ListRow
+                  key={e.id}
+                  title={e.name}
+                  subtitle={paydayLabel(e)}
+                  icon="briefcase-outline"
+                  iconColor={theme.colors.onSurfaceVariant}
+                  onPress={() => openEmployer(e.id)}
+                />
               ))}
-            </List.Section>
+            </SectionCard>
           )}
         </ScrollView>
       )}
-      <FAB icon="plus" label="働き先を追加" style={styles.fab} onPress={() => openEmployer('new')} />
+      <AddFab label="働き先を追加" onPress={() => openEmployer('new')} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  list: { paddingBottom: 96 },
+  list: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 96 },
   empty: { padding: 24, textAlign: 'center' },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
 });
