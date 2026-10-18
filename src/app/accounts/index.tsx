@@ -1,6 +1,9 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, Stack } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { FAB, IconButton, List, Snackbar, Text, useTheme } from 'react-native-paper';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { FAB, List, Snackbar, Text, useTheme } from 'react-native-paper';
+import ReorderableList, { reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 
 import { QueryState } from '@/components/QueryState';
 import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
@@ -11,48 +14,49 @@ function openAccount(id: string) {
   router.push({ pathname: '/accounts/[id]', params: { id } });
 }
 
+function describe(account: Account) {
+  return ACCOUNT_KIND_INFO[account.kind].label + (account.is_reserved ? '・普段使わない' : '');
+}
+
+/** 並べ替えできる行。右のつまみを押したまま動かすか、行を長押しして動かす */
+function DraggableRow({ account }: { account: Account }) {
+  const theme = useTheme();
+  const drag = useReorderableDrag();
+  return (
+    <List.Item
+      title={account.name}
+      description={describe(account)}
+      style={{ backgroundColor: theme.colors.background }}
+      left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[account.kind].icon} />}
+      right={() => (
+        <Pressable onPressIn={drag} hitSlop={12} accessibilityLabel={`${account.name}を並べ替え`} style={styles.handle}>
+          <MaterialCommunityIcons name="drag-horizontal-variant" size={24} color={theme.colors.onSurfaceVariant} />
+        </Pressable>
+      )}
+      onPress={() => openAccount(account.id)}
+      onLongPress={drag}
+    />
+  );
+}
+
 export default function AccountsScreen() {
   const theme = useTheme();
   const { data, isLoading, error, refetch } = useAccounts();
   const reorder = useReorderAccounts();
+  // ドロップした直後は保存を待たずに並べ替え後の順で見せる
+  const [pendingOrder, setPendingOrder] = useState<Account[] | null>(null);
 
-  const active = data?.filter((a) => !a.is_archived) ?? [];
+  const active = pendingOrder ?? data?.filter((a) => !a.is_archived) ?? [];
   const archived = data?.filter((a) => a.is_archived) ?? [];
 
-  const move = (index: number, delta: -1 | 1) => {
-    const ids = active.map((a) => a.id);
-    const target = index + delta;
-    [ids[index], ids[target]] = [ids[target], ids[index]];
-    reorder.mutate(ids);
+  const onReorder = ({ from, to }: { from: number; to: number }) => {
+    const next = reorderItems(active, from, to);
+    setPendingOrder(next);
+    reorder.mutate(
+      next.map((a) => a.id),
+      { onSettled: () => setPendingOrder(null) },
+    );
   };
-
-  const renderItem = (account: Account, index?: number) => (
-    <List.Item
-      key={account.id}
-      title={account.name}
-      description={ACCOUNT_KIND_INFO[account.kind].label + (account.is_reserved ? '・普段使わない' : '')}
-      left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[account.kind].icon} />}
-      right={() =>
-        index === undefined ? null : (
-          <View style={styles.moveButtons}>
-            <IconButton
-              icon="chevron-up"
-              accessibilityLabel="上へ"
-              disabled={index === 0 || reorder.isPending}
-              onPress={() => move(index, -1)}
-            />
-            <IconButton
-              icon="chevron-down"
-              accessibilityLabel="下へ"
-              disabled={index === active.length - 1 || reorder.isPending}
-              onPress={() => move(index, 1)}
-            />
-          </View>
-        )
-      }
-      onPress={() => openAccount(account.id)}
-    />
-  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -60,17 +64,33 @@ export default function AccountsScreen() {
       {!data ? (
         <QueryState isLoading={isLoading} error={error} onRetry={refetch} />
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
-          {active.length === 0 && (
+        <ReorderableList
+          data={active}
+          keyExtractor={(a) => a.id}
+          renderItem={({ item }) => <DraggableRow account={item} />}
+          onReorder={onReorder}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
             <Text style={styles.empty} variant="bodyMedium">
               口座がありません
             </Text>
-          )}
-          {active.map((a, i) => renderItem(a, i))}
-          {archived.length > 0 && (
-            <List.Section title="非表示にした口座">{archived.map((a) => renderItem(a))}</List.Section>
-          )}
-        </ScrollView>
+          }
+          ListFooterComponent={
+            archived.length > 0 ? (
+              <List.Section title="非表示にした口座">
+                {archived.map((a) => (
+                  <List.Item
+                    key={a.id}
+                    title={a.name}
+                    description={describe(a)}
+                    left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[a.kind].icon} />}
+                    onPress={() => openAccount(a.id)}
+                  />
+                ))}
+              </List.Section>
+            ) : null
+          }
+        />
       )}
       <FAB icon="plus" label="口座を追加" style={styles.fab} onPress={() => openAccount('new')} />
       <Snackbar visible={reorder.isError} onDismiss={reorder.reset}>
@@ -84,6 +104,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { paddingBottom: 96 },
   empty: { padding: 24, textAlign: 'center' },
-  moveButtons: { flexDirection: 'row', alignItems: 'center' },
+  handle: { justifyContent: 'center', paddingHorizontal: 8 },
   fab: { position: 'absolute', right: 16, bottom: 16 },
 });

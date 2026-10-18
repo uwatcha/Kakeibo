@@ -43,7 +43,7 @@ export default function BalanceAdjustScreen() {
   const appShown = isLiability(kind) ? 0 - balance.data : balance.data;
   const actual = input.trim() === '' ? null : parseNonNegativeYen(input);
   const plan = actual === null ? null : planAdjustment(kind, balance.data, actual);
-  // 画面に出す差額（実際 − アプリ。負債も「未払い額」どうしの差で見せる）
+  // 画面に出す差額（実際 − 現在。負債も「未払い額」どうしの差で見せる）
   const shownDiff = actual === null ? 0 : actual - appShown;
 
   const onSave = async () => {
@@ -72,7 +72,7 @@ export default function BalanceAdjustScreen() {
         bottomOffset={24}
       >
         <View style={styles.row}>
-          <Text variant="bodyLarge">アプリの{label}</Text>
+          <Text variant="bodyLarge">現在の{label}</Text>
           <Text variant="titleMedium" style={styles.number}>
             {formatYen(appShown)}
           </Text>

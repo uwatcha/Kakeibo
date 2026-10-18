@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { MD3DarkTheme, MD3LightTheme, PaperProvider, useTheme } from 'react-native-paper';
 
@@ -55,15 +56,18 @@ export default function RootLayout() {
   const theme = colorScheme === 'dark' ? MD3DarkTheme : MD3LightTheme;
 
   return (
-    <KeyboardProvider>
-      <QueryClientProvider client={queryClient}>
-        <PaperProvider theme={theme}>
-          <AuthProvider>
-            <StatusBar style="auto" />
-            <RootNavigator />
-          </AuthProvider>
-        </PaperProvider>
-      </QueryClientProvider>
-    </KeyboardProvider>
+    // ドラッグ＆ドロップ（react-native-reorderable-list）などのジェスチャーに必要
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
+        <QueryClientProvider client={queryClient}>
+          <PaperProvider theme={theme}>
+            <AuthProvider>
+              <StatusBar style="auto" />
+              <RootNavigator />
+            </AuthProvider>
+          </PaperProvider>
+        </QueryClientProvider>
+      </KeyboardProvider>
+    </GestureHandlerRootView>
   );
 }
