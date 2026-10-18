@@ -177,9 +177,6 @@ export default function ReportsScreen() {
                 right={() => (
                   <View style={styles.itemRight}>
                     <Text style={styles.number}>{formatYen(item.amount)}</Text>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      {Math.round(item.ratio * 100)}%
-                    </Text>
                   </View>
                 )}
                 onPress={() => openTransactions(item.categoryId)}
