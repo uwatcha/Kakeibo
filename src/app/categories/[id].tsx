@@ -1,13 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
-import { Button, HelperText, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, HelperText, List, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
+import ReorderableList, { reorderItems } from 'react-native-reorderable-list';
 import { z } from 'zod';
 
+import { DragHandle } from '@/components/DragHandle';
 import { QueryState } from '@/components/QueryState';
-import { useCategories, useCreateCategory, useUpdateCategory } from '@/features/categories/hooks';
+import type { Category } from '@/features/categories/api';
+import { useCategories, useCreateCategory, useReorderCategories, useUpdateCategory } from '@/features/categories/hooks';
 import type { CategoryKind } from '@/features/transactions/transactionRules';
 
 const schema = z.object({
@@ -25,6 +28,9 @@ export default function CategoryEditScreen() {
   const categories = useCategories();
   const create = useCreateCategory();
   const update = useUpdateCategory();
+  const reorder = useReorderCategories();
+  // 小分類をドロップした直後は保存を待たずに並べ替え後の順で見せる
+  const [pendingOrder, setPendingOrder] = useState<Category[] | null>(null);
 
   const category = categories.data?.find((c) => c.id === params.id);
   const parentId = isNew ? (params.parentId ?? null) : (category?.parent_id ?? null);
@@ -78,6 +84,17 @@ export default function CategoryEditScreen() {
   }
 
   const saving = isSubmitting || update.isPending;
+  const subcategories =
+    pendingOrder ?? (category ? categories.data.filter((c) => c.parent_id === category.id && !c.is_archived) : []);
+
+  const onReorderSubcategories = ({ from, to }: { from: number; to: number }) => {
+    const next = reorderItems(subcategories, from, to);
+    setPendingOrder(next);
+    reorder.mutate(
+      next.map((c) => c.id),
+      { onSettled: () => setPendingOrder(null) },
+    );
+  };
 
   return (
     <View style={[styles.container, styles.content, { backgroundColor: theme.colors.background }]}>
@@ -124,7 +141,30 @@ export default function CategoryEditScreen() {
         </>
       )}
 
-      <Snackbar visible={create.isError || update.isError} onDismiss={() => (create.reset(), update.reset())}>
+      {category && !category.parent_id && subcategories.length > 0 && (
+        <>
+          <List.Subheader style={styles.subheader}>小分類</List.Subheader>
+          <ReorderableList
+            data={subcategories}
+            keyExtractor={(c) => c.id}
+            renderItem={({ item }) => (
+              <List.Item
+                title={item.name}
+                style={{ backgroundColor: theme.colors.background }}
+                right={() => <DragHandle label={item.name} />}
+                onPress={() => router.push({ pathname: '/categories/[id]', params: { id: item.id } })}
+              />
+            )}
+            onReorder={onReorderSubcategories}
+            style={styles.subList}
+          />
+        </>
+      )}
+
+      <Snackbar
+        visible={create.isError || update.isError || reorder.isError}
+        onDismiss={() => (create.reset(), update.reset(), reorder.reset())}
+      >
         保存できませんでした。通信状態を確認してください
       </Snackbar>
     </View>
@@ -135,4 +175,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, gap: 4 },
   button: { marginTop: 12 },
+  subheader: { paddingHorizontal: 0, marginTop: 16 },
+  subList: { flex: 1 },
 });

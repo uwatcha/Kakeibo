@@ -1,10 +1,10 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { FAB, List, Snackbar, Text, useTheme } from 'react-native-paper';
 import ReorderableList, { reorderItems, useReorderableDrag } from 'react-native-reorderable-list';
 
+import { DragHandle } from '@/components/DragHandle';
 import { QueryState } from '@/components/QueryState';
 import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
 import type { Account } from '@/features/accounts/api';
@@ -28,11 +28,7 @@ function DraggableRow({ account }: { account: Account }) {
       description={describe(account)}
       style={{ backgroundColor: theme.colors.background }}
       left={(props) => <List.Icon {...props} icon={ACCOUNT_KIND_INFO[account.kind].icon} />}
-      right={() => (
-        <Pressable onPressIn={drag} hitSlop={12} accessibilityLabel={`${account.name}を並べ替え`} style={styles.handle}>
-          <MaterialCommunityIcons name="drag-horizontal-variant" size={24} color={theme.colors.onSurfaceVariant} />
-        </Pressable>
-      )}
+      right={() => <DragHandle label={account.name} />}
       onPress={() => openAccount(account.id)}
       onLongPress={drag}
     />
@@ -104,6 +100,5 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { paddingBottom: 96 },
   empty: { padding: 24, textAlign: 'center' },
-  handle: { justifyContent: 'center', paddingHorizontal: 8 },
   fab: { position: 'absolute', right: 16, bottom: 16 },
 });
