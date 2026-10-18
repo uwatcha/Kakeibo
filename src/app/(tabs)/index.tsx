@@ -104,6 +104,7 @@ export default function HomeScreen() {
     ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, monthEnd(today))
     : null;
 
+  const openTransaction = (id: string) => router.push({ pathname: '/transaction/[id]', params: { id } });
   const accountName = (id: string | null) => data.find((a) => a.id === id)?.name ?? '';
   // 支払い先が口座（クレカ・貸し借りの相手）ならその名前、なければ内容、それもなければ記録の種類
   const causeLabel = (m: Movement) =>
@@ -140,15 +141,26 @@ export default function HomeScreen() {
                       {formatDay(s.date)}
                     </Text>
                     {/* その日に足りなくなる原因の支払い */}
+                    {/* 原因が複数あるときは、それぞれの行を押すとその予定を開く */}
                     {s.causes.map((m) => (
-                      <Text key={m.id} variant="bodySmall" numberOfLines={1}>
+                      <Text
+                        key={m.id}
+                        variant="bodySmall"
+                        numberOfLines={1}
+                        onPress={s.causes.length > 1 ? () => openTransaction(m.id) : undefined}
+                      >
                         {causeLabel(m)} {formatYen(m.amount)}
                       </Text>
                     ))}
                   </View>
                 }
                 right={<Amount value={s.lowest} variant="bodyLarge" />}
-                onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: s.accountId } })}
+                // 足りなくなる原因の支払い予定を開く（複数なら一番大きいもの）
+                onPress={() => {
+                  const main = [...s.causes].sort((a, b) => b.amount - a.amount)[0];
+                  if (main) openTransaction(main.id);
+                  else router.push({ pathname: '/accounts/[id]', params: { id: s.accountId } });
+                }}
               />
             ))}
           </SectionCard>
