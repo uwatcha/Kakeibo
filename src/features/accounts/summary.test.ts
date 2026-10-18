@@ -11,6 +11,7 @@ function account(overrides: Partial<AccountBalance>): AccountBalance {
     isArchived: false,
     sortOrder: seq,
     balance: 0,
+    includeInAvailable: true,
     ...overrides,
   };
 }
@@ -18,7 +19,13 @@ function account(overrides: Partial<AccountBalance>): AccountBalance {
 describe('summarizeBalances', () => {
   const wallet = account({ name: '財布', kind: 'cash', balance: 8000 });
   const bank = account({ name: '銀行', kind: 'bank', balance: 120000 });
-  const nisa = account({ name: 'NISA', kind: 'investment', balance: 300000, isReserved: true });
+  const nisa = account({
+    name: 'NISA',
+    kind: 'investment',
+    balance: 300000,
+    isReserved: true,
+    includeInAvailable: false,
+  });
   const card = account({ name: 'クレカ', kind: 'credit_card', balance: -15000 });
   const parent = account({ name: '親', kind: 'payable', balance: -20000 });
   const friend = account({ name: '友人', kind: 'receivable', balance: 800 });
@@ -30,7 +37,7 @@ describe('summarizeBalances', () => {
     expect(summary.netWorth).toBe(8000 + 120000 + 300000 - 15000 - 20000 + 800 + 500);
   });
 
-  it('普段使わない口座を除いた額は、負債を差し引いたうえで NISA を除く', () => {
+  it('汎用資産は含めると選んだ口座だけ（負債は差し引き、含めない NISA は除く）', () => {
     expect(summary.availableNetWorth).toBe(8000 + 120000 - 15000 - 20000 + 800 + 500);
   });
 
@@ -50,6 +57,12 @@ describe('summarizeBalances', () => {
   it('非表示の口座は一覧に出さない', () => {
     const names = [...summary.everyday, ...summary.reserved].map((a) => a.name);
     expect(names).not.toContain('旧口座');
+  });
+
+  it('普段使わない口座でも、含めると選べば汎用資産に入る', () => {
+    const reserved = account({ kind: 'bank', balance: 1000, isReserved: true, includeInAvailable: true });
+    const excludedCard = account({ kind: 'credit_card', balance: -500, includeInAvailable: false });
+    expect(summarizeBalances([reserved, excludedCard]).availableNetWorth).toBe(1000);
   });
 
   it('並び順は sortOrder 優先', () => {

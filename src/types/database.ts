@@ -43,6 +43,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          include_in_available: boolean
           is_archived: boolean
           is_reserved: boolean
           kind: Database["public"]["Enums"]["account_kind"]
@@ -54,6 +55,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          include_in_available?: boolean
           is_archived?: boolean
           is_reserved?: boolean
           kind: Database["public"]["Enums"]["account_kind"]
@@ -65,6 +67,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          include_in_available?: boolean
           is_archived?: boolean
           is_reserved?: boolean
           kind?: Database["public"]["Enums"]["account_kind"]
@@ -359,6 +362,7 @@ export type Database = {
         Row: {
           balance: number | null
           id: string | null
+          include_in_available: boolean | null
           is_archived: boolean | null
           is_reserved: boolean | null
           kind: Database["public"]["Enums"]["account_kind"] | null

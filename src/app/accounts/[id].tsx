@@ -71,7 +71,13 @@ export default function AccountEditScreen() {
     try {
       if (isNew) {
         const maxOrder = Math.max(0, ...(accounts.data ?? []).map((a) => a.sort_order));
-        await create.mutateAsync({ ...common, kind: valuesKind, sort_order: maxOrder + 10 });
+        await create.mutateAsync({
+          ...common,
+          kind: valuesKind,
+          sort_order: maxOrder + 10,
+          // 作るときだけ、普段使わない口座は汎用資産に含めない状態から始める（あとはホームの ⚙ で切り替える）
+          include_in_available: !common.is_reserved,
+        });
       } else {
         await update.mutateAsync({ id, values: common });
       }

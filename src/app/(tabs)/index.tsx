@@ -1,10 +1,12 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Divider, FAB, List, Text, useTheme } from 'react-native-paper';
 
 import { QueryState } from '@/components/QueryState';
 import { Amount } from '@/components/Amount';
 import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
+import { AvailableAccountsSheet } from '@/features/accounts/components/AvailableAccountsSheet';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
@@ -45,6 +47,7 @@ export default function HomeScreen() {
   const today = toTokyoDateString();
   const employers = useEmployers();
   const future = useMovementsAfter(today);
+  const [showAvailable, setShowAvailable] = useState(false);
 
   if (!data) {
     return (
@@ -104,7 +107,11 @@ export default function HomeScreen() {
 
         <BalanceCarousel
           pages={[
-            { title: '汎用資産', amount: summary.availableNetWorth },
+            {
+              title: '汎用資産',
+              amount: summary.availableNetWorth,
+              action: { icon: 'tune-variant', label: '汎用資産に含める口座', onPress: () => setShowAvailable(true) },
+            },
             { title: '純資産', amount: summary.netWorth },
             ...(spendable
               ? [
@@ -167,6 +174,7 @@ export default function HomeScreen() {
           onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
         />
       )}
+      <AvailableAccountsSheet visible={showAvailable} onDismiss={() => setShowAvailable(false)} accounts={data} />
     </View>
   );
 }

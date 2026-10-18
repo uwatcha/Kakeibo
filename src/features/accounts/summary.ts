@@ -9,12 +9,14 @@ export type AccountBalance = {
   sortOrder: number;
   /** 負債はマイナス */
   balance: number;
+  /** 汎用資産に含めるか（ホームの ⚙ から切り替える） */
+  includeInAvailable: boolean;
 };
 
 export type BalanceSummary = {
   /** 全口座（非表示も含む）の残高合計 */
   netWorth: number;
-  /** 汎用資産: 純資産から普段使わない口座（REQ-14）を除いた額。ホームでいちばん大きく出す */
+  /** 汎用資産: 汎用資産に含めると選んだ口座の残高の合計。ホームでいちばん大きく出す */
   availableNetWorth: number;
   /** 普段使う口座（現金・銀行・電子マネー・投資） */
   everyday: AccountBalance[];
@@ -33,9 +35,9 @@ export type BalanceSummary = {
   payableTotal: number;
 };
 
-/** 汎用資産に数える口座か（普段使わない資産の口座以外すべて） */
-export function isAvailableAccount(account: Pick<AccountBalance, 'kind' | 'isReserved'>): boolean {
-  return !(ASSET_KINDS.includes(account.kind) && account.isReserved);
+/** 汎用資産に数える口座か（口座ごとに選ぶ） */
+export function isAvailableAccount(account: Pick<AccountBalance, 'includeInAvailable'>): boolean {
+  return account.includeInAvailable;
 }
 
 const sum = (accounts: AccountBalance[]) => accounts.reduce((total, a) => total + a.balance, 0);
@@ -57,7 +59,6 @@ export function summarizeBalances(accounts: AccountBalance[]): BalanceSummary {
 
   return {
     netWorth: sum(accounts),
-    // 非表示にした口座も「普段使わない」ものだけ除く（純資産と同じく非表示の口座も含める）
     availableNetWorth: sum(accounts.filter(isAvailableAccount)),
     everyday,
     everydayTotal: sum(everyday),

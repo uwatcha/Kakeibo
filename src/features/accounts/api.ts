@@ -19,6 +19,7 @@ export async function fetchAccountBalances(): Promise<AccountBalance[]> {
     isArchived: row.is_archived!,
     sortOrder: row.sort_order!,
     balance: row.balance ?? 0,
+    includeInAvailable: row.include_in_available!,
   }));
 }
 
