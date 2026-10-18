@@ -366,13 +366,7 @@ export default function TransactionEditScreen() {
           control={control}
           name="payee"
           render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              mode="outlined"
-              label={type === 'expense' ? '用途（任意）' : '相手・内容（任意）'}
-              value={value}
-              onChangeText={onChange}
-              onBlur={onBlur}
-            />
+            <TextInput mode="outlined" label="内容（任意）" value={value} onChangeText={onChange} onBlur={onBlur} />
           )}
         />
         <Controller
