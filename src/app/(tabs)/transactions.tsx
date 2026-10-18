@@ -1,7 +1,6 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
-import { Divider, FAB, IconButton, List, Text, useTheme } from 'react-native-paper';
+import { Chip, Divider, FAB, IconButton, List, Text, useTheme } from 'react-native-paper';
 
 import { QueryState } from '@/components/QueryState';
 import type { Account } from '@/features/accounts/api';
@@ -15,6 +14,18 @@ import { groupByDate, monthTotals } from '@/features/transactions/list';
 import { amountSign, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { addMonths, formatDay, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
+
+/** 大分類で絞り込む（その大分類の小分類も含む）。'none' は未分類の支出 */
+function filterByCategory(
+  transactions: readonly Transaction[],
+  categoryId: string | undefined,
+  categories: readonly Category[],
+): Transaction[] {
+  if (!categoryId) return [...transactions];
+  if (categoryId === 'none') return transactions.filter((t) => t.type === 'expense' && !t.category_id);
+  const ids = new Set([categoryId, ...categories.filter((c) => c.parent_id === categoryId).map((c) => c.id)]);
+  return transactions.filter((t) => t.category_id !== null && ids.has(t.category_id));
+}
 
 function describeAccounts(t: Transaction, accounts: readonly Account[]): string {
   const name = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '';
@@ -66,13 +77,22 @@ function TransactionRow({
 
 export default function TransactionsScreen() {
   const theme = useTheme();
-  const [month, setMonth] = useState(() => monthStart(toTokyoDateString()));
+  // 集計画面からカテゴリをタップすると month と categoryId（未分類は 'none'）が渡される
+  const params = useLocalSearchParams<{ month?: string; categoryId?: string }>();
+  // 表示中の月も URL のパラメータで持つ（集計画面から開いたときと同じ仕組みで切り替える）
+  const month = params.month ?? monthStart(toTokyoDateString());
+  const setMonth = (next: string) => router.setParams({ month: next });
+  const categoryFilter = params.categoryId;
+
   const transactions = useMonthTransactions(month);
   const accounts = useAccounts();
   const categories = useCategories();
 
   const ready = transactions.data && accounts.data && categories.data;
-  const totals = monthTotals(transactions.data ?? []);
+  const filtered = filterByCategory(transactions.data ?? [], categoryFilter, categories.data ?? []);
+  const totals = monthTotals(filtered);
+  const filterLabel =
+    categoryFilter === 'none' ? '未分類' : categories.data?.find((c) => c.id === categoryFilter)?.name;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -88,6 +108,13 @@ export default function TransactionsScreen() {
           差額 {formatYen(totals.income - totals.expense)}
         </Text>
       </View>
+      {categoryFilter && (
+        <View style={styles.filter}>
+          <Chip icon="filter" onClose={() => router.setParams({ categoryId: undefined })}>
+            {filterLabel ?? 'カテゴリ'}の支出だけ表示中
+          </Chip>
+        </View>
+      )}
       <Divider />
 
       {!ready ? (
@@ -102,7 +129,7 @@ export default function TransactionsScreen() {
         />
       ) : (
         <SectionList
-          sections={groupByDate(transactions.data!)}
+          sections={groupByDate(filtered)}
           keyExtractor={(t) => t.id}
           renderSectionHeader={({ section }) => (
             <List.Subheader style={{ backgroundColor: theme.colors.background }}>
@@ -137,6 +164,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   monthBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   totals: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 8, paddingHorizontal: 8 },
+  filter: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8 },
   bold: { fontWeight: 'bold' },
   amount: { alignSelf: 'center', fontVariant: ['tabular-nums'] },
   empty: { padding: 32, textAlign: 'center' },

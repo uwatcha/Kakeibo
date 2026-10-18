@@ -19,6 +19,13 @@ export default function SettingsScreen() {
         onPress={() => router.push('/accounts')}
       />
       <List.Item
+        title="カテゴリの管理"
+        description="追加・名前の変更・並べ替え・非表示"
+        left={(props) => <List.Icon {...props} icon="shape" />}
+        right={(props) => <List.Icon {...props} icon="chevron-right" />}
+        onPress={() => router.push('/categories')}
+      />
+      <List.Item
         title="ログイン中"
         description={session?.user.email}
         left={(props) => <List.Icon {...props} icon="account" />}
