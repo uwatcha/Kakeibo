@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Chip, IconButton, Searchbar, Text, useTheme } from 'react-native-paper';
@@ -106,18 +106,31 @@ function DayCard({
   section,
   accounts,
   categories,
+  planned = false,
 }: {
   section: DaySection;
   accounts: readonly Account[];
   categories: readonly Category[];
+  /** 今日より後の日付。まだ残高に入っていないので、塗らずに破線の枠で見せる */
+  planned?: boolean;
 }) {
   const theme = useTheme();
   return (
     <View style={styles.day}>
-      <Text variant="labelLarge" style={[styles.dayLabel, { color: theme.colors.onSurfaceVariant }]}>
-        {formatDay(section.date)}
-      </Text>
-      <SectionCard>
+      <View style={styles.dayHeader}>
+        <Text variant="labelLarge" style={[styles.dayLabel, { color: theme.colors.onSurfaceVariant }]}>
+          {formatDay(section.date)}
+        </Text>
+        {planned && (
+          <View style={[styles.plannedBadge, { backgroundColor: theme.colors.secondaryContainer }]}>
+            <MaterialCommunityIcons name="calendar-clock" size={14} color={theme.colors.onSecondaryContainer} />
+            <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer }}>
+              予定
+            </Text>
+          </View>
+        )}
+      </View>
+      <SectionCard dashed={planned}>
         {section.data.map((t) => (
           <TransactionRow key={t.id} transaction={t} accounts={accounts} categories={categories} />
         ))}
@@ -177,6 +190,25 @@ export default function TransactionsScreen() {
     (searching ? searchFilter === null || searchResults.data : transactions.data) && accounts.data && categories.data;
   const filtered = searching ? listSource : filterByCategory(listSource, categoryFilter, categories.data ?? []);
   const totals = monthTotals(filtered);
+  // 一覧は新しい日付順なので、未来の予定が上に来る。予定は上にまとめ、開いたときは今日以前から見せる
+  const today = toTokyoDateString();
+  const sections = groupByDate(filtered);
+  const future = sections.filter((section) => section.date > today);
+  const past = sections.filter((section) => section.date <= today);
+
+  const listRef = useRef<FlatList<DaySection>>(null);
+  // 月や検索語が変わったときだけ予定の下まで送る（引っぱって更新したときなどは動かさない）
+  const viewKey = searching ? `search:${term}` : `${month}:${categoryFilter ?? ''}`;
+  const skippedFor = useRef<string | null>(null);
+  const skipFuture = (futureHeight: number) => {
+    // 全部が予定の月（来月など）はいちばん上から見せる
+    if (skippedFor.current === viewKey || past.length === 0) return;
+    skippedFor.current = viewKey;
+    requestAnimationFrame(() =>
+      listRef.current?.scrollToOffset({ offset: futureHeight + SPACING.screen, animated: false }),
+    );
+  };
+
   const filterLabel =
     categoryFilter === 'none' ? '未分類' : categories.data?.find((c) => c.id === categoryFilter)?.name;
 
@@ -261,13 +293,31 @@ export default function TransactionsScreen() {
         />
       ) : (
         <FlatList
-          data={groupByDate(filtered)}
+          ref={listRef}
+          data={past}
           keyExtractor={(section) => section.date}
           renderItem={({ item }) => <DayCard section={item} accounts={accounts.data!} categories={categories.data!} />}
+          ListHeaderComponent={
+            future.length > 0 ? (
+              <View style={styles.future} onLayout={(e) => skipFuture(e.nativeEvent.layout.height)}>
+                {future.map((section) => (
+                  <DayCard
+                    key={section.date}
+                    section={section}
+                    accounts={accounts.data!}
+                    categories={categories.data!}
+                    planned
+                  />
+                ))}
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
-            <Text style={[styles.empty, { color: theme.colors.onSurfaceVariant }]} variant="bodyMedium">
-              {searching ? (term === '' ? '' : '一致する記録はありません') : 'この月の記録はありません'}
-            </Text>
+            future.length > 0 ? null : (
+              <Text style={[styles.empty, { color: theme.colors.onSurfaceVariant }]} variant="bodyMedium">
+                {searching ? (term === '' ? '' : '一致する記録はありません') : 'この月の記録はありません'}
+              </Text>
+            )
           }
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={transactions.isRefetching} onRefresh={transactions.refetch} />}
@@ -297,6 +347,16 @@ const styles = StyleSheet.create({
   subtitleText: { flexShrink: 1 },
   amount: { fontWeight: '700' },
   day: { gap: 6 },
+  dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  plannedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  future: { gap: 16, marginBottom: 16 },
   dayLabel: { paddingHorizontal: 4, fontWeight: '700' },
   empty: { padding: 32, textAlign: 'center' },
   listContent: { padding: SPACING.screen, gap: 16, paddingBottom: 96 },

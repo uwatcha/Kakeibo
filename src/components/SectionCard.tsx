@@ -12,10 +12,12 @@ type Props = {
   left?: ReactNode;
   children?: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** 塗らずに破線の枠だけにする（まだ来ていない予定など、確定したものと分けたいとき） */
+  dashed?: boolean;
 };
 
 /** 白い角丸のカード。見出しの右と中の行の右端は同じ余白なので、金額の「円」が縦にそろう */
-export function SectionCard({ title, right, left, children, style }: Props) {
+export function SectionCard({ title, right, left, children, style, dashed = false }: Props) {
   const theme = useTheme();
   return (
     <View style={[styles.card, { backgroundColor: theme.colors.surface }, theme.dark ? null : styles.shadow, style]}>
@@ -42,6 +44,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
+  dashed: { borderWidth: 1.5, borderStyle: 'dashed' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
