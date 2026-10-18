@@ -191,7 +191,9 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
                 color: theme.colors.outlineVariant,
                 thickness: 1,
                 width: plotWidth,
-                dashWidth: 3,
+                // 目盛り線と区別するため一点鎖線（長 8・間 3・短 2・間 3）。ライブラリは
+                // strokeDasharray を `${dashWidth},${dashGap}` で組み立てるので、dashWidth に「長,間,短」を渡す
+                dashWidth: '8,3,2' as unknown as number,
                 dashGap: 3,
                 labelText: projectedEnd ? projectedEnd.balance.toLocaleString('ja-JP') : '',
                 // 線の左端が目盛りの右端なので、目盛りの幅だけ左に出す。背景で通常の目盛りの数字を隠す
