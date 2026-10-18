@@ -57,12 +57,8 @@ export default function HomeScreen() {
       >
         <BalanceCarousel
           pages={[
-            {
-              title: '手元の純資産',
-              caption: '純資産から普段使わない口座を除いた額',
-              amount: summary.availableNetWorth,
-            },
-            { title: '純資産', caption: 'すべての口座の合計（クレカ・借金を差し引き）', amount: summary.netWorth },
+            { title: '汎用資産', amount: summary.availableNetWorth },
+            { title: '純資産', amount: summary.netWorth },
           ]}
         />
 

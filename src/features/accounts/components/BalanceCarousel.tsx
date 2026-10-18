@@ -11,7 +11,7 @@ import { Card, Text, useTheme } from 'react-native-paper';
 
 import { formatYen } from '@/lib/money';
 
-type Page = { title: string; caption: string; amount: number };
+type Page = { title: string; amount: number };
 
 /** ホーム上部の金額カード。横にスワイプして切り替える */
 export function BalanceCarousel({ pages }: { pages: Page[] }) {
@@ -45,9 +45,6 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
                 <Text variant="labelLarge">{page.title}</Text>
                 <Text variant="displaySmall" style={styles.amount} numberOfLines={1} adjustsFontSizeToFit>
                   {formatYen(page.amount)}
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {page.caption}
                 </Text>
               </Card.Content>
             </Card>

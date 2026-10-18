@@ -38,6 +38,7 @@ function RootNavigator() {
         <Stack.Screen name="transaction/[id]" options={{ headerShown: true, title: '記録' }} />
         <Stack.Screen name="categories/index" options={{ headerShown: true, title: 'カテゴリの管理' }} />
         <Stack.Screen name="categories/[id]" options={{ headerShown: true, title: 'カテゴリ' }} />
+        <Stack.Screen name="info" options={{ headerShown: true, title: '用語の説明' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="(auth)" />

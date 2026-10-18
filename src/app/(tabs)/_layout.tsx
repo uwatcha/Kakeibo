@@ -1,8 +1,8 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { IconButton, useTheme } from 'react-native-paper';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -24,7 +24,23 @@ export default function TabsLayout() {
         headerTintColor: theme.colors.onSurface,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'ホーム', tabBarIcon: tabIcon('home') }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'ホーム',
+          tabBarIcon: tabIcon('home'),
+          // 用語の説明は目立たないようヘッダーの小さなアイコンから開く
+          headerRight: () => (
+            <IconButton
+              icon="information-outline"
+              size={20}
+              iconColor={theme.colors.onSurfaceVariant}
+              accessibilityLabel="用語の説明"
+              onPress={() => router.push('/info')}
+            />
+          ),
+        }}
+      />
       <Tabs.Screen name="transactions" options={{ title: '記録', tabBarIcon: tabIcon('format-list-bulleted') }} />
       <Tabs.Screen name="reports" options={{ title: '集計', tabBarIcon: tabIcon('chart-pie') }} />
       <Tabs.Screen name="settings" options={{ title: '設定', tabBarIcon: tabIcon('cog') }} />
