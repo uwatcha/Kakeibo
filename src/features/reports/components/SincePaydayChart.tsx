@@ -226,13 +226,6 @@ export function SincePaydayChart({ today, style }: { today: string; style?: obje
             </View>
           </View>
         )}
-
-        {next && (
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            次の給料日 {formatDay(next.date)}（{next.employer.name}）
-            {projectedEnd ? `の予測: ${formatYen(projectedEnd.balance)}` : ''}
-          </Text>
-        )}
       </Card.Content>
     </Card>
   );
