@@ -7,6 +7,9 @@ import {
   fetchAccount,
   fetchAccountBalances,
   fetchAccountBalance,
+  fetchCardSettings,
+  type CardSettingsInsert,
+  saveCardSettings,
   fetchAccounts,
   reorderAccounts,
   updateAccount,
@@ -19,6 +22,7 @@ export const accountKeys = {
   balances: () => [...accountKeys.all, 'balances'] as const,
   detail: (id: string) => [...accountKeys.all, 'detail', id] as const,
   balance: (id: string) => [...accountKeys.all, 'balance', id] as const,
+  cardSettings: (id: string) => [...accountKeys.all, 'cardSettings', id] as const,
 };
 
 export function useAccountBalances() {
@@ -68,4 +72,13 @@ export function useReorderAccounts() {
     mutationFn: (orderedIds: string[]) => reorderAccounts(orderedIds),
     onSettled: invalidate,
   });
+}
+
+export function useCardSettings(accountId: string) {
+  return useQuery({ queryKey: accountKeys.cardSettings(accountId), queryFn: () => fetchCardSettings(accountId) });
+}
+
+export function useSaveCardSettings() {
+  const invalidate = useInvalidateAccounts();
+  return useMutation({ mutationFn: (values: CardSettingsInsert) => saveCardSettings(values), onSuccess: invalidate });
 }

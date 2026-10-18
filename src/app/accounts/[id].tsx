@@ -187,6 +187,17 @@ export default function AccountEditScreen() {
           保存
         </Button>
 
+        {!isNew && account.data?.kind === 'credit_card' && (
+          <Button
+            mode="outlined"
+            style={styles.button}
+            icon="calendar-clock"
+            onPress={() => router.push({ pathname: '/card-settings/[id]', params: { id } })}
+            disabled={saving}
+          >
+            締め日・引き落とし日
+          </Button>
+        )}
         {!isNew && account.data && !account.data.is_archived && (
           <Button
             mode="outlined"

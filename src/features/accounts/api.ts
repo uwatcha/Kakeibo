@@ -64,3 +64,22 @@ export async function fetchAccountBalance(accountId: string): Promise<number> {
   if (error) throw error;
   return data.balance ?? 0;
 }
+
+export type CardSettings = Database['public']['Tables']['credit_card_settings']['Row'];
+export type CardSettingsInsert = Database['public']['Tables']['credit_card_settings']['Insert'];
+
+/** クレカの締め日・引き落とし日。未設定なら null */
+export async function fetchCardSettings(accountId: string): Promise<CardSettings | null> {
+  const { data, error } = await supabase
+    .from('credit_card_settings')
+    .select('*')
+    .eq('account_id', accountId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCardSettings(values: CardSettingsInsert): Promise<void> {
+  const { error } = await supabase.from('credit_card_settings').upsert(values);
+  if (error) throw error;
+}
