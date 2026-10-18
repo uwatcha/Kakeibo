@@ -34,6 +34,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="accounts/index" options={{ headerShown: true, title: '口座の管理' }} />
         <Stack.Screen name="accounts/[id]" options={{ headerShown: true, title: '口座' }} />
+        <Stack.Screen name="transaction/[id]" options={{ headerShown: true, title: '記録' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="(auth)" />

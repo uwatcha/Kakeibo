@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, Divider, List, Text, useTheme } from 'react-native-paper';
+import { Button, Card, Divider, FAB, List, Text, useTheme } from 'react-native-paper';
 
 import { QueryState } from '@/components/QueryState';
 import { ACCOUNT_KIND_INFO, isLiability } from '@/features/accounts/accountKinds';
@@ -49,62 +49,72 @@ export default function HomeScreen() {
   const hasAccounts = data.some((a) => !a.isArchived);
 
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-    >
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text variant="labelLarge">純資産</Text>
-          <Text variant="displaySmall">{formatYen(summary.netWorth)}</Text>
-        </Card.Content>
-      </Card>
-
-      {!hasAccounts && (
-        <Card style={styles.card} mode="outlined">
-          <Card.Content style={styles.empty}>
-            <Text variant="bodyMedium">口座がまだありません。財布や銀行口座を登録しましょう。</Text>
-            <Button
-              mode="contained"
-              icon="plus"
-              onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: 'new' } })}
-            >
-              口座を追加
-            </Button>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+      >
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="labelLarge">純資産</Text>
+            <Text variant="displaySmall">{formatYen(summary.netWorth)}</Text>
           </Card.Content>
         </Card>
-      )}
 
-      <Section title="普段使う口座" total={summary.everydayTotal} accounts={summary.everyday} />
-      <Section title="クレジットカード（未払い）" total={summary.creditCardUnpaid} accounts={summary.creditCards} />
-      <Section title="貸している・立て替え" total={summary.receivableTotal} accounts={summary.receivables} />
-      <Section title="借りている" total={summary.payableTotal} accounts={summary.payables} />
+        {!hasAccounts && (
+          <Card style={styles.card} mode="outlined">
+            <Card.Content style={styles.empty}>
+              <Text variant="bodyMedium">口座がまだありません。財布や銀行口座を登録しましょう。</Text>
+              <Button
+                mode="contained"
+                icon="plus"
+                onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: 'new' } })}
+              >
+                口座を追加
+              </Button>
+            </Card.Content>
+          </Card>
+        )}
 
-      {summary.reserved.length > 0 && (
-        <Card style={styles.card} mode="contained">
-          <List.Accordion
-            title="普段使わない口座"
-            description={formatYen(summary.reservedTotal)}
-            style={styles.accordion}
-          >
-            <Divider />
-            {summary.reserved.map((a) => (
-              <AccountRow key={a.id} account={a} />
-            ))}
-          </List.Accordion>
-        </Card>
+        <Section title="普段使う口座" total={summary.everydayTotal} accounts={summary.everyday} />
+        <Section title="クレジットカード（未払い）" total={summary.creditCardUnpaid} accounts={summary.creditCards} />
+        <Section title="貸している・立て替え" total={summary.receivableTotal} accounts={summary.receivables} />
+        <Section title="借りている" total={summary.payableTotal} accounts={summary.payables} />
+
+        {summary.reserved.length > 0 && (
+          <Card style={styles.card} mode="contained">
+            <List.Accordion
+              title="普段使わない口座"
+              description={formatYen(summary.reservedTotal)}
+              style={styles.accordion}
+            >
+              <Divider />
+              {summary.reserved.map((a) => (
+                <AccountRow key={a.id} account={a} />
+              ))}
+            </List.Accordion>
+          </Card>
+        )}
+      </ScrollView>
+      {hasAccounts && (
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          accessibilityLabel="記録する"
+          onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
+        />
       )}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, gap: 12 },
+  content: { padding: 16, gap: 12, paddingBottom: 96 },
   card: { overflow: 'hidden' },
   amount: { alignSelf: 'center', fontVariant: ['tabular-nums'] },
   sectionTotal: { marginRight: 16, fontWeight: 'bold', fontVariant: ['tabular-nums'] },
   empty: { gap: 12 },
   accordion: { backgroundColor: 'transparent' },
+  fab: { position: 'absolute', right: 16, bottom: 16 },
 });

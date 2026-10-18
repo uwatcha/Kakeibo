@@ -14,3 +14,42 @@ export function toTokyoDateString(date: Date = new Date()): string {
 export function monthStart(dateString: string): string {
   return `${dateString.slice(0, 7)}-01`;
 }
+
+/** 月初（YYYY-MM-01）に月数を足す */
+export function addMonths(monthStartString: string, months: number): string {
+  const [year, month] = monthStartString.split('-').map(Number);
+  const index = year * 12 + (month - 1) + months;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}-01`;
+}
+
+/** 「2026年10月」 */
+export function formatMonth(monthStartString: string): string {
+  const [year, month] = monthStartString.split('-').map(Number);
+  return `${year}年${month}月`;
+}
+
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+
+/** 「10月18日（日）」 */
+export function formatDay(dateString: string): string {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  return `${month}月${day}日（${weekday}）`;
+}
+
+/** YYYY-MM-DD を日付ピッカー用の Date（その日の正午、端末のタイムゾーン）にする */
+export function dateStringToLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+/** 日付ピッカーが返した Date（端末のタイムゾーンでの日付）を YYYY-MM-DD にする */
+export function localDateToDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/** YYYY-MM-DD に日数を足す */
+export function addDays(dateString: string, days: number): string {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}

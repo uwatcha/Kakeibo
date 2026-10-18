@@ -1,0 +1,440 @@
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Controller, type Resolver, useForm, type UseFormSetValue, useWatch } from 'react-hook-form';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Button,
+  Dialog,
+  HelperText,
+  IconButton,
+  Portal,
+  SegmentedButtons,
+  Snackbar,
+  Text,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
+
+import { ChipGroup } from '@/components/ChipGroup';
+import { QueryState } from '@/components/QueryState';
+import { useAccounts } from '@/features/accounts/hooks';
+import { useCategories } from '@/features/categories/hooks';
+import { AccountPicker } from '@/features/transactions/components/AccountPicker';
+import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
+import { DateField } from '@/features/transactions/components/DateField';
+import {
+  useCreateTransaction,
+  useDeleteTransaction,
+  useTransaction,
+  useUpdateTransaction,
+} from '@/features/transactions/hooks';
+import { loadLastUsedAccounts, saveLastUsedAccounts } from '@/features/transactions/lastUsedAccounts';
+import {
+  type AdjustmentDirection,
+  type DraftErrors,
+  normalizeAccounts,
+  OTHER_TYPES,
+  PRIMARY_TYPES,
+  TRANSACTION_RULES,
+  type TransactionType,
+  validateDraft,
+} from '@/features/transactions/transactionRules';
+import { toTokyoDateString } from '@/lib/date';
+import { parseYen } from '@/lib/money';
+
+type FormValues = {
+  type: TransactionType;
+  amount: string;
+  fromAccountId: string | null;
+  toAccountId: string | null;
+  adjustmentDirection: AdjustmentDirection;
+  categoryId: string | null;
+  date: string;
+  payee: string;
+  memo: string;
+};
+
+const OTHER = 'other';
+
+type LastUsed = Awaited<ReturnType<typeof loadLastUsedAccounts>>;
+
+/** その種類で前回使った口座をフォームに入れる。残高調整は口座を fromAccountId にまとめて持つ */
+function applyLastUsed(setValue: UseFormSetValue<FormValues>, type: TransactionType, saved: LastUsed) {
+  const from = saved[type]?.fromAccountId ?? null;
+  const to = saved[type]?.toAccountId ?? null;
+  setValue('fromAccountId', type === 'adjustment' ? (from ?? to) : from);
+  setValue('toAccountId', type === 'adjustment' ? null : to);
+}
+
+export default function TransactionEditScreen() {
+  const theme = useTheme();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const isNew = id === 'new';
+
+  const transaction = useTransaction(isNew ? undefined : id);
+  const accounts = useAccounts();
+  const categories = useCategories();
+  const create = useCreateTransaction();
+  const update = useUpdateTransaction();
+  const remove = useDeleteTransaction();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // 種類ごとのルール（transactionRules.ts）で確かめる
+  const resolver: Resolver<FormValues> = (values) => {
+    const errors: DraftErrors = validateDraft(
+      { ...values, amount: parseYen(values.amount) },
+      accounts.data ?? [],
+      categories.data ?? [],
+    );
+    const entries = Object.entries(errors);
+    if (entries.length === 0) return { values, errors: {} };
+    return {
+      values: {},
+      errors: Object.fromEntries(entries.map(([key, message]) => [key, { type: 'validate', message }])),
+    };
+  };
+
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    getValues,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({
+    resolver,
+    defaultValues: {
+      type: 'expense',
+      amount: '',
+      fromAccountId: null,
+      toAccountId: null,
+      adjustmentDirection: 'increase',
+      categoryId: null,
+      date: toTokyoDateString(),
+      payee: '',
+      memo: '',
+    },
+  });
+  const type = useWatch({ control, name: 'type' });
+  const rule = TRANSACTION_RULES[type];
+
+  // 編集: 保存済みの記録をフォームに入れる
+  useEffect(() => {
+    const t = transaction.data;
+    if (!t) return;
+    reset({
+      type: t.type,
+      amount: String(t.amount),
+      // 残高調整は口座を fromAccountId にまとめて持ち、保存時に向きで振り分ける（normalizeAccounts）
+      fromAccountId: t.type === 'adjustment' ? (t.from_account_id ?? t.to_account_id) : t.from_account_id,
+      toAccountId: t.type === 'adjustment' ? null : t.to_account_id,
+      adjustmentDirection: t.type === 'adjustment' && t.from_account_id ? 'decrease' : 'increase',
+      categoryId: t.category_id,
+      date: t.date,
+      payee: t.payee ?? '',
+      memo: t.memo ?? '',
+    });
+  }, [transaction.data, reset]);
+
+  // 新規: 種類を選ぶたびに、その種類で前回使った口座を初期値にする（REQ-30）
+  const lastUsed = useRef<LastUsed>({});
+  useEffect(() => {
+    if (!isNew) return;
+    loadLastUsedAccounts().then((saved) => {
+      lastUsed.current = saved;
+      applyLastUsed(setValue, getValues('type'), saved);
+    });
+  }, [isNew, getValues, setValue]);
+
+  const changeType = (next: TransactionType) => {
+    if (TRANSACTION_RULES[next].categoryKind !== TRANSACTION_RULES[getValues('type')].categoryKind) {
+      setValue('categoryId', null);
+    }
+    setValue('type', next);
+    if (isNew) applyLastUsed(setValue, next, lastUsed.current);
+  };
+
+  const onSubmit = async (values: FormValues) => {
+    const { fromAccountId, toAccountId } = normalizeAccounts({ ...values, amount: parseYen(values.amount) });
+    const row = {
+      type: values.type,
+      amount: parseYen(values.amount)!,
+      from_account_id: fromAccountId,
+      to_account_id: toAccountId,
+      category_id: TRANSACTION_RULES[values.type].categoryKind ? values.categoryId : null,
+      date: values.date,
+      payee: values.payee.trim() || null,
+      memo: values.memo.trim() || null,
+    };
+    try {
+      if (isNew) {
+        await create.mutateAsync(row);
+        await saveLastUsedAccounts(values.type, { fromAccountId, toAccountId });
+      } else {
+        await update.mutateAsync({ id, values: row });
+      }
+      router.back();
+    } catch {
+      // Snackbar で知らせる
+    }
+  };
+
+  const onDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      await remove.mutateAsync(id);
+      router.back();
+    } catch {
+      // Snackbar で知らせる
+    }
+  };
+
+  const title = isNew ? '記録する' : '記録を編集';
+  const loading = !accounts.data || !categories.data || (!isNew && !transaction.data);
+  if (loading) {
+    const failed = accounts.error ?? categories.error ?? transaction.error;
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Stack.Screen options={{ title }} />
+        <QueryState
+          isLoading={!failed}
+          error={failed}
+          onRetry={() => {
+            accounts.refetch();
+            categories.refetch();
+            if (!isNew) transaction.refetch();
+          }}
+        />
+      </View>
+    );
+  }
+
+  const saving = isSubmitting || remove.isPending;
+  const accountList = accounts.data!;
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Stack.Screen
+        options={{
+          title,
+          headerRight: isNew
+            ? undefined
+            : () => (
+                <IconButton
+                  icon="delete"
+                  accessibilityLabel="削除"
+                  onPress={() => setConfirmDelete(true)}
+                  disabled={saving}
+                />
+              ),
+        }}
+      />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <SegmentedButtons
+          value={PRIMARY_TYPES.includes(type) ? type : OTHER}
+          onValueChange={(v) => changeType(v === OTHER ? 'advance' : (v as TransactionType))}
+          buttons={[
+            ...PRIMARY_TYPES.map((t) => ({ value: t, label: TRANSACTION_RULES[t].label })),
+            { value: OTHER, label: 'その他' },
+          ]}
+        />
+        {!PRIMARY_TYPES.includes(type) && (
+          <ChipGroup
+            options={OTHER_TYPES.map((t) => ({
+              value: t,
+              label: TRANSACTION_RULES[t].label,
+              icon: TRANSACTION_RULES[t].icon,
+            }))}
+            value={type}
+            onChange={(v) => v && changeType(v as TransactionType)}
+          />
+        )}
+
+        <Controller
+          control={control}
+          name="amount"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              mode="outlined"
+              label="金額"
+              keyboardType="number-pad"
+              autoFocus={isNew}
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              error={!!errors.amount}
+              style={styles.amount}
+              right={<TextInput.Affix text="円" />}
+            />
+          )}
+        />
+        {!!errors.amount && <HelperText type="error">{errors.amount.message}</HelperText>}
+
+        {type === 'adjustment' && (
+          <Controller
+            control={control}
+            name="adjustmentDirection"
+            render={({ field: { onChange, value } }) => (
+              <SegmentedButtons
+                value={value}
+                onValueChange={onChange}
+                buttons={[
+                  { value: 'increase', label: '残高を増やす', icon: 'plus' },
+                  { value: 'decrease', label: '残高を減らす', icon: 'minus' },
+                ]}
+              />
+            )}
+          />
+        )}
+
+        {type === 'adjustment' ? (
+          <Controller
+            control={control}
+            name="fromAccountId"
+            render={({ field: { onChange, value } }) => (
+              <AccountPicker
+                label="口座"
+                kinds={rule.from!.kinds}
+                accounts={accountList}
+                value={value}
+                onChange={onChange}
+                error={errors.fromAccountId?.message ?? errors.toAccountId?.message}
+              />
+            )}
+          />
+        ) : (
+          <>
+            {rule.from && (
+              <Controller
+                control={control}
+                name="fromAccountId"
+                render={({ field: { onChange, value } }) => (
+                  <AccountPicker
+                    label={rule.from!.label}
+                    kinds={rule.from!.kinds}
+                    accounts={accountList}
+                    value={value}
+                    onChange={onChange}
+                    error={errors.fromAccountId?.message}
+                  />
+                )}
+              />
+            )}
+            {rule.to && (
+              <Controller
+                control={control}
+                name="toAccountId"
+                render={({ field: { onChange, value } }) => (
+                  <AccountPicker
+                    label={rule.to!.label}
+                    kinds={rule.to!.kinds}
+                    accounts={accountList}
+                    value={value}
+                    onChange={onChange}
+                    error={errors.toAccountId?.message}
+                  />
+                )}
+              />
+            )}
+          </>
+        )}
+
+        {rule.categoryKind && (
+          <Controller
+            control={control}
+            name="categoryId"
+            render={({ field: { onChange, value } }) => (
+              <CategoryPicker
+                kind={rule.categoryKind!}
+                categories={categories.data!}
+                value={value}
+                onChange={onChange}
+                error={errors.categoryId?.message}
+              />
+            )}
+          />
+        )}
+
+        <Controller
+          control={control}
+          name="date"
+          render={({ field: { onChange, value } }) => <DateField value={value} onChange={onChange} />}
+        />
+        {!!errors.date && <HelperText type="error">{errors.date.message}</HelperText>}
+
+        <Controller
+          control={control}
+          name="payee"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              mode="outlined"
+              label={type === 'expense' ? '支払先・店名（任意）' : '相手・内容（任意）'}
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+            />
+          )}
+        />
+        <Controller
+          control={control}
+          name="memo"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              mode="outlined"
+              label="メモ（任意）"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              multiline
+            />
+          )}
+        />
+
+        {type === 'adjustment' && (
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            アプリの残高と実際の残高のずれを合わせるための記録です。収支の集計には入りません
+          </Text>
+        )}
+
+        <Button
+          mode="contained"
+          style={styles.save}
+          onPress={() => handleSubmit(onSubmit)()}
+          loading={isSubmitting}
+          disabled={saving}
+        >
+          保存
+        </Button>
+      </ScrollView>
+
+      <Portal>
+        <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
+          <Dialog.Title>この記録を削除しますか？</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">削除すると元に戻せません。残高と集計からも消えます。</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDelete(false)}>キャンセル</Button>
+            <Button onPress={onDelete} textColor={theme.colors.error}>
+              削除
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      <Snackbar
+        visible={create.isError || update.isError || remove.isError}
+        onDismiss={() => (create.reset(), update.reset(), remove.reset())}
+      >
+        保存できませんでした。通信状態を確認してください
+      </Snackbar>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 48, gap: 12 },
+  amount: { fontSize: 24 },
+  save: { marginTop: 8 },
+});
