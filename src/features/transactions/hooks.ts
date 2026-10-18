@@ -7,6 +7,7 @@ import {
   deleteTransaction,
   fetchMonthTransactions,
   fetchTransaction,
+  searchTransactions,
   type TransactionInsert,
   type TransactionUpdate,
   updateTransaction,
@@ -16,10 +17,20 @@ export const transactionKeys = {
   all: ['transactions'] as const,
   month: (month: string) => [...transactionKeys.all, 'month', month] as const,
   detail: (id: string) => [...transactionKeys.all, 'detail', id] as const,
+  search: (filter: string) => [...transactionKeys.all, 'search', filter] as const,
 };
 
 export function useMonthTransactions(month: string) {
   return useQuery({ queryKey: transactionKeys.month(month), queryFn: () => fetchMonthTransactions(month) });
+}
+
+/** filter が null のあいだは検索しない */
+export function useSearchTransactions(filter: string | null) {
+  return useQuery({
+    queryKey: transactionKeys.search(filter ?? ''),
+    queryFn: () => searchTransactions(filter!),
+    enabled: filter !== null,
+  });
 }
 
 export function useTransaction(id: string | undefined) {

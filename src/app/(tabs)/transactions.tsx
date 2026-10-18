@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
-import { Chip, Divider, FAB, IconButton, List, Text, useTheme } from 'react-native-paper';
+import { Chip, Divider, FAB, IconButton, List, Searchbar, Text, useTheme } from 'react-native-paper';
 
 import { Amount } from '@/components/Amount';
 import { QueryState } from '@/components/QueryState';
@@ -10,8 +11,9 @@ import type { Category } from '@/features/categories/api';
 import { useCategories } from '@/features/categories/hooks';
 import { categoryLabel } from '@/features/categories/tree';
 import type { Transaction } from '@/features/transactions/api';
-import { useMonthTransactions } from '@/features/transactions/hooks';
+import { useMonthTransactions, useSearchTransactions } from '@/features/transactions/hooks';
 import { groupByDate, monthTotals } from '@/features/transactions/list';
+import { buildSearchFilter } from '@/features/transactions/search';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { addMonths, formatDay, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
@@ -74,34 +76,84 @@ export default function TransactionsScreen() {
   const setMonth = (next: string) => router.setParams({ month: next });
   const categoryFilter = params.categoryId;
 
+  // 検索中は月をまたいで全期間から探す。入力が止まってから 300ms 後に検索する
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   const transactions = useMonthTransactions(month);
   const accounts = useAccounts();
   const categories = useCategories();
 
-  const ready = transactions.data && accounts.data && categories.data;
-  const filtered = filterByCategory(transactions.data ?? [], categoryFilter, categories.data ?? []);
+  const term = debouncedQuery.trim();
+  const matchedCategoryIds =
+    term === '' ? [] : (categories.data ?? []).filter((c) => c.name.includes(term)).map((c) => c.id);
+  const searchFilter = searching && categories.data ? buildSearchFilter(term, matchedCategoryIds) : null;
+  const searchResults = useSearchTransactions(searchFilter);
+
+  const closeSearch = () => {
+    setSearching(false);
+    setQuery('');
+  };
+
+  const listSource = searching ? (searchResults.data ?? []) : (transactions.data ?? []);
+  const ready =
+    (searching ? searchFilter === null || searchResults.data : transactions.data) && accounts.data && categories.data;
+  const filtered = searching ? listSource : filterByCategory(listSource, categoryFilter, categories.data ?? []);
   const totals = monthTotals(filtered);
   const filterLabel =
     categoryFilter === 'none' ? '未分類' : categories.data?.find((c) => c.id === categoryFilter)?.name;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.monthBar}>
-        <IconButton icon="chevron-left" accessibilityLabel="前の月" onPress={() => setMonth(addMonths(month, -1))} />
-        <Text variant="titleMedium">{formatMonth(month)}</Text>
-        <IconButton icon="chevron-right" accessibilityLabel="次の月" onPress={() => setMonth(addMonths(month, 1))} />
-      </View>
-      <View style={styles.totals}>
-        <Text variant="bodyMedium">収入 {formatYen(totals.income)}</Text>
-        <Text variant="bodyMedium">支出 {formatYen(totals.expense)}</Text>
-        <View style={styles.inline}>
-          <Text variant="bodyMedium" style={styles.bold}>
-            差額{' '}
-          </Text>
-          <Amount value={totals.income - totals.expense} kind="delta" variant="bodyMedium" style={styles.bold} />
-        </View>
-      </View>
-      {categoryFilter && (
+      {searching ? (
+        <Searchbar
+          placeholder="内容・メモ・カテゴリ・金額"
+          value={query}
+          onChangeText={setQuery}
+          autoFocus
+          icon="arrow-left"
+          onIconPress={closeSearch}
+          style={styles.searchbar}
+        />
+      ) : (
+        <>
+          <View style={styles.monthBar}>
+            <IconButton
+              icon="chevron-left"
+              accessibilityLabel="前の月"
+              onPress={() => setMonth(addMonths(month, -1))}
+            />
+            <Text variant="titleMedium">{formatMonth(month)}</Text>
+            <IconButton
+              icon="chevron-right"
+              accessibilityLabel="次の月"
+              onPress={() => setMonth(addMonths(month, 1))}
+            />
+            <IconButton
+              icon="magnify"
+              accessibilityLabel="記録を検索"
+              style={styles.searchButton}
+              onPress={() => setSearching(true)}
+            />
+          </View>
+          <View style={styles.totals}>
+            <Text variant="bodyMedium">収入 {formatYen(totals.income)}</Text>
+            <Text variant="bodyMedium">支出 {formatYen(totals.expense)}</Text>
+            <View style={styles.inline}>
+              <Text variant="bodyMedium" style={styles.bold}>
+                差額{' '}
+              </Text>
+              <Amount value={totals.income - totals.expense} kind="delta" variant="bodyMedium" style={styles.bold} />
+            </View>
+          </View>
+        </>
+      )}
+      {!searching && categoryFilter && (
         <View style={styles.filter}>
           <Chip icon="filter" onClose={() => router.setParams({ categoryId: undefined })}>
             {filterLabel ?? 'カテゴリ'}の支出だけ表示中
@@ -112,9 +164,10 @@ export default function TransactionsScreen() {
 
       {!ready ? (
         <QueryState
-          isLoading={!(transactions.error ?? accounts.error ?? categories.error)}
-          error={transactions.error ?? accounts.error ?? categories.error}
+          isLoading={!(transactions.error ?? searchResults.error ?? accounts.error ?? categories.error)}
+          error={transactions.error ?? searchResults.error ?? accounts.error ?? categories.error}
           onRetry={() => {
+            if (searching) searchResults.refetch();
             transactions.refetch();
             accounts.refetch();
             categories.refetch();
@@ -134,7 +187,7 @@ export default function TransactionsScreen() {
           )}
           ListEmptyComponent={
             <Text style={styles.empty} variant="bodyMedium">
-              この月の記録はありません
+              {searching ? (term === '' ? '' : '一致する記録はありません') : 'この月の記録はありません'}
             </Text>
           }
           contentContainerStyle={styles.listContent}
@@ -156,6 +209,8 @@ export default function TransactionsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   monthBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  searchButton: { position: 'absolute', right: 4 },
+  searchbar: { margin: 8 },
   totals: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 8, paddingHorizontal: 8 },
   filter: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8 },
   bold: { fontWeight: 'bold' },

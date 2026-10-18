@@ -39,3 +39,16 @@ export async function deleteTransaction(id: string): Promise<void> {
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) throw error;
 }
+
+/** 全期間から検索する（新しい順に最大200件）。filter は buildSearchFilter で作る */
+export async function searchTransactions(filter: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .or(filter)
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return data;
+}
