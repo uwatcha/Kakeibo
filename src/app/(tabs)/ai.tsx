@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { router, Stack } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import { useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -83,7 +83,7 @@ export default function AiChatScreen() {
   if (sources.some((q) => !q.data)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Stack.Screen options={{ title: 'AI 相談', headerRight }} />
+        <Tabs.Screen options={{ headerRight }} />
         <QueryState isLoading={!loadError} error={loadError} onRetry={() => sources.forEach((q) => q.refetch())} />
       </View>
     );
@@ -92,7 +92,7 @@ export default function AiChatScreen() {
   if (!status.data!.hasKey) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: theme.colors.background }]}>
-        <Stack.Screen options={{ title: 'AI 相談', headerRight }} />
+        <Tabs.Screen options={{ headerRight }} />
         <Button mode="contained" icon="link" onPress={() => router.push('/ai-settings')}>
           Gemini と連携する
         </Button>
@@ -147,7 +147,7 @@ export default function AiChatScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen options={{ title: 'AI 相談', headerRight }} />
+      <Tabs.Screen options={{ headerRight }} />
       <View style={[styles.meter, { backgroundColor: theme.colors.surface }]}>
         <Text variant="labelMedium" numberOfLines={1} style={styles.meterModel}>
           {model?.label ?? status.data!.model}
@@ -160,7 +160,7 @@ export default function AiChatScreen() {
         </Text>
       </View>
 
-      <KeyboardAvoidingView behavior="padding" style={styles.container} keyboardVerticalOffset={insets.top + 56}>
+      <KeyboardAvoidingView behavior="padding" style={styles.container} keyboardVerticalOffset={insets.top + 64}>
         <FlatList
           ref={listRef}
           data={items}
@@ -192,12 +192,7 @@ export default function AiChatScreen() {
             </>
           }
         />
-        <View
-          style={[
-            styles.inputBar,
-            { backgroundColor: theme.colors.surface, paddingBottom: Math.max(insets.bottom, 8) },
-          ]}
-        >
+        <View style={[styles.inputBar, { backgroundColor: theme.colors.surface }]}>
           <TextInput
             mode="outlined"
             placeholder="家計について聞く"
@@ -239,6 +234,6 @@ const styles = StyleSheet.create({
   modelBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
   thinking: { alignSelf: 'flex-start', marginLeft: 8 },
   error: { textAlign: 'center' },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingTop: 8, gap: 4 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 8, gap: 4 },
   input: { flex: 1, maxHeight: 120 },
 });

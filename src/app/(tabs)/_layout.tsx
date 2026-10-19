@@ -66,17 +66,16 @@ export default function TabsLayout() {
         options={{
           title: '集計',
           tabBarIcon: tabIcon('chart-pie'),
-          headerRight: () => (
-            <View style={styles.headerRight}>
-              <IconButton
-                icon="robot-outline"
-                iconColor={theme.colors.primary}
-                accessibilityLabel="AI 相談"
-                onPress={() => router.push('/ai-chat')}
-              />
-              <AvailableAccountsButton />
-            </View>
-          ),
+          headerRight: () => <AvailableAccountsButton />,
+        }}
+      />
+      <Tabs.Screen
+        name="ai"
+        options={{
+          title: 'AI 相談',
+          tabBarLabel: 'AI',
+          tabBarIcon: tabIcon('robot-outline'),
+          tabBarHideOnKeyboard: true,
         }}
       />
       <Tabs.Screen name="settings" options={{ title: '設定', tabBarIcon: tabIcon('cog') }} />
