@@ -10,6 +10,7 @@ import { QueryState } from '@/components/QueryState';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
 import { type AiMessage, sendAiChat } from '@/features/ai/api';
+import { TokenGauge } from '@/features/ai/components/TokenGauge';
 import { aiKeys, useAiStatus, useAiUsageToday } from '@/features/ai/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { useEmployers } from '@/features/employers/hooks';
@@ -62,8 +63,22 @@ export default function AiChatScreen() {
   const nextId = useRef(1);
   const listRef = useRef<FlatList<ChatItem>>(null);
 
+  // 右上の小さな円のゲージ（この会話で使ったトークン）。連携していて、モデルが分かるときだけ
+  const currentModel = status.data?.models.find((m) => m.id === status.data?.model);
+  const gauge =
+    status.data?.hasKey && currentModel ? (
+      <TokenGauge
+        modelLabel={currentModel.label}
+        used={lastTotal ?? 0}
+        limit={currentModel.inputTokenLimit}
+        todayCount={usage.data?.count ?? 0}
+        todayTokens={usage.data?.tokens ?? 0}
+      />
+    ) : null;
+
   const headerRight = () => (
     <View style={styles.headerRight}>
+      {gauge}
       <IconButton
         icon="broom"
         accessibilityLabel="新しい会話"
@@ -99,9 +114,6 @@ export default function AiChatScreen() {
       </View>
     );
   }
-
-  const model = status.data!.models.find((m) => m.id === status.data!.model);
-  const limit = model?.inputTokenLimit ?? 0;
 
   // 送るたびに今の記録から材料を作り直す（名前は置き換え済み）
   const source = {
@@ -143,22 +155,9 @@ export default function AiChatScreen() {
     }
   };
 
-  const remaining = lastTotal === null ? limit : Math.max(0, limit - lastTotal);
-
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Tabs.Screen options={{ headerRight }} />
-      <View style={[styles.meter, { backgroundColor: theme.colors.surface }]}>
-        <Text variant="labelMedium" numberOfLines={1} style={styles.meterModel}>
-          {model?.label ?? status.data!.model}
-        </Text>
-        <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-          この会話の残り {remaining.toLocaleString('ja-JP')} / {limit.toLocaleString('ja-JP')} トークン
-        </Text>
-        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          今日 {usage.data?.count ?? 0}回・{(usage.data?.tokens ?? 0).toLocaleString('ja-JP')} トークン使用
-        </Text>
-      </View>
 
       <KeyboardAvoidingView behavior="padding" style={styles.container} keyboardVerticalOffset={insets.top + 64}>
         <FlatList
@@ -218,16 +217,7 @@ export default function AiChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
-  headerRight: { flexDirection: 'row' },
-  meter: {
-    marginHorizontal: SPACING.screen,
-    marginTop: 4,
-    paddingHorizontal: SPACING.row,
-    paddingVertical: 8,
-    borderRadius: RADIUS.tile,
-    gap: 2,
-  },
-  meterModel: { fontWeight: '700' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
   messages: { padding: SPACING.screen, gap: 10 },
   bubble: { maxWidth: '88%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.tile },
   userBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
