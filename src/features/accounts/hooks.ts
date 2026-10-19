@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -26,6 +27,12 @@ export const accountKeys = {
 
 export function useAccountBalances() {
   return useQuery({ queryKey: accountKeys.balances(), queryFn: fetchAccountBalances });
+}
+
+/** 口座ごとの今日までの残高（読み込み中は undefined） */
+export function useBalanceMap(): ReadonlyMap<string, number> | undefined {
+  const { data } = useAccountBalances();
+  return useMemo(() => (data ? new Map(data.map((a) => [a.id, a.balance])) : undefined), [data]);
 }
 
 export function useAccounts() {

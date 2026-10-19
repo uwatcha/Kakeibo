@@ -43,7 +43,7 @@ export default function AccountsScreen() {
                   <ListRow
                     key={a.id}
                     title={a.name}
-                    subtitle={a.is_reserved ? '普段使わない' : undefined}
+                    subtitle={[a.is_reserved ? '普段使わない' : null, a.memo].filter(Boolean).join('・') || undefined}
                     icon={ACCOUNT_KIND_INFO[a.kind].icon}
                     onPress={() => openAccount(a.id)}
                   />

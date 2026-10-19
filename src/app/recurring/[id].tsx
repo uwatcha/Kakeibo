@@ -21,7 +21,7 @@ import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
-import { useAccounts } from '@/features/accounts/hooks';
+import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import type { RecurringRule } from '@/features/recurring/api';
 import {
@@ -81,6 +81,7 @@ export default function RecurringRuleScreen() {
 
   const rules = useRules();
   const accounts = useAccounts();
+  const balances = useBalanceMap();
   const categories = useCategories();
   const generated = useGeneratedTransactions(isNew ? undefined : id);
   const save = useSaveRule();
@@ -284,6 +285,7 @@ export default function RecurringRuleScreen() {
             name="fromAccountId"
             render={({ field: { onChange, value } }) => (
               <AccountPicker
+                balances={balances}
                 label={txRule.from!.label}
                 kinds={txRule.from!.kinds}
                 accounts={accounts.data!}
@@ -300,6 +302,7 @@ export default function RecurringRuleScreen() {
             name="toAccountId"
             render={({ field: { onChange, value } }) => (
               <AccountPicker
+                balances={balances}
                 label={txRule.to!.label}
                 kinds={txRule.to!.kinds}
                 accounts={accounts.data!}

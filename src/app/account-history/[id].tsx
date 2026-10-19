@@ -82,6 +82,11 @@ export default function AccountHistoryScreen() {
           variant="headlineMedium"
           style={styles.balance}
         />
+        {account.memo && (
+          <Text variant="bodyMedium" style={[styles.memo, { color: theme.colors.onSurfaceVariant }]}>
+            {account.memo}
+          </Text>
+        )}
       </SectionCard>
       {isCard && (
         <SegmentedButtons
@@ -149,6 +154,7 @@ const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   number: { fontVariant: ['tabular-nums'] },
   balance: { fontWeight: '800', marginTop: 2 },
+  memo: { marginTop: 6 },
   segment: { marginHorizontal: SPACING.screen, marginTop: SPACING.gap, borderRadius: RADIUS.tile },
   statements: { padding: SPACING.screen, paddingBottom: 48 },
 });

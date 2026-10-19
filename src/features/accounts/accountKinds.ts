@@ -32,6 +32,14 @@ export function compareAccounts(
 /** 自分のお金を置いておく口座（現金・銀行・電子マネー・投資） */
 export const ASSET_KINDS: readonly AccountKind[] = ['cash', 'bank', 'emoney', 'investment'];
 
+/** 貸し借りの相手（人ごとの口座） */
+export const PERSON_KINDS: readonly AccountKind[] = ['receivable', 'payable'];
+
+/** 「普段使わない」を選べる口座（資産と貸し借りの相手） */
+export function canBeReserved(kind: AccountKind): boolean {
+  return ASSET_KINDS.includes(kind) || PERSON_KINDS.includes(kind);
+}
+
 /** 残高がマイナスになる口座（クレカ・借金） */
 export function isLiability(kind: AccountKind): boolean {
   return kind === 'credit_card' || kind === 'payable';

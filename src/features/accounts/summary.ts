@@ -1,4 +1,4 @@
-import { compareAccounts, ASSET_KINDS, type AccountKind } from './accountKinds';
+import { type AccountKind, ASSET_KINDS, canBeReserved, compareAccounts } from './accountKinds';
 
 export type AccountBalance = {
   id: string;
@@ -49,10 +49,11 @@ export function summarizeBalances(accounts: AccountBalance[]): BalanceSummary {
   const assets = visible.filter((a) => ASSET_KINDS.includes(a.kind));
 
   const everyday = assets.filter((a) => !a.isReserved);
-  const reserved = assets.filter((a) => a.isReserved);
+  // 普段使わない資産と貸し借りの相手は、ホームの下の「普段使わない口座」にまとめる
+  const reserved = visible.filter((a) => a.isReserved && canBeReserved(a.kind));
   const creditCards = visible.filter((a) => a.kind === 'credit_card');
-  const receivables = visible.filter((a) => a.kind === 'receivable');
-  const payables = visible.filter((a) => a.kind === 'payable');
+  const receivables = visible.filter((a) => a.kind === 'receivable' && !a.isReserved);
+  const payables = visible.filter((a) => a.kind === 'payable' && !a.isReserved);
 
   return {
     netWorth: sum(accounts),

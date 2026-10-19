@@ -12,6 +12,7 @@ import {
   ACCOUNT_KIND_INFO,
   ACCOUNT_KINDS,
   ASSET_KINDS,
+  canBeReserved,
   fromOpeningBalance,
   toOpeningBalance,
 } from '@/features/accounts/accountKinds';
@@ -29,6 +30,7 @@ const schema = z.object({
   openingBalance: z.string().refine((v) => parseNonNegativeYen(v) !== null, '0以上の整数（円）で入力してください'),
   isReserved: z.boolean(),
   defaultCategoryId: z.string().nullable(),
+  memo: z.string().max(200, '200文字以内にしてください'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -57,7 +59,7 @@ export default function AccountEditScreen() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', kind: 'cash', openingBalance: '', isReserved: false, defaultCategoryId: null },
+    defaultValues: { name: '', kind: 'cash', openingBalance: '', isReserved: false, defaultCategoryId: null, memo: '' },
   });
   const kind = useWatch({ control, name: 'kind' }) as Kind;
 
@@ -68,6 +70,7 @@ export default function AccountEditScreen() {
         kind: account.data.kind,
         openingBalance: String(fromOpeningBalance(account.data.kind, balance.data)),
         isReserved: account.data.is_reserved,
+        memo: account.data.memo ?? '',
         defaultCategoryId: account.data.default_category_id,
       });
     }
@@ -78,8 +81,9 @@ export default function AccountEditScreen() {
     const input = parseNonNegativeYen(values.openingBalance) ?? 0;
     const common = {
       name: values.name,
-      // 普段使わない口座の区別は資産の口座だけ
-      is_reserved: ASSET_KINDS.includes(valuesKind) && values.isReserved,
+      // 普段使わない口座の区別は資産と貸し借りの相手だけ
+      is_reserved: canBeReserved(valuesKind) && values.isReserved,
+      memo: values.memo.trim() || null,
       default_category_id: canPay(valuesKind) ? values.defaultCategoryId : null,
     };
     try {
@@ -219,7 +223,7 @@ export default function AccountEditScreen() {
           />
         )}
 
-        {ASSET_KINDS.includes(kind) && (
+        {canBeReserved(kind) && (
           <Controller
             control={control}
             name="isReserved"
@@ -232,6 +236,25 @@ export default function AccountEditScreen() {
             )}
           />
         )}
+
+        <Controller
+          control={control}
+          name="memo"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              mode="outlined"
+              label="メモ（任意）"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              multiline
+              error={!!errors.memo}
+            />
+          )}
+        />
+        <HelperText type="error" visible={!!errors.memo}>
+          {errors.memo?.message}
+        </HelperText>
 
         <Button
           mode="contained"

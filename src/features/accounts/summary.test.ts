@@ -71,6 +71,16 @@ describe('summarizeBalances', () => {
     expect(summarizeBalances([bank, cashB, cashA]).everyday.map((x) => x.name)).toEqual(['A財布', 'B財布', 'A銀行']);
   });
 
+  it('普段使わない貸し借りの相手は、貸し借りの欄ではなく普段使わない口座に入る', () => {
+    const friend = account({ name: '友達', kind: 'receivable', balance: 1000 });
+    const old = account({ name: '昔の同僚', kind: 'receivable', balance: 500, isReserved: true });
+    const result = summarizeBalances([friend, old]);
+    expect(result.receivables.map((a) => a.name)).toEqual(['友達']);
+    expect(result.receivableTotal).toBe(1000);
+    expect(result.reserved.map((a) => a.name)).toEqual(['昔の同僚']);
+    expect(result.netWorth).toBe(1500);
+  });
+
   it('口座がなければすべて 0', () => {
     const empty = summarizeBalances([]);
     expect(empty.netWorth).toBe(0);

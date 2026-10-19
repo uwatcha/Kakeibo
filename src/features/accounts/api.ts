@@ -37,9 +37,11 @@ export async function fetchAccount(id: string): Promise<Account> {
   return data;
 }
 
-export async function createAccount(values: AccountInsert): Promise<void> {
-  const { error } = await supabase.from('accounts').insert(values);
+/** 作った口座の id を返す */
+export async function createAccount(values: AccountInsert): Promise<string> {
+  const { data, error } = await supabase.from('accounts').insert(values).select('id').single();
   if (error) throw error;
+  return data.id;
 }
 
 export async function updateAccount(id: string, values: AccountUpdate): Promise<void> {

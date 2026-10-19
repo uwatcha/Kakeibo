@@ -21,7 +21,7 @@ import {
 import { ChipGroup } from '@/components/ChipGroup';
 import { QueryState } from '@/components/QueryState';
 import { StatusBadge } from '@/components/StatusBadge';
-import { useAccounts } from '@/features/accounts/hooks';
+import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
 import { guessCategory } from '@/features/transactions/categoryGuess';
@@ -86,6 +86,7 @@ export default function TransactionEditScreen() {
 
   const transaction = useTransaction(isNew ? undefined : id);
   const accounts = useAccounts();
+  const balances = useBalanceMap();
   const categories = useCategories();
   const create = useCreateTransaction();
   const update = useUpdateTransaction();
@@ -405,6 +406,7 @@ export default function TransactionEditScreen() {
             name="fromAccountId"
             render={({ field: { onChange, value } }) => (
               <AccountPicker
+                balances={balances}
                 label="口座"
                 kinds={rule.from!.kinds}
                 accounts={accountList}
@@ -422,6 +424,7 @@ export default function TransactionEditScreen() {
                 name="fromAccountId"
                 render={({ field: { onChange, value } }) => (
                   <AccountPicker
+                    balances={balances}
                     label={rule.from!.label}
                     kinds={rule.from!.kinds}
                     accounts={accountList}
@@ -438,6 +441,7 @@ export default function TransactionEditScreen() {
                 name="toAccountId"
                 render={({ field: { onChange, value } }) => (
                   <AccountPicker
+                    balances={balances}
                     label={rule.to!.label}
                     kinds={rule.to!.kinds}
                     accounts={accountList}

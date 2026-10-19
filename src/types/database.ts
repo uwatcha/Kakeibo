@@ -48,6 +48,7 @@ export type Database = {
           is_archived: boolean
           is_reserved: boolean
           kind: Database["public"]["Enums"]["account_kind"]
+          memo: string | null
           name: string
           opening_balance: number
           sort_order: number
@@ -61,6 +62,7 @@ export type Database = {
           is_archived?: boolean
           is_reserved?: boolean
           kind: Database["public"]["Enums"]["account_kind"]
+          memo?: string | null
           name: string
           opening_balance?: number
           sort_order?: number
@@ -74,6 +76,7 @@ export type Database = {
           is_archived?: boolean
           is_reserved?: boolean
           kind?: Database["public"]["Enums"]["account_kind"]
+          memo?: string | null
           name?: string
           opening_balance?: number
           sort_order?: number
