@@ -73,6 +73,9 @@ export function BalanceLineChart({ points, today, width, height, labelFor, proje
   const base = Math.floor((min - margin) / 1000) * 1000;
   const top = Math.ceil((max + margin - base) / 1000) * 1000;
 
+  // 0 円の高さに、目盛り線より少しだけ濃い線を引く（赤などで強調はしない）。0 円が範囲に入るときだけ
+  const showZero = base < 0 && base + top > 0;
+
   const plotWidth = Math.max(0, width - Y_AXIS_WIDTH - 24);
   const fitSpacing = count > 1 ? plotWidth / (count - 1) : plotWidth;
   // 収まるなら幅いっぱいに広げ、収まらないときだけスクロールさせる
@@ -120,6 +123,15 @@ export function BalanceLineChart({ points, today, width, height, labelFor, proje
       disableScroll={!scrollable}
       scrollToIndex={scrollable ? Math.max(0, todayIndex) : undefined}
       scrollAnimation={false}
+      showReferenceLine1={showZero}
+      referenceLine1Position={0 - base}
+      referenceLine1Config={{
+        color: theme.colors.outline,
+        thickness: 1,
+        type: 'solid',
+        // スクロールするときは全体の長さに引く
+        width: spacing * (count - 1) + 8,
+      }}
       maxValue={top}
       noOfSections={4}
       formatYLabel={(label: string) => compactYen(Number(label) + base)}
