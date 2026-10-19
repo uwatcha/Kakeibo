@@ -5,6 +5,8 @@ import { accountKeys } from '@/features/accounts/hooks';
 import {
   createTransaction,
   deleteTransaction,
+  fetchAccountTransactions,
+  fetchPayeeHistory,
   fetchMonthTransactions,
   fetchTransaction,
   searchTransactions,
@@ -18,6 +20,8 @@ export const transactionKeys = {
   month: (month: string) => [...transactionKeys.all, 'month', month] as const,
   detail: (id: string) => [...transactionKeys.all, 'detail', id] as const,
   search: (filter: string) => [...transactionKeys.all, 'search', filter] as const,
+  account: (accountId: string) => [...transactionKeys.all, 'account', accountId] as const,
+  payees: () => [...transactionKeys.all, 'payees'] as const,
 };
 
 export function useMonthTransactions(month: string) {
@@ -31,6 +35,17 @@ export function useSearchTransactions(filter: string | null) {
     queryFn: () => searchTransactions(filter!),
     enabled: filter !== null,
   });
+}
+
+export function useAccountTransactions(accountId: string) {
+  return useQuery({
+    queryKey: transactionKeys.account(accountId),
+    queryFn: () => fetchAccountTransactions(accountId),
+  });
+}
+
+export function usePayeeHistory() {
+  return useQuery({ queryKey: transactionKeys.payees(), queryFn: fetchPayeeHistory });
 }
 
 export function useTransaction(id: string | undefined) {

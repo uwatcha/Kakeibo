@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
   Button,
+  Chip,
   Dialog,
   HelperText,
   IconButton,
@@ -24,6 +25,7 @@ import { useAccounts } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
 import { guessCategory } from '@/features/transactions/categoryGuess';
+import { suggestPayees } from '@/features/transactions/payeeSuggest';
 import { isConfirmedOnSave, recordStatus } from '@/features/transactions/confirmation';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
@@ -31,6 +33,7 @@ import { DateField } from '@/features/transactions/components/DateField';
 import {
   useCreateTransaction,
   useDeleteTransaction,
+  usePayeeHistory,
   useTransaction,
   useUpdateTransaction,
 } from '@/features/transactions/hooks';
@@ -87,6 +90,8 @@ export default function TransactionEditScreen() {
   const create = useCreateTransaction();
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
+  const payeeHistory = usePayeeHistory();
+  const [payeeFocused, setPayeeFocused] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // 「ポイント」は、保存済みの値があれば最初から開いておく。押したら押した方を優先
   const [pointsOpen, setPointsOpen] = useState<boolean | null>(null);
@@ -137,6 +142,20 @@ export default function TransactionEditScreen() {
   });
   const type = useWatch({ control, name: 'type' });
   const rule = TRANSACTION_RULES[type];
+  const fromAccountId = useWatch({ control, name: 'fromAccountId' });
+
+  // カテゴリをどこから入れたか。自分で選んだものは自動で上書きしない。内容から予測したものは口座の既定より優先する
+  const categorySource = useRef<'user' | 'payee' | 'account' | null>(null);
+
+  // 新規の支払いで口座を選んだら、その口座の既定のカテゴリを入れる（自分で選んだ・内容から予測したときは除く）
+  useEffect(() => {
+    if (!isNew || type !== 'expense' || !accounts.data) return;
+    if (categorySource.current === 'user' || categorySource.current === 'payee') return;
+    if (categorySource.current === null && getValues('categoryId')) return;
+    const fallback = accounts.data.find((a) => a.id === fromAccountId)?.default_category_id ?? null;
+    setValue('categoryId', fallback);
+    categorySource.current = fallback ? 'account' : null;
+  }, [isNew, type, fromAccountId, accounts.data, getValues, setValue]);
 
   // 編集: 保存済みの記録をフォームに入れる
   useEffect(() => {
@@ -171,6 +190,7 @@ export default function TransactionEditScreen() {
   const changeType = (next: TransactionType) => {
     if (TRANSACTION_RULES[next].categoryKind !== TRANSACTION_RULES[getValues('type')].categoryKind) {
       setValue('categoryId', null);
+      categorySource.current = null;
     }
     setValue('type', next);
     if (isNew) applyLastUsed(setValue, next, lastUsed.current);
@@ -182,10 +202,15 @@ export default function TransactionEditScreen() {
   // カテゴリが空のまま内容を入れたら、同じ内容の過去の記録でいちばん多いカテゴリを入れる（REQ-8）
   const fillCategoryFromHistory = async (payee: string) => {
     const currentType = getValues('type');
-    if (!TRANSACTION_RULES[currentType].categoryKind || getValues('categoryId') || payee.trim() === '') return;
+    const canFill = !getValues('categoryId') || categorySource.current === 'account';
+    if (!TRANSACTION_RULES[currentType].categoryKind || !canFill || payee.trim() === '') return;
     try {
       const guessed = guessCategory(await fetchCategoryHistory(payee.trim(), currentType));
-      if (guessed && !getValues('categoryId') && getValues('type') === currentType) setValue('categoryId', guessed);
+      const stillFillable = !getValues('categoryId') || categorySource.current === 'account';
+      if (guessed && stillFillable && getValues('type') === currentType) {
+        setValue('categoryId', guessed);
+        categorySource.current = 'payee';
+      }
     } catch {
       // 予測できなくても入力は続けられる
     }
@@ -435,7 +460,10 @@ export default function TransactionEditScreen() {
                 kind={rule.categoryKind!}
                 categories={categories.data!}
                 value={value}
-                onChange={onChange}
+                onChange={(next) => {
+                  categorySource.current = 'user';
+                  onChange(next);
+                }}
                 error={errors.categoryId?.message}
               />
             )}
@@ -453,16 +481,38 @@ export default function TransactionEditScreen() {
           control={control}
           name="payee"
           render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              mode="outlined"
-              label="内容（任意）"
-              value={value}
-              onChangeText={onChange}
-              onBlur={() => {
-                onBlur();
-                fillCategoryFromHistory(value);
-              }}
-            />
+            <View>
+              <TextInput
+                mode="outlined"
+                label="内容（任意）"
+                value={value}
+                onChangeText={onChange}
+                onFocus={() => setPayeeFocused(true)}
+                onBlur={() => {
+                  setPayeeFocused(false);
+                  onBlur();
+                  fillCategoryFromHistory(value);
+                }}
+              />
+              {/* 入力中の文字を含む過去の内容。押すとそれを入れて、カテゴリも予測する */}
+              {payeeFocused && (
+                <View style={styles.suggestions}>
+                  {suggestPayees(payeeHistory.data ?? [], value).map((payee) => (
+                    <Chip
+                      key={payee}
+                      compact
+                      icon="history"
+                      onPress={() => {
+                        onChange(payee);
+                        fillCategoryFromHistory(payee);
+                      }}
+                    >
+                      {payee}
+                    </Chip>
+                  ))}
+                </View>
+              )}
+            </View>
           )}
         />
         <Controller
@@ -578,6 +628,7 @@ export default function TransactionEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   confirmBar: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 8, paddingLeft: 12 },
   confirmSpacer: { flex: 1 },
   accordion: { paddingHorizontal: 0 },

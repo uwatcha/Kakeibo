@@ -10,7 +10,6 @@ import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
-import { AvailableAccountsSheet } from '@/features/accounts/components/AvailableAccountsSheet';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
@@ -31,7 +30,7 @@ function AccountRow({ account }: { account: AccountBalance }) {
       title={account.name}
       icon={ACCOUNT_KIND_INFO[account.kind].icon}
       right={<Amount value={account.balance} variant="bodyLarge" />}
-      onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })}
+      onPress={() => router.push({ pathname: '/account-history/[id]', params: { id: account.id } })}
     />
   );
 }
@@ -80,7 +79,6 @@ export default function HomeScreen() {
   const today = toTokyoDateString();
   const employers = useEmployers();
   const future = useMovementsAfter(today);
-  const [showAvailable, setShowAvailable] = useState(false);
 
   if (!data) {
     return (
@@ -171,7 +169,6 @@ export default function HomeScreen() {
             {
               title: '汎用資産',
               amount: summary.availableNetWorth,
-              action: { icon: 'tune-variant', label: '汎用資産に含める口座', onPress: () => setShowAvailable(true) },
             },
             { title: '純資産', amount: summary.netWorth },
             ...(spendable
@@ -218,7 +215,6 @@ export default function HomeScreen() {
           onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
         />
       )}
-      <AvailableAccountsSheet visible={showAvailable} onDismiss={() => setShowAvailable(false)} accounts={data} />
     </View>
   );
 }

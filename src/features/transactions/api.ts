@@ -19,6 +19,19 @@ export async function fetchMonthTransactions(month: string): Promise<Transaction
   return data;
 }
 
+/** その口座から出た・入った記録（新しい順）。口座の利用履歴用 */
+export async function fetchAccountTransactions(accountId: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .or(`from_account_id.eq.${accountId},to_account_id.eq.${accountId}`)
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  if (error) throw error;
+  return data;
+}
+
 export async function fetchTransaction(id: string): Promise<Transaction> {
   const { data, error } = await supabase.from('transactions').select('*').eq('id', id).single();
   if (error) throw error;
@@ -60,6 +73,18 @@ export async function findSameDayAmount(date: string, amount: number, excludeId?
   const { data, error } = await query;
   if (error) throw error;
   return data;
+}
+
+/** これまでの記録の内容（新しい順に最大1000件）。内容の入力候補用 */
+export async function fetchPayeeHistory(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('payee')
+    .not('payee', 'is', null)
+    .order('date', { ascending: false })
+    .limit(1000);
+  if (error) throw error;
+  return data.map((row) => row.payee!).filter((payee) => payee.trim() !== '');
 }
 
 /** 同じ内容・同じ種類で過去に付けたカテゴリ（新しい順に最大20件）。カテゴリの予測用（REQ-8） */

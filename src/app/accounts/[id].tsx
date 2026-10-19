@@ -15,7 +15,18 @@ import {
   fromOpeningBalance,
   toOpeningBalance,
 } from '@/features/accounts/accountKinds';
-import { useAccount, useAccounts, useCreateAccount, useUpdateAccount } from '@/features/accounts/hooks';
+import { planAdjustment } from '@/features/accounts/adjustment';
+import {
+  useAccount,
+  useAccountBalance,
+  useAccounts,
+  useCreateAccount,
+  useUpdateAccount,
+} from '@/features/accounts/hooks';
+import { useCategories } from '@/features/categories/hooks';
+import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
+import { useCreateTransaction } from '@/features/transactions/hooks';
+import { toTokyoDateString } from '@/lib/date';
 import { parseNonNegativeYen } from '@/lib/money';
 
 const schema = z.object({
@@ -23,10 +34,14 @@ const schema = z.object({
   kind: z.enum(ACCOUNT_KINDS as [string, ...string[]]),
   openingBalance: z.string().refine((v) => parseNonNegativeYen(v) !== null, '0以上の整数（円）で入力してください'),
   isReserved: z.boolean(),
+  defaultCategoryId: z.string().nullable(),
 });
 
 type FormValues = z.infer<typeof schema>;
 type Kind = (typeof ACCOUNT_KINDS)[number];
+
+/** 支払いに使える口座（既定のカテゴリを持てる） */
+const canPay = (kind: Kind) => ASSET_KINDS.includes(kind) || kind === 'credit_card';
 
 export default function AccountEditScreen() {
   const theme = useTheme();
@@ -34,7 +49,11 @@ export default function AccountEditScreen() {
   const isNew = id === 'new';
 
   const account = useAccount(isNew ? undefined : id);
+  // 編集では残高の欄に今日までの残高を出し、変えたら差額を残高調整として記録する
+  const balance = useAccountBalance(isNew ? undefined : id);
   const accounts = useAccounts();
+  const categories = useCategories();
+  const createTransaction = useCreateTransaction();
   const create = useCreateAccount();
   const update = useUpdateAccount();
 
@@ -45,34 +64,37 @@ export default function AccountEditScreen() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', kind: 'cash', openingBalance: '', isReserved: false },
+    defaultValues: { name: '', kind: 'cash', openingBalance: '', isReserved: false, defaultCategoryId: null },
   });
   const kind = useWatch({ control, name: 'kind' }) as Kind;
 
   useEffect(() => {
-    if (account.data) {
+    if (account.data && balance.data !== undefined) {
       reset({
         name: account.data.name,
         kind: account.data.kind,
-        openingBalance: String(fromOpeningBalance(account.data.kind, account.data.opening_balance)),
+        openingBalance: String(fromOpeningBalance(account.data.kind, balance.data)),
         isReserved: account.data.is_reserved,
+        defaultCategoryId: account.data.default_category_id,
       });
     }
-  }, [account.data, reset]);
+  }, [account.data, balance.data, reset]);
 
   const onSubmit = async (values: FormValues) => {
     const valuesKind = values.kind as Kind;
+    const input = parseNonNegativeYen(values.openingBalance) ?? 0;
     const common = {
       name: values.name,
-      opening_balance: toOpeningBalance(valuesKind, parseNonNegativeYen(values.openingBalance) ?? 0),
       // 普段使わない口座の区別は資産の口座だけ
       is_reserved: ASSET_KINDS.includes(valuesKind) && values.isReserved,
+      default_category_id: canPay(valuesKind) ? values.defaultCategoryId : null,
     };
     try {
       if (isNew) {
         const maxOrder = Math.max(0, ...(accounts.data ?? []).map((a) => a.sort_order));
         await create.mutateAsync({
           ...common,
+          opening_balance: toOpeningBalance(valuesKind, input),
           kind: valuesKind,
           sort_order: maxOrder + 10,
           // 作るときだけ、普段使わない口座は汎用資産に含めない状態から始める（あとはホームの ⚙ で切り替える）
@@ -80,6 +102,18 @@ export default function AccountEditScreen() {
         });
       } else {
         await update.mutateAsync({ id, values: common });
+        // 残高を変えたら、差額を今日の残高調整として記録する（初期残高は変えない）
+        const plan = planAdjustment(valuesKind, balance.data ?? 0, input);
+        if (plan) {
+          await createTransaction.mutateAsync({
+            type: 'adjustment',
+            amount: plan.amount,
+            from_account_id: plan.direction === 'decrease' ? id : null,
+            to_account_id: plan.direction === 'increase' ? id : null,
+            date: toTokyoDateString(),
+            payee: '残高を合わせる',
+          });
+        }
       }
       router.back();
     } catch {
@@ -98,16 +132,25 @@ export default function AccountEditScreen() {
 
   const title = isNew ? '口座を追加' : '口座を編集';
 
-  if (!isNew && !account.data) {
+  if ((!isNew && (!account.data || balance.data === undefined)) || !categories.data) {
+    const error = account.error ?? balance.error ?? categories.error;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title }} />
-        <QueryState isLoading={account.isLoading} error={account.error} onRetry={account.refetch} />
+        <QueryState
+          isLoading={!error}
+          error={error}
+          onRetry={() => {
+            account.refetch();
+            balance.refetch();
+            categories.refetch();
+          }}
+        />
       </View>
     );
   }
 
-  const saving = isSubmitting || update.isPending;
+  const saving = isSubmitting || update.isPending || createTransaction.isPending;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -169,6 +212,22 @@ export default function AccountEditScreen() {
           {errors.openingBalance?.message}
         </HelperText>
 
+        {canPay(kind) && (
+          <Controller
+            control={control}
+            name="defaultCategoryId"
+            render={({ field: { onChange, value } }) => (
+              <CategoryPicker
+                label="既定のカテゴリ（任意）"
+                kind="expense"
+                categories={categories.data!}
+                value={value}
+                onChange={onChange}
+              />
+            )}
+          />
+        )}
+
         {ASSET_KINDS.includes(kind) && (
           <Controller
             control={control}
@@ -204,17 +263,6 @@ export default function AccountEditScreen() {
             締め日・引き落とし日
           </Button>
         )}
-        {!isNew && account.data && !account.data.is_archived && (
-          <Button
-            mode="outlined"
-            style={styles.button}
-            icon="scale-balance"
-            onPress={() => router.push({ pathname: '/balance-adjust/[id]', params: { id } })}
-            disabled={saving}
-          >
-            残高を合わせる
-          </Button>
-        )}
         {!isNew && account.data && (
           <Button
             mode="outlined"
@@ -228,7 +276,8 @@ export default function AccountEditScreen() {
         )}
       </KeyboardAwareScrollView>
 
-      <Snackbar visible={create.isError || update.isError} onDismiss={() => (create.reset(), update.reset())}>
+      <Snackbar visible={create.isError || update.isError || createTransaction.isError}
+        onDismiss={() => (create.reset(), update.reset(), createTransaction.reset())}>
         保存できませんでした。通信状態を確認してください
       </Snackbar>
     </View>

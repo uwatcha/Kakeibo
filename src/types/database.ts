@@ -42,6 +42,7 @@ export type Database = {
       accounts: {
         Row: {
           created_at: string
+          default_category_id: string | null
           id: string
           include_in_available: boolean
           is_archived: boolean
@@ -54,6 +55,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_category_id?: string | null
           id?: string
           include_in_available?: boolean
           is_archived?: boolean
@@ -66,6 +68,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_category_id?: string | null
           id?: string
           include_in_available?: boolean
           is_archived?: boolean
@@ -76,7 +79,15 @@ export type Database = {
           sort_order?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "accounts_default_category_fk"
+            columns: ["user_id", "default_category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
       }
       categories: {
         Row: {

@@ -1,8 +1,10 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
-import type { ColorValue } from 'react-native';
+import { type ColorValue, StyleSheet, View } from 'react-native';
 import { IconButton, useTheme } from 'react-native-paper';
+
+import { AvailableAccountsButton } from '@/features/accounts/components/AvailableAccountsButton';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -38,18 +40,28 @@ export default function TabsLayout() {
           tabBarIcon: tabIcon('home'),
           // 用語の説明はヘッダーの小さなアイコンから開く
           headerRight: () => (
-            <IconButton
-              icon="information-outline"
-              iconColor={theme.colors.primary}
-              accessibilityLabel="用語の説明"
-              onPress={() => router.push('/info')}
-            />
+            <View style={styles.headerRight}>
+              <AvailableAccountsButton />
+              <IconButton
+                icon="information-outline"
+                iconColor={theme.colors.primary}
+                accessibilityLabel="用語の説明"
+                onPress={() => router.push('/info')}
+              />
+            </View>
           ),
         }}
       />
       <Tabs.Screen name="transactions" options={{ title: '記録', tabBarIcon: tabIcon('format-list-bulleted') }} />
-      <Tabs.Screen name="reports" options={{ title: '集計', tabBarIcon: tabIcon('chart-pie') }} />
+      <Tabs.Screen
+        name="reports"
+        options={{ title: '集計', tabBarIcon: tabIcon('chart-pie'), headerRight: () => <AvailableAccountsButton /> }}
+      />
       <Tabs.Screen name="settings" options={{ title: '設定', tabBarIcon: tabIcon('cog') }} />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  headerRight: { flexDirection: 'row' },
+});

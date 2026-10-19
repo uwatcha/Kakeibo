@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Modal, Portal, Snackbar, Switch, Text, useTheme } from 'react-native-paper';
 
 import { Amount } from '@/components/Amount';
@@ -25,6 +25,11 @@ export function AvailableAccountsSheet({ visible, onDismiss, accounts }: Props) 
 
   const included = (a: AccountBalance) => pending[a.id] ?? a.includeInAvailable;
   const visibleAccounts = accounts.filter((a) => !a.isArchived).sort((a, b) => a.sortOrder - b.sortOrder);
+  // 普段使わない口座は下にまとめて見分けられるようにする
+  const groups = [
+    { title: '普段使う口座', accounts: visibleAccounts.filter((a) => !a.isReserved) },
+    { title: '普段使わない口座', accounts: visibleAccounts.filter((a) => a.isReserved) },
+  ];
   const total = visibleAccounts.filter(included).reduce((sum, a) => sum + a.balance, 0);
 
   const toggle = (account: AccountBalance, value: boolean) => {
@@ -54,16 +59,27 @@ export function AvailableAccountsSheet({ visible, onDismiss, accounts }: Props) 
         </Text>
         <Amount value={total} variant="headlineMedium" style={[styles.total, styles.title]} />
         <ScrollView style={styles.list}>
-          {visibleAccounts.map((a) => (
-            <ListRow
-              key={a.id}
-              title={a.name}
-              subtitle={<Amount value={a.balance} variant="bodySmall" />}
-              icon={ACCOUNT_KIND_INFO[a.kind].icon}
-              right={<Switch value={included(a)} onValueChange={(v) => toggle(a, v)} />}
-              onPress={() => toggle(a, !included(a))}
-            />
-          ))}
+          {groups.map(
+            (group) =>
+              group.accounts.length > 0 && (
+                <View key={group.title}>
+                  <Text variant="labelLarge" style={[styles.group, { color: theme.colors.onSurfaceVariant }]}>
+                    {group.title}
+                  </Text>
+                  {group.accounts.map((a) => (
+                    <ListRow
+                      key={a.id}
+                      title={a.name}
+                      subtitle={<Amount value={a.balance} variant="bodySmall" />}
+                      icon={ACCOUNT_KIND_INFO[a.kind].icon}
+                      iconColor={a.isReserved ? theme.colors.onSurfaceVariant : undefined}
+                      right={<Switch value={included(a)} onValueChange={(v) => toggle(a, v)} />}
+                      onPress={() => toggle(a, !included(a))}
+                    />
+                  ))}
+                </View>
+              ),
+          )}
         </ScrollView>
         <Button onPress={onDismiss} style={styles.close}>
           閉じる
@@ -81,5 +97,6 @@ const styles = StyleSheet.create({
   title: { paddingHorizontal: 20, fontWeight: '700' },
   total: { marginTop: 4, marginBottom: 8, fontWeight: '800' },
   list: { flexGrow: 0 },
+  group: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 2, fontWeight: '700' },
   close: { alignSelf: 'flex-end', marginTop: 8, marginRight: 12 },
 });

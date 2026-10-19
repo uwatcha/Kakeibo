@@ -41,8 +41,13 @@ export function useAccount(id: string | undefined) {
   });
 }
 
-export function useAccountBalance(id: string) {
-  return useQuery({ queryKey: accountKeys.balance(id), queryFn: () => fetchAccountBalance(id) });
+/** id が undefined のあいだは取りに行かない */
+export function useAccountBalance(id: string | undefined) {
+  return useQuery({
+    queryKey: accountKeys.balance(id ?? ''),
+    queryFn: () => fetchAccountBalance(id!),
+    enabled: !!id,
+  });
 }
 
 function useInvalidateAccounts() {
