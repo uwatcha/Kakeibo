@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { router, Tabs } from 'expo-router';
+import { router, Tabs, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -9,10 +9,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { QueryState } from '@/components/QueryState';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
-import { type AiMessage, sendAiChat } from '@/features/ai/api';
+import { type AiMessage, appendExchange, createConversation, fetchConversation, sendAiChat } from '@/features/ai/api';
 import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
-import { aiKeys, useAiStatus, useAiUsageToday } from '@/features/ai/hooks';
+import { aiKeys, useAiStatus, useAiUsageToday, useConversation } from '@/features/ai/hooks';
+import { daysUntilDeletion, RETENTION_DAYS, titleFrom } from '@/features/ai/retention';
 import { useCategories } from '@/features/categories/hooks';
 import { useEmployers } from '@/features/employers/hooks';
 import { useRules } from '@/features/recurring/hooks';
@@ -24,7 +25,7 @@ import { RADIUS, SPACING } from '@/theme';
 const CONTEXT_DAYS = 90;
 
 type ChatItem = {
-  id: number;
+  id: number | string;
   role: 'user' | 'model';
   /** 画面に出す文（元の名前） */
   shown: string;
@@ -32,8 +33,13 @@ type ChatItem = {
   sent: string;
 };
 
-/** 出納の記録をもとに、家計の相談に乗る AI（Gemini）とのチャット */
+/**
+ * 出納の記録をもとに、家計の相談に乗る AI（Gemini）とのチャット。
+ * 会話は保存し、URL の c に開いている会話の id を持つ（なければ新しいチャット）
+ */
 export default function AiChatScreen() {
+  const { c: conversationId } = useLocalSearchParams<{ c?: string }>();
+  const conversation = useConversation(conversationId);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const today = toTokyoDateString();
@@ -50,13 +56,16 @@ export default function AiChatScreen() {
     queryFn: () => fetchTransactionsSince(since),
   });
 
-  const [items, setItems] = useState<ChatItem[]>([]);
+  // 返事を待っている間の質問（保存は返事と一緒にする）
+  const [pending, setPending] = useState<ChatItem | null>(null);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastTotal, setLastTotal] = useState<number | null>(null);
-  const nextId = useRef(1);
   const listRef = useRef<FlatList<ChatItem>>(null);
+
+  const stored: ChatItem[] = conversationId ? (conversation.data?.messages ?? []) : [];
+  const items = pending ? [...stored, pending] : stored;
+  const lastTotal = conversationId ? (conversation.data?.conversation.last_total_tokens ?? 0) : 0;
 
   // 右上の小さな円のゲージ（この会話で使ったトークン）。連携していて、モデルが分かるときだけ
   const currentModel = status.data?.models.find((m) => m.id === status.data?.model);
@@ -64,7 +73,7 @@ export default function AiChatScreen() {
     status.data?.hasKey && currentModel ? (
       <TokenGauge
         modelLabel={currentModel.label}
-        used={lastTotal ?? 0}
+        used={lastTotal}
         limit={currentModel.inputTokenLimit}
         todayCount={usage.data?.count ?? 0}
         todayTokens={usage.data?.tokens ?? 0}
@@ -74,21 +83,28 @@ export default function AiChatScreen() {
   const headerRight = () => (
     <View style={styles.headerRight}>
       {gauge}
+      <IconButton icon="history" accessibilityLabel="会話の履歴" onPress={() => router.push('/ai-history')} />
       <IconButton
-        icon="broom"
-        accessibilityLabel="新しい会話"
-        disabled={items.length === 0 || sending}
+        icon="square-edit-outline"
+        accessibilityLabel="新しいチャット"
+        disabled={!conversationId || sending}
         onPress={() => {
-          setItems([]);
-          setLastTotal(null);
           setError(null);
+          router.setParams({ c: undefined });
         }}
       />
-      <IconButton icon="cog" accessibilityLabel="AI 相談の設定" onPress={() => router.push('/ai-settings')} />
     </View>
   );
 
-  const sources = [status, balances, categories, employers, rules, transactions];
+  const sources = [
+    status,
+    balances,
+    categories,
+    employers,
+    rules,
+    transactions,
+    ...(conversationId ? [conversation] : []),
+  ];
   const loadError = sources.find((q) => q.error)?.error ?? null;
   if (sources.some((q) => !q.data)) {
     return (
@@ -124,9 +140,9 @@ export default function AiChatScreen() {
   const send = async () => {
     const text = input.trim();
     if (text === '' || sending) return;
-    const userItem: ChatItem = { id: nextId.current++, role: 'user', shown: text, sent: maskText(text, aliases) };
-    const history = [...items, userItem];
-    setItems(history);
+    const question = { shown: text, sent: maskText(text, aliases) };
+    const history = [...stored, { id: 'pending', role: 'user' as const, ...question }];
+    setPending(history[history.length - 1]);
     setInput('');
     setError(null);
     setSending(true);
@@ -134,20 +150,27 @@ export default function AiChatScreen() {
       const system = `${SYSTEM_PROMPT}\n\n# 家計の材料\n${buildContext(source, aliases)}`;
       const messages: AiMessage[] = history.map((m) => ({ role: m.role, text: m.sent }));
       const reply = await sendAiChat(system, messages);
-      setItems([
-        ...history,
-        { id: nextId.current++, role: 'model', shown: restoreText(reply.text, aliases), sent: reply.text },
-      ]);
-      setLastTotal(reply.usage.total);
+      // 質問と返事を保存する。初めての質問なら会話を作る
+      const id = conversationId ?? (await createConversation(titleFrom(text)));
+      await appendExchange(
+        id,
+        question,
+        { shown: restoreText(reply.text, aliases), sent: reply.text },
+        reply.usage.total,
+      );
+      // 読み直してから開く（新しい会話でも読み込み中の画面を挟まない）
+      await queryClient.fetchQuery({ queryKey: aiKeys.conversation(id), queryFn: () => fetchConversation(id) });
+      queryClient.invalidateQueries({ queryKey: aiKeys.conversations() });
+      if (!conversationId) router.setParams({ c: id });
       usage.refetch();
       // 使えなくなったモデルからサーバーが自動で切り替えたときは、表示のモデルも読み直す
       if (reply.model !== status.data?.model) queryClient.invalidateQueries({ queryKey: aiKeys.status() });
     } catch (e) {
       setError(e instanceof Error ? e.message : '送れませんでした');
       // 送れなかった質問は入力欄に戻す
-      setItems(items);
       setInput(text);
     } finally {
+      setPending(null);
       setSending(false);
     }
   };
@@ -162,6 +185,16 @@ export default function AiChatScreen() {
           data={items}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.messages}
+          ListHeaderComponent={
+            // ピン留めしていない会話は消えることを、開いている会話でも分かるようにする
+            <Text variant="labelSmall" style={[styles.retention, { color: theme.colors.onSurfaceVariant }]}>
+              {conversation.data?.conversation.pinned && conversationId
+                ? 'ピン留め中の会話'
+                : conversationId && conversation.data
+                  ? `この会話はあと${daysUntilDeletion(conversation.data.conversation.updated_at, new Date())}日で消えます（履歴でピン留めすると残ります）`
+                  : `会話は保存され、ピン留めしなければ${RETENTION_DAYS}日で消えます`}
+            </Text>
+          }
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => (
             <View
@@ -226,6 +259,7 @@ const styles = StyleSheet.create({
   modelBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
   thinking: { alignSelf: 'flex-start', marginLeft: 8 },
   error: { textAlign: 'center' },
+  retention: { textAlign: 'center' },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 8, gap: 4 },
   input: { flex: 1, maxHeight: 120 },
 });

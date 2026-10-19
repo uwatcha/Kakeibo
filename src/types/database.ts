@@ -92,6 +92,74 @@ export type Database = {
           },
         ]
       }
+      ai_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_total_tokens: number
+          pinned: boolean
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_total_tokens?: number
+          pinned?: boolean
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_total_tokens?: number
+          pinned?: boolean
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_messages: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: number
+          role: string
+          sent: string
+          shown: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: never
+          role: string
+          sent: string
+          shown: string
+          user_id?: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: never
+          role?: string
+          sent?: string
+          shown?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_user_id_conversation_id_fkey"
+            columns: ["user_id", "conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
       ai_settings: {
         Row: {
           gemini_api_key: string | null

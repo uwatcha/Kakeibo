@@ -1,11 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { deleteAiKey, fetchAiStatus, fetchAiUsageToday, saveAiKey, setAiModel } from './api';
+import {
+  deleteAiKey,
+  deleteConversation,
+  fetchAiStatus,
+  fetchAiUsageToday,
+  fetchConversation,
+  fetchConversations,
+  saveAiKey,
+  setAiModel,
+  setConversationPinned,
+} from './api';
+import { deletionCutoff } from './retention';
 
 export const aiKeys = {
   all: ['ai'] as const,
   status: () => [...aiKeys.all, 'status'] as const,
   usage: (today: string) => [...aiKeys.all, 'usage', today] as const,
+  conversations: () => [...aiKeys.all, 'conversations'] as const,
+  conversation: (id: string) => [...aiKeys.all, 'conversations', id] as const,
 };
 
 export function useAiStatus() {
@@ -36,5 +49,34 @@ export function useSetAiModel() {
   return useMutation({
     mutationFn: setAiModel,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: aiKeys.status() }),
+  });
+}
+
+/** 会話の一覧。開くたびに、期限が過ぎたピン留めなしの会話を消してから読む */
+export function useConversations() {
+  return useQuery({ queryKey: aiKeys.conversations(), queryFn: () => fetchConversations(deletionCutoff(new Date())) });
+}
+
+export function useConversation(id: string | undefined) {
+  return useQuery({
+    queryKey: aiKeys.conversation(id ?? ''),
+    queryFn: () => fetchConversation(id!),
+    enabled: !!id,
+  });
+}
+
+export function useSetConversationPinned() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => setConversationPinned(id, pinned),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: aiKeys.conversations() }),
+  });
+}
+
+export function useDeleteConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteConversation,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: aiKeys.conversations() }),
   });
 }
