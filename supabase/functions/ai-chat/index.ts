@@ -77,6 +77,31 @@ function sortModels(models: Model[]): Model[] {
  * 古い版は一覧に出ていても新しい利用者には使えない（404）ことがあるため
  */
 const FALLBACK_MODEL = 'gemini-flash-latest';
+/** Flash も混み合っているときに試す、軽いモデル */
+const LIGHT_FALLBACK_MODEL = 'gemini-flash-lite-latest';
+
+/** 混み合い・一時的な障害（少し待てば通ることがある） */
+const isTemporary = (status: number) => status === 500 || status === 502 || status === 503 || status === 504;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 一時的なエラーなら 1秒・3秒待って、最大2回送り直す */
+async function generateWithRetry(
+  apiKey: string,
+  model: string,
+  system: string,
+  messages: { role: string; text: string }[],
+) {
+  for (const wait of [1000, 3000, 0]) {
+    try {
+      return await generate(apiKey, model, system, messages);
+    } catch (e) {
+      if (!(e instanceof GeminiError) || !isTemporary(e.status) || wait === 0) throw e;
+      await sleep(wait);
+    }
+  }
+  throw new Error('unreachable');
+}
 function defaultModel(models: Model[]): string | null {
   if (models.some((m) => m.id === FALLBACK_MODEL)) return FALLBACK_MODEL;
   const flash = models.filter((m) => /flash/.test(m.id) && !/lite|preview|exp/.test(m.id));
@@ -140,15 +165,25 @@ Deno.serve(async (req) => {
         if (!settings?.gemini_api_key || !settings.model) return json({ error: 'API キーを登録してください' }, 400);
         const messages = (body.messages ?? []) as { role: 'user' | 'model'; text: string }[];
         const system = String(body.system ?? '');
+        // 選んだモデル → 最新の Flash → 最新の Flash-Lite の順に試す。
+        // 混み合い（503 など）は少し待って送り直し、使えないモデル（404）はすぐ次へ
+        const candidates = [...new Set([settings.model, FALLBACK_MODEL, LIGHT_FALLBACK_MODEL])];
         let model = settings.model;
         let out;
-        try {
-          out = await generate(settings.gemini_api_key, model, system, messages);
-        } catch (e) {
-          // 選んでいたモデルが使えなくなっていたら、最新の Flash に切り替えて送り直し、設定も変える
-          if (!(e instanceof GeminiError) || e.status !== 404 || model === FALLBACK_MODEL) throw e;
-          model = FALLBACK_MODEL;
-          out = await generate(settings.gemini_api_key, model, system, messages);
+        let lastError: unknown;
+        for (const candidate of candidates) {
+          try {
+            out = await generateWithRetry(settings.gemini_api_key, candidate, system, messages);
+            model = candidate;
+            break;
+          } catch (e) {
+            lastError = e;
+            if (!(e instanceof GeminiError) || !(e.status === 404 || isTemporary(e.status))) throw e;
+          }
+        }
+        if (!out) throw lastError;
+        // 使えなくなっていたモデルは、切り替え先を設定にする（混み合いで切り替えただけなら設定は変えない）
+        if (model !== settings.model && lastError instanceof GeminiError && lastError.status === 404) {
           await db.from('ai_settings').update({ model, updated_at: new Date().toISOString() }).eq('user_id', user.id);
         }
         const text = (out.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
@@ -170,7 +205,9 @@ Deno.serve(async (req) => {
       const message =
         e.status === 429
           ? '無料枠の上限に達しました。しばらく待ってから送ってください'
-          : e.status === 404
+          : isTemporary(e.status)
+            ? 'Gemini が混み合っています。少し待ってから送ってください'
+            : e.status === 404
             ? 'このモデルは使えなくなりました。設定でほかのモデルを選んでください'
             : e.status === 400 || e.status === 401 || e.status === 403
               ? 'Gemini に断られました。API キーやモデルを確かめてください'
