@@ -11,6 +11,7 @@ function txn(overrides: Partial<Transaction>): Transaction {
     date: '2026-10-18',
     amount: 100,
     is_confirmed: true,
+    employer_id: null,
     from_account_id: 'wallet',
     to_account_id: null,
     category_id: null,

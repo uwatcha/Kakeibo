@@ -22,6 +22,7 @@ describe('transactionsToCsv', () => {
       recurring_rule_id: null,
       updated_at: '',
       is_confirmed: true,
+      employer_id: null,
     };
     const csv = transactionsToCsv(
       [

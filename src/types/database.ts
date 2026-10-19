@@ -293,6 +293,7 @@ export type Database = {
           category_id: string | null
           created_at: string
           date: string
+          employer_id: string | null
           from_account_id: string | null
           id: string
           is_confirmed: boolean
@@ -311,6 +312,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           date?: string
+          employer_id?: string | null
           from_account_id?: string | null
           id?: string
           is_confirmed?: boolean
@@ -329,6 +331,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           date?: string
+          employer_id?: string | null
           from_account_id?: string | null
           id?: string
           is_confirmed?: boolean
@@ -343,6 +346,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_employer_fk"
+            columns: ["user_id", "employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["user_id", "id"]
+          },
           {
             foreignKeyName: "transactions_recurring_rule_fk"
             columns: ["user_id", "recurring_rule_id"]

@@ -24,6 +24,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import type { Account } from '@/features/accounts/api';
 import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
+import { useEmployers } from '@/features/employers/hooks';
 import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
 import { defaultTypeForAccount, presetSide } from '@/features/transactions/accountPreset';
 import { guessCategory } from '@/features/transactions/categoryGuess';
@@ -67,9 +68,13 @@ type FormValues = {
   /** 本来の金額・利用ポイント（REQ-18）。空欄なら記録しない */
   listPrice: string;
   pointsUsed: string;
+  /** 収入を払ってくれた働き先（給与の支払い元） */
+  employerId: string | null;
 };
 
 const OTHER = 'other';
+/** 働き先を選んだときに入れる収入のカテゴリ（初期カテゴリの名前） */
+const SALARY_CATEGORY = '給与・アルバイト';
 
 type LastUsed = Awaited<ReturnType<typeof loadLastUsedAccounts>>;
 
@@ -95,6 +100,7 @@ export default function TransactionEditScreen() {
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
   const payeeHistory = usePayeeHistory();
+  const employers = useEmployers();
   const [payeeFocused, setPayeeFocused] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // 「ポイント」は、保存済みの値があれば最初から開いておく。押したら押した方を優先
@@ -142,6 +148,7 @@ export default function TransactionEditScreen() {
       memo: '',
       listPrice: '',
       pointsUsed: '',
+      employerId: null,
     },
   });
   const type = useWatch({ control, name: 'type' });
@@ -178,6 +185,7 @@ export default function TransactionEditScreen() {
       memo: t.memo ?? '',
       listPrice: t.list_price === null ? '' : String(t.list_price),
       pointsUsed: t.points_used === null ? '' : String(t.points_used),
+      employerId: t.employer_id,
     });
   }, [transaction.data, reset]);
 
@@ -236,6 +244,21 @@ export default function TransactionEditScreen() {
     }
   };
 
+  // 働き先を選んだら、空いていれば内容に働き先の名前、カテゴリに「給与・アルバイト」を入れる（自分で選んだカテゴリは変えない）
+  const usableEmployers = employers.data ?? [];
+  const fillFromEmployer = (employerId: string) => {
+    const employer = usableEmployers.find((e) => e.id === employerId);
+    if (!employer) return;
+    if (getValues('payee').trim() === '') setValue('payee', employer.name);
+    if (categorySource.current !== 'user' && !getValues('categoryId')) {
+      const salary = categories.data?.find((c) => c.kind === 'income' && c.name === SALARY_CATEGORY && !c.is_archived);
+      if (salary) {
+        setValue('categoryId', salary.id);
+        categorySource.current = 'account';
+      }
+    }
+  };
+
   const onSubmit = async (values: FormValues, skipDuplicateCheck = false) => {
     if (isNew && !skipDuplicateCheck) {
       try {
@@ -260,6 +283,7 @@ export default function TransactionEditScreen() {
       memo: values.memo.trim() || null,
       list_price: values.listPrice.trim() === '' ? null : parseNonNegativeYen(values.listPrice),
       points_used: values.pointsUsed.trim() === '' ? null : parseNonNegativeYen(values.pointsUsed),
+      employer_id: values.type === 'income' ? values.employerId : null,
       is_confirmed: isConfirmedOnSave(values.date, toTokyoDateString()),
     };
     try {
@@ -477,6 +501,29 @@ export default function TransactionEditScreen() {
           </>
         )}
 
+        {type === 'income' && usableEmployers.length > 0 && (
+          <Controller
+            control={control}
+            name="employerId"
+            render={({ field: { onChange, value } }) => (
+              <View style={styles.field}>
+                <Text variant="labelLarge">働き先（任意）</Text>
+                <ChipGroup
+                  options={usableEmployers
+                    .filter((e) => !e.is_archived || e.id === value)
+                    .map((e) => ({ value: e.id, label: e.name, icon: 'briefcase' }))}
+                  value={value}
+                  onChange={(next) => {
+                    onChange(next);
+                    if (next) fillFromEmployer(next);
+                  }}
+                  allowDeselect
+                />
+              </View>
+            )}
+          />
+        )}
+
         {rule.categoryKind && (
           <Controller
             control={control}
@@ -655,6 +702,7 @@ export default function TransactionEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  field: { gap: 4 },
   suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   confirmBar: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 8, paddingLeft: 12 },
   confirmSpacer: { flex: 1 },
