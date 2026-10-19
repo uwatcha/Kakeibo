@@ -24,7 +24,7 @@ export function AvailableAccountsSheet({ visible, onDismiss, accounts }: Props) 
   const [pending, setPending] = useState<Record<string, boolean>>({});
 
   const included = (a: AccountBalance) => pending[a.id] ?? a.includeInAvailable;
-  const visibleAccounts = accounts.filter((a) => !a.isArchived).sort((a, b) => a.sortOrder - b.sortOrder);
+  const visibleAccounts = accounts.filter((a) => !a.isArchived);
   // 普段使わない口座は下にまとめて見分けられるようにする
   const groups = [
     { title: '普段使う口座', accounts: visibleAccounts.filter((a) => !a.isReserved) },

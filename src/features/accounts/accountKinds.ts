@@ -21,6 +21,14 @@ export const ACCOUNT_KIND_INFO: Record<AccountKind, AccountKindInfo> = {
 
 export const ACCOUNT_KINDS = Object.keys(ACCOUNT_KIND_INFO) as AccountKind[];
 
+/** 口座の並び順: 種類（ACCOUNT_KINDS の順）、同じ種類の中は名前順。口座が並ぶところはすべてこの順にする */
+export function compareAccounts(
+  a: { kind: AccountKind; name: string },
+  b: { kind: AccountKind; name: string },
+): number {
+  return ACCOUNT_KINDS.indexOf(a.kind) - ACCOUNT_KINDS.indexOf(b.kind) || a.name.localeCompare(b.name, 'ja');
+}
+
 /** 自分のお金を置いておく口座（現金・銀行・電子マネー・投資） */
 export const ASSET_KINDS: readonly AccountKind[] = ['cash', 'bank', 'emoney', 'investment'];
 

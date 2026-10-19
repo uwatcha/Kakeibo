@@ -11,7 +11,6 @@ import {
   type CardSettingsInsert,
   saveCardSettings,
   fetchAccounts,
-  reorderAccounts,
   updateAccount,
 } from './api';
 
@@ -68,14 +67,6 @@ export function useUpdateAccount() {
   return useMutation({
     mutationFn: ({ id, values }: { id: string; values: AccountUpdate }) => updateAccount(id, values),
     onSuccess: invalidate,
-  });
-}
-
-export function useReorderAccounts() {
-  const invalidate = useInvalidateAccounts();
-  return useMutation({
-    mutationFn: (orderedIds: string[]) => reorderAccounts(orderedIds),
-    onSettled: invalidate,
   });
 }
 

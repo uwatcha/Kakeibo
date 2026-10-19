@@ -1,4 +1,4 @@
-import { ASSET_KINDS, type AccountKind } from './accountKinds';
+import { compareAccounts, ASSET_KINDS, type AccountKind } from './accountKinds';
 
 export type AccountBalance = {
   id: string;
@@ -6,7 +6,6 @@ export type AccountBalance = {
   kind: AccountKind;
   isReserved: boolean;
   isArchived: boolean;
-  sortOrder: number;
   /** 負債はマイナス */
   balance: number;
   /** 汎用資産に含めるか（ホームの ⚙ から切り替える） */
@@ -46,9 +45,7 @@ const negate = (value: number) => 0 - value;
 
 /** ホーム画面に出す残高のまとめ。非表示の口座は一覧に出さないが、純資産には含める */
 export function summarizeBalances(accounts: AccountBalance[]): BalanceSummary {
-  const visible = accounts
-    .filter((a) => !a.isArchived)
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'ja'));
+  const visible = accounts.filter((a) => !a.isArchived).sort(compareAccounts);
   const assets = visible.filter((a) => ASSET_KINDS.includes(a.kind));
 
   const everyday = assets.filter((a) => !a.isReserved);

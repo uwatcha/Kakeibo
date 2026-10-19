@@ -9,7 +9,6 @@ function account(overrides: Partial<AccountBalance>): AccountBalance {
     kind: 'bank',
     isReserved: false,
     isArchived: false,
-    sortOrder: seq,
     balance: 0,
     includeInAvailable: true,
     ...overrides,
@@ -65,10 +64,11 @@ describe('summarizeBalances', () => {
     expect(summarizeBalances([reserved, excludedCard]).availableNetWorth).toBe(1000);
   });
 
-  it('並び順は sortOrder 優先', () => {
-    const a = account({ name: 'B', sortOrder: 1 });
-    const b = account({ name: 'A', sortOrder: 2 });
-    expect(summarizeBalances([b, a]).everyday.map((x) => x.name)).toEqual(['B', 'A']);
+  it('並び順は種類、同じ種類の中は名前順', () => {
+    const bank = account({ name: 'A銀行', kind: 'bank' });
+    const cashB = account({ name: 'B財布', kind: 'cash' });
+    const cashA = account({ name: 'A財布', kind: 'cash' });
+    expect(summarizeBalances([bank, cashB, cashA]).everyday.map((x) => x.name)).toEqual(['A財布', 'B財布', 'A銀行']);
   });
 
   it('口座がなければすべて 0', () => {

@@ -16,13 +16,7 @@ import {
   toOpeningBalance,
 } from '@/features/accounts/accountKinds';
 import { planAdjustment } from '@/features/accounts/adjustment';
-import {
-  useAccount,
-  useAccountBalance,
-  useAccounts,
-  useCreateAccount,
-  useUpdateAccount,
-} from '@/features/accounts/hooks';
+import { useAccount, useAccountBalance, useCreateAccount, useUpdateAccount } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { useCreateTransaction } from '@/features/transactions/hooks';
@@ -51,7 +45,6 @@ export default function AccountEditScreen() {
   const account = useAccount(isNew ? undefined : id);
   // 編集では残高の欄に今日までの残高を出し、変えたら差額を残高調整として記録する
   const balance = useAccountBalance(isNew ? undefined : id);
-  const accounts = useAccounts();
   const categories = useCategories();
   const createTransaction = useCreateTransaction();
   const create = useCreateAccount();
@@ -91,12 +84,10 @@ export default function AccountEditScreen() {
     };
     try {
       if (isNew) {
-        const maxOrder = Math.max(0, ...(accounts.data ?? []).map((a) => a.sort_order));
         await create.mutateAsync({
           ...common,
           opening_balance: toOpeningBalance(valuesKind, input),
           kind: valuesKind,
-          sort_order: maxOrder + 10,
           // 作るときだけ、普段使わない口座は汎用資産に含めない状態から始める（あとはホームの ⚙ で切り替える）
           include_in_available: !common.is_reserved,
         });
@@ -276,8 +267,10 @@ export default function AccountEditScreen() {
         )}
       </KeyboardAwareScrollView>
 
-      <Snackbar visible={create.isError || update.isError || createTransaction.isError}
-        onDismiss={() => (create.reset(), update.reset(), createTransaction.reset())}>
+      <Snackbar
+        visible={create.isError || update.isError || createTransaction.isError}
+        onDismiss={() => (create.reset(), update.reset(), createTransaction.reset())}
+      >
         保存できませんでした。通信状態を確認してください
       </Snackbar>
     </View>
