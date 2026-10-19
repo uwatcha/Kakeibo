@@ -88,7 +88,20 @@ function applyLastUsed(setValue: UseFormSetValue<FormValues>, type: TransactionT
 export default function TransactionEditScreen() {
   const theme = useTheme();
   // 口座の利用履歴の＋から開いたときは accountId にその口座が入っている
-  const { id, accountId: presetAccountId } = useLocalSearchParams<{ id: string; accountId?: string }>();
+  // ホームの「足りなくなる口座」の振替の候補から開いたときは transferFrom / transferTo / amount が入っている
+  const {
+    id,
+    accountId: presetAccountId,
+    transferFrom,
+    transferTo,
+    amount: presetAmount,
+  } = useLocalSearchParams<{
+    id: string;
+    accountId?: string;
+    transferFrom?: string;
+    transferTo?: string;
+    amount?: string;
+  }>();
   const isNew = id === 'new';
 
   const transaction = useTransaction(isNew ? undefined : id);
@@ -216,8 +229,14 @@ export default function TransactionEditScreen() {
       applyLastUsed(setValue, type, saved);
       const side = preset.current ? presetSide(type, preset.current.kind) : null;
       if (preset.current && side) setValue(side === 'from' ? 'fromAccountId' : 'toAccountId', preset.current.id);
+      if (transferFrom && transferTo) {
+        setValue('type', 'transfer');
+        setValue('fromAccountId', transferFrom);
+        setValue('toAccountId', transferTo);
+        if (presetAmount) setValue('amount', presetAmount);
+      }
     });
-  }, [isNew, accounts.data, presetAccountId, getValues, setValue]);
+  }, [isNew, accounts.data, presetAccountId, transferFrom, transferTo, presetAmount, getValues, setValue]);
 
   const changeType = (next: TransactionType) => {
     if (TRANSACTION_RULES[next].categoryKind !== TRANSACTION_RULES[getValues('type')].categoryKind) {

@@ -50,3 +50,73 @@ export function findShortages<M extends Movement>(
   }
   return [...result.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
+
+export type CoverSource = { accountId: string; amount: number };
+export type ShortageCover = {
+  /** 振替で切り抜けられるか。false ならどこから振り替えても足りない */
+  covered: boolean;
+  /** 振り替える口座と額（今日振り替える想定。covered が false でも、出せる分は入れる） */
+  sources: CoverSource[];
+};
+
+/**
+ * 各口座が今日から先で一番少なくなるときの残高（今日の残高も含む）。
+ * 今日この額までなら、その口座から振り替えても予定でマイナスにならない
+ */
+export function lowestAhead(
+  balances: ReadonlyMap<string, number>,
+  movements: readonly Movement[],
+  today: string,
+): Map<string, number> {
+  const running = new Map(balances);
+  const lowest = new Map(balances);
+  const upcoming = movements.filter((m) => m.date > today).sort((a, b) => a.date.localeCompare(b.date));
+  let index = 0;
+  while (index < upcoming.length) {
+    const date = upcoming[index].date;
+    for (; index < upcoming.length && upcoming[index].date === date; index++) {
+      const m = upcoming[index];
+      if (m.from_account_id && running.has(m.from_account_id)) {
+        running.set(m.from_account_id, running.get(m.from_account_id)! - m.amount);
+      }
+      if (m.to_account_id && running.has(m.to_account_id)) {
+        running.set(m.to_account_id, running.get(m.to_account_id)! + m.amount);
+      }
+    }
+    for (const [id, balance] of running) {
+      if (balance < lowest.get(id)!) lowest.set(id, balance);
+    }
+  }
+  return lowest;
+}
+
+/**
+ * 足りなくなる口座ごとに、ほかの口座からの振替で切り抜けられるかを調べる。
+ * sources は振替元にできる口座（使う順。普段使う口座を先に）。足りない額（−lowest）を、
+ * 各口座の「今日から先で一番少ないときの残高」の範囲で前から順に割り当てる。
+ * 足りなくなる日が早い口座から割り当て、同じ口座の余裕を二重に使わない
+ */
+export function planCovers(
+  shortages: readonly Shortage[],
+  lowest: ReadonlyMap<string, number>,
+  sources: readonly string[],
+): Map<string, ShortageCover> {
+  const spare = new Map(sources.map((id) => [id, Math.max(0, lowest.get(id) ?? 0)]));
+  const result = new Map<string, ShortageCover>();
+  for (const s of shortages) {
+    let need = 0 - s.lowest;
+    const used: CoverSource[] = [];
+    for (const id of sources) {
+      if (need <= 0) break;
+      if (id === s.accountId) continue;
+      const available = spare.get(id) ?? 0;
+      if (available <= 0) continue;
+      const amount = Math.min(available, need);
+      used.push({ accountId: id, amount });
+      spare.set(id, available - amount);
+      need -= amount;
+    }
+    result.set(s.accountId, { covered: need <= 0, sources: used });
+  }
+  return result;
+}

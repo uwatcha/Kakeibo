@@ -94,3 +94,8 @@ export function positiveContainer(isDark: boolean): string {
 export function warningColors(isDark: boolean): { background: string; color: string } {
   return isDark ? { background: '#4d3300', color: '#ffd08a' } : { background: '#ffe2b8', color: '#7a4300' };
 }
+
+/** 「振替で切り抜けられる不足」など、注意を促すが赤ほど強くない文字の色（黄色系。白地でも読める濃さ） */
+export function cautionColor(isDark: boolean): string {
+  return isDark ? '#f0c24b' : '#946200';
+}

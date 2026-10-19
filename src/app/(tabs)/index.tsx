@@ -9,7 +9,7 @@ import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
-import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
+import { ACCOUNT_KIND_INFO, type AccountKind, ASSET_KINDS } from '@/features/accounts/accountKinds';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
@@ -17,12 +17,15 @@ import { useEmployers } from '@/features/employers/hooks';
 import { nextPayday } from '@/features/employers/payday';
 import type { Movement } from '@/features/reports/api';
 import { useMovementsAfter } from '@/features/reports/hooks';
-import { findShortages } from '@/features/reports/shortage';
+import { findShortages, lowestAhead, planCovers, type ShortageCover } from '@/features/reports/shortage';
 import { monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
-import { SPACING } from '@/theme';
+import { cautionColor, SPACING } from '@/theme';
+
+/** 足りなくなる口座への振替元にできる口座の種類 */
+const TRANSFER_SOURCE_KINDS: readonly AccountKind[] = ['cash', 'bank', 'emoney'];
 
 /** 予定を見る期間の終わり（期限なし） */
 const LAST_DATE = '9999-12-31';
@@ -112,14 +115,27 @@ export default function HomeScreen() {
     (m.to_account_id ? accountName(m.to_account_id) : null) || m.payee || TRANSACTION_RULES[m.type].label;
 
   // 入っている予定（来月以降も含めて全部）で残高がマイナスになる口座（REQ-25）
-  const shortages = future.data
-    ? findShortages(
-        new Map(data.filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived).map((a) => [a.id, a.balance])),
-        future.data,
-        today,
-        LAST_DATE,
-      )
-    : [];
+  const assetBalances = new Map(
+    data.filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived).map((a) => [a.id, a.balance]),
+  );
+  const shortages = future.data ? findShortages(assetBalances, future.data, today, LAST_DATE) : [];
+  // ほかの口座からの振替で切り抜けられるか。振替元は現金・銀行・電子マネー（投資はすぐ引き出せないので除く）で、
+  // 普段使う口座を先に使う
+  const transferSources = data
+    .filter((a) => TRANSFER_SOURCE_KINDS.includes(a.kind) && !a.isArchived)
+    .sort((a, b) => Number(a.isReserved) - Number(b.isReserved))
+    .map((a) => a.id);
+  const covers =
+    future.data && shortages.length > 0
+      ? planCovers(shortages, lowestAhead(assetBalances, future.data, today), transferSources)
+      : new Map<string, ShortageCover>();
+  const anyAbsolute = shortages.some((s) => !covers.get(s.accountId)?.covered);
+  const caution = cautionColor(theme.dark);
+  const openTransfer = (from: string, to: string, amount: number) =>
+    router.push({
+      pathname: '/transaction/[id]',
+      params: { id: 'new', transferFrom: from, transferTo: to, amount: String(amount) },
+    });
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -130,40 +146,70 @@ export default function HomeScreen() {
         {shortages.length > 0 && (
           <SectionCard
             title="足りなくなる口座"
-            left={<MaterialCommunityIcons name="alert" size={22} color={theme.colors.error} />}
-          >
-            {shortages.map((s) => (
-              <ListRow
-                key={s.accountId}
-                title={accountName(s.accountId)}
-                subtitle={
-                  <View>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      {formatDay(s.date)}
-                    </Text>
-                    {/* その日に足りなくなる原因の支払い */}
-                    {/* 原因が複数あるときは、それぞれの行を押すとその予定を開く */}
-                    {s.causes.map((m) => (
-                      <Text
-                        key={m.id}
-                        variant="bodySmall"
-                        numberOfLines={1}
-                        onPress={s.causes.length > 1 ? () => openTransaction(m.id) : undefined}
-                      >
-                        {causeLabel(m)} {formatYen(m.amount)}
-                      </Text>
-                    ))}
-                  </View>
-                }
-                right={<Amount value={s.lowest} variant="bodyLarge" />}
-                // 足りなくなる原因の支払い予定を開く（複数なら一番大きいもの）
-                onPress={() => {
-                  const main = [...s.causes].sort((a, b) => b.amount - a.amount)[0];
-                  if (main) openTransaction(main.id);
-                  else router.push({ pathname: '/accounts/[id]', params: { id: s.accountId } });
-                }}
+            // どこから振り替えても足りない口座があれば赤、振替で切り抜けられるものだけなら黄色
+            left={
+              <MaterialCommunityIcons
+                name={anyAbsolute ? 'alert' : 'alert-outline'}
+                size={22}
+                color={anyAbsolute ? theme.colors.error : caution}
               />
-            ))}
+            }
+          >
+            {shortages.map((s) => {
+              const cover = covers.get(s.accountId);
+              const covered = !!cover?.covered;
+              return (
+                <ListRow
+                  key={s.accountId}
+                  title={accountName(s.accountId)}
+                  subtitle={
+                    <View>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {formatDay(s.date)}
+                      </Text>
+                      {/* その日に足りなくなる原因の支払い */}
+                      {/* 原因が複数あるときは、それぞれの行を押すとその予定を開く */}
+                      {s.causes.map((m) => (
+                        <Text
+                          key={m.id}
+                          variant="bodySmall"
+                          numberOfLines={1}
+                          onPress={s.causes.length > 1 ? () => openTransaction(m.id) : undefined}
+                        >
+                          {causeLabel(m)} {formatYen(m.amount)}
+                        </Text>
+                      ))}
+                      {/* 振替で切り抜けられるときは、どこからいくら振り替えるか。押すとその振替を記録する画面 */}
+                      {covered &&
+                        cover!.sources.map((src) => (
+                          <Text
+                            key={src.accountId}
+                            variant="bodySmall"
+                            numberOfLines={1}
+                            style={[styles.transfer, { color: caution }]}
+                            onPress={() => openTransfer(src.accountId, s.accountId, src.amount)}
+                          >
+                            {accountName(src.accountId)}から {formatYen(src.amount)} を振替
+                          </Text>
+                        ))}
+                    </View>
+                  }
+                  right={
+                    <Amount
+                      value={s.lowest}
+                      variant="bodyLarge"
+                      style={covered ? [styles.total, { color: caution }] : styles.total}
+                    />
+                  }
+                  // 足りなくなる原因の支払い予定を開く（複数なら一番大きいもの）
+                  onPress={() => {
+                    const main = [...s.causes].sort((a, b) => b.amount - a.amount)[0];
+                    if (main) openTransaction(main.id);
+                    else router.push({ pathname: '/accounts/[id]', params: { id: s.accountId } });
+                  }}
+                />
+              );
+            })}
           </SectionCard>
         )}
 
@@ -235,6 +281,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 96 },
   total: { fontWeight: '700' },
+  transfer: { fontWeight: '700' },
   empty: { gap: 12, padding: 16 },
   collapsibleHeader: {
     flexDirection: 'row',
