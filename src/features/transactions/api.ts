@@ -32,6 +32,19 @@ export async function fetchAccountTransactions(accountId: string): Promise<Trans
   return data;
 }
 
+/** date 以降の記録（未来の日付も含む。新しい順）。AI の家計相談の材料用 */
+export async function fetchTransactionsSince(date: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .gte('date', date)
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(2000);
+  if (error) throw error;
+  return data;
+}
+
 export async function fetchTransaction(id: string): Promise<Transaction> {
   const { data, error } = await supabase.from('transactions').select('*').eq('id', id).single();
   if (error) throw error;

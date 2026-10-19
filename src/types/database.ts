@@ -92,6 +92,54 @@ export type Database = {
           },
         ]
       }
+      ai_settings: {
+        Row: {
+          gemini_api_key: string | null
+          model: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          gemini_api_key?: string | null
+          model?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          gemini_api_key?: string | null
+          model?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_usage: {
+        Row: {
+          created_at: string
+          id: number
+          model: string
+          output_tokens: number
+          prompt_tokens: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          model: string
+          output_tokens?: number
+          prompt_tokens?: number
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          model?: string
+          output_tokens?: number
+          prompt_tokens?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string

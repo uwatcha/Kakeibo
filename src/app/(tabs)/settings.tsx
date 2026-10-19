@@ -52,6 +52,7 @@ export default function SettingsScreen() {
           {navItem('カテゴリの管理', 'shape', '/categories')}
           {navItem('働き先と給料日', 'briefcase', '/employers')}
           {navItem('定期支払い', 'autorenew', '/recurring')}
+          {navItem('AI 相談', 'robot-outline', '/ai-chat')}
         </SectionCard>
         <SectionCard title="データ">
           {exportItem('csv', '記録を CSV で書き出す', 'file-delimited')}
