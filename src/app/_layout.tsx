@@ -10,6 +10,7 @@ import { PaperProvider, useTheme } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { RecurringRunner } from '@/features/recurring/RecurringRunner';
+import { UpdateButton } from '@/features/updates/UpdateButton';
 import { themes } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -74,6 +75,7 @@ export default function RootLayout() {
               <StatusBar style="auto" />
               <RecurringRunner />
               <RootNavigator />
+              <UpdateButton />
             </AuthProvider>
           </PaperProvider>
         </QueryClientProvider>
