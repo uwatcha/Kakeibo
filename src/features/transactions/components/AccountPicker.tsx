@@ -18,9 +18,11 @@ type Props = {
   error?: string;
   /** 口座ごとの今日までの残高。あれば残高 0 円の貸し借りの相手を隠す */
   balances?: ReadonlyMap<string, number>;
+  /** 2 ならチップを2行に並べる（記録の入力画面） */
+  rows?: 1 | 2;
 };
 
-export function AccountPicker({ label, kinds, accounts, value, onChange, error, balances }: Props) {
+export function AccountPicker({ label, kinds, accounts, value, onChange, error, balances, rows = 1 }: Props) {
   const [showAll, setShowAll] = useState(false);
   const { shown, hiddenCount } = pickerAccounts(accounts, kinds, value, balances, showAll);
   // 選ぶのが貸し借りの相手だけなら、その場で相手を追加できる
@@ -51,6 +53,7 @@ export function AccountPicker({ label, kinds, accounts, value, onChange, error, 
           options={shown.map((a) => ({ value: a.id, label: a.name, icon: ACCOUNT_KIND_INFO[a.kind].icon }))}
           value={value}
           onChange={onChange}
+          rows={rows}
           extra={
             <>
               {hiddenCount > 0 && (

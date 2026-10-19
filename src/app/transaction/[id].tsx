@@ -407,6 +407,7 @@ export default function TransactionEditScreen() {
             render={({ field: { onChange, value } }) => (
               <AccountPicker
                 balances={balances}
+                rows={2}
                 label="口座"
                 kinds={rule.from!.kinds}
                 accounts={accountList}
@@ -425,6 +426,7 @@ export default function TransactionEditScreen() {
                 render={({ field: { onChange, value } }) => (
                   <AccountPicker
                     balances={balances}
+                    rows={2}
                     label={rule.from!.label}
                     kinds={rule.from!.kinds}
                     accounts={accountList}
@@ -442,6 +444,7 @@ export default function TransactionEditScreen() {
                 render={({ field: { onChange, value } }) => (
                   <AccountPicker
                     balances={balances}
+                    rows={2}
                     label={rule.to!.label}
                     kinds={rule.to!.kinds}
                     accounts={accountList}
@@ -461,6 +464,7 @@ export default function TransactionEditScreen() {
             name="categoryId"
             render={({ field: { onChange, value } }) => (
               <CategoryPicker
+                rows={2}
                 kind={rule.categoryKind!}
                 categories={categories.data!}
                 value={value}

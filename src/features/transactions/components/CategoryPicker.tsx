@@ -13,10 +13,12 @@ type Props = {
   onChange: (id: string | null) => void;
   error?: string;
   label?: string;
+  /** 2 ならチップを2行に並べる（記録の入力画面） */
+  rows?: 1 | 2;
 };
 
 /** 大分類を選ぶと、小分類があればその下に出す。大分類だけでも記録できる */
-export function CategoryPicker({ kind, categories, value, onChange, error, label = 'カテゴリ' }: Props) {
+export function CategoryPicker({ kind, categories, value, onChange, error, label = 'カテゴリ', rows = 1 }: Props) {
   const usable = categories.filter((c) => c.kind === kind && (!c.is_archived || c.id === value));
   const parents = usable.filter((c) => c.parent_id === null);
   const selected = usable.find((c) => c.id === value);
@@ -31,6 +33,7 @@ export function CategoryPicker({ kind, categories, value, onChange, error, label
         value={selectedParentId}
         onChange={onChange}
         allowDeselect
+        rows={rows}
       />
       {children.length > 0 && (
         <ChipGroup
@@ -38,6 +41,7 @@ export function CategoryPicker({ kind, categories, value, onChange, error, label
           value={selected?.parent_id ? selected.id : null}
           onChange={(id) => onChange(id ?? selectedParentId)}
           allowDeselect
+          rows={rows}
         />
       )}
       {!!error && <HelperText type="error">{error}</HelperText>}
