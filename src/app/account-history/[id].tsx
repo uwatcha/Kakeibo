@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
+import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
@@ -144,6 +145,12 @@ export default function AccountHistoryScreen() {
           }}
         />
       )}
+      {!account.is_archived && (
+        <AddFab
+          accessibilityLabel={`${account.name}で記録する`}
+          onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new', accountId: id } })}
+        />
+      )}
     </View>
   );
 }
@@ -156,5 +163,5 @@ const styles = StyleSheet.create({
   balance: { fontWeight: '800', marginTop: 2 },
   memo: { marginTop: 6 },
   segment: { marginHorizontal: SPACING.screen, marginTop: SPACING.gap, borderRadius: RADIUS.tile },
-  statements: { padding: SPACING.screen, paddingBottom: 48 },
+  statements: { padding: SPACING.screen, paddingBottom: 96 },
 });

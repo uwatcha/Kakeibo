@@ -21,9 +21,11 @@ import {
 import { ChipGroup } from '@/components/ChipGroup';
 import { QueryState } from '@/components/QueryState';
 import { StatusBadge } from '@/components/StatusBadge';
+import type { Account } from '@/features/accounts/api';
 import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
+import { defaultTypeForAccount, presetSide } from '@/features/transactions/accountPreset';
 import { guessCategory } from '@/features/transactions/categoryGuess';
 import { suggestPayees } from '@/features/transactions/payeeSuggest';
 import { isConfirmedOnSave, recordStatus } from '@/features/transactions/confirmation';
@@ -81,7 +83,8 @@ function applyLastUsed(setValue: UseFormSetValue<FormValues>, type: TransactionT
 
 export default function TransactionEditScreen() {
   const theme = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // 口座の利用履歴の＋から開いたときは accountId にその口座が入っている
+  const { id, accountId: presetAccountId } = useLocalSearchParams<{ id: string; accountId?: string }>();
   const isNew = id === 'new';
 
   const transaction = useTransaction(isNew ? undefined : id);
@@ -179,14 +182,30 @@ export default function TransactionEditScreen() {
   }, [transaction.data, reset]);
 
   // 新規: 種類を選ぶたびに、その種類で前回使った口座を初期値にする（REQ-30）
+  // 口座の利用履歴から開いたときは、前回の口座の代わりにその口座を入れる（種類を変えても、使える欄なら入れ直す）
   const lastUsed = useRef<LastUsed>({});
+  const preset = useRef<Account | null>(null);
+  const applyDefaults = (next: TransactionType) => {
+    applyLastUsed(setValue, next, lastUsed.current);
+    const account = preset.current;
+    const side = account ? presetSide(next, account.kind) : null;
+    if (account && side) setValue(side === 'from' ? 'fromAccountId' : 'toAccountId', account.id);
+  };
+  const initialized = useRef(false);
   useEffect(() => {
-    if (!isNew) return;
+    if (!isNew || !accounts.data || initialized.current) return;
+    initialized.current = true;
+    preset.current = accounts.data.find((a) => a.id === presetAccountId) ?? null;
     loadLastUsedAccounts().then((saved) => {
       lastUsed.current = saved;
-      applyLastUsed(setValue, getValues('type'), saved);
+      const presetType = preset.current ? defaultTypeForAccount(preset.current.kind) : null;
+      if (presetType) setValue('type', presetType);
+      const type = getValues('type');
+      applyLastUsed(setValue, type, saved);
+      const side = preset.current ? presetSide(type, preset.current.kind) : null;
+      if (preset.current && side) setValue(side === 'from' ? 'fromAccountId' : 'toAccountId', preset.current.id);
     });
-  }, [isNew, getValues, setValue]);
+  }, [isNew, accounts.data, presetAccountId, getValues, setValue]);
 
   const changeType = (next: TransactionType) => {
     if (TRANSACTION_RULES[next].categoryKind !== TRANSACTION_RULES[getValues('type')].categoryKind) {
@@ -194,7 +213,7 @@ export default function TransactionEditScreen() {
       categorySource.current = null;
     }
     setValue('type', next);
-    if (isNew) applyLastUsed(setValue, next, lastUsed.current);
+    if (isNew) applyDefaults(next);
   };
 
   // 新しい記録で同じ日・同じ金額の記録があれば、保存する前に確かめる（REQ-17）
