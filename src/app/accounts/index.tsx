@@ -1,13 +1,16 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, Stack } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 import { AddFab } from '@/components/AddFab';
 import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
-import { ACCOUNT_KIND_INFO, ACCOUNT_KINDS } from '@/features/accounts/accountKinds';
-import { useAccounts } from '@/features/accounts/hooks';
+import { ACCOUNT_KIND_INFO, type AccountKind, ACCOUNT_KINDS, PERSON_KINDS } from '@/features/accounts/accountKinds';
+import type { Account } from '@/features/accounts/api';
+import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { SPACING } from '@/theme';
 
 function openAccount(id: string) {
@@ -19,7 +22,19 @@ export default function AccountsScreen() {
   const theme = useTheme();
   const { data, isLoading, error, refetch } = useAccounts();
 
+  const balances = useBalanceMap();
+  const [openPast, setOpenPast] = useState<Partial<Record<AccountKind, boolean>>>({});
+
   const active = data?.filter((a) => !a.is_archived) ?? [];
+  const row = (a: Account) => (
+    <ListRow
+      key={a.id}
+      title={a.name}
+      subtitle={[a.is_reserved ? '普段使わない' : null, a.memo].filter(Boolean).join('・') || undefined}
+      icon={ACCOUNT_KIND_INFO[a.kind].icon}
+      onPress={() => openAccount(a.id)}
+    />
+  );
   const archived = data?.filter((a) => a.is_archived) ?? [];
 
   return (
@@ -37,17 +52,34 @@ export default function AccountsScreen() {
           {ACCOUNT_KINDS.map((kind) => {
             const ofKind = active.filter((a) => a.kind === kind);
             if (ofKind.length === 0) return null;
+            // 貸し借りの相手で残高が 0 円の人は「過去の相手」にたたむ
+            const isPast = (a: Account) =>
+              PERSON_KINDS.includes(kind) && balances !== undefined && (balances.get(a.id) ?? 0) === 0;
+            const current = ofKind.filter((a) => !isPast(a));
+            const past = ofKind.filter(isPast);
             return (
               <SectionCard key={kind} title={ACCOUNT_KIND_INFO[kind].label}>
-                {ofKind.map((a) => (
-                  <ListRow
-                    key={a.id}
-                    title={a.name}
-                    subtitle={[a.is_reserved ? '普段使わない' : null, a.memo].filter(Boolean).join('・') || undefined}
-                    icon={ACCOUNT_KIND_INFO[a.kind].icon}
-                    onPress={() => openAccount(a.id)}
-                  />
-                ))}
+                {current.map(row)}
+                {past.length > 0 && (
+                  <>
+                    <TouchableRipple
+                      onPress={() => setOpenPast({ ...openPast, [kind]: !openPast[kind] })}
+                      accessibilityState={{ expanded: !!openPast[kind] }}
+                    >
+                      <View style={styles.pastToggle}>
+                        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                          過去の相手（{past.length}）
+                        </Text>
+                        <MaterialCommunityIcons
+                          name={openPast[kind] ? 'chevron-up' : 'chevron-down'}
+                          size={20}
+                          color={theme.colors.onSurfaceVariant}
+                        />
+                      </View>
+                    </TouchableRipple>
+                    {openPast[kind] && past.map(row)}
+                  </>
+                )}
               </SectionCard>
             );
           })}
@@ -76,4 +108,11 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 96 },
   empty: { padding: 24, textAlign: 'center' },
+  pastToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.row,
+    paddingVertical: 10,
+  },
 });

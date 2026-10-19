@@ -35,42 +35,13 @@ function AccountRow({ account }: { account: AccountBalance }) {
   );
 }
 
-function Section({
-  title,
-  total,
-  accounts,
-  collapseZero = false,
-}: {
-  title: string;
-  total: number;
-  accounts: AccountBalance[];
-  /** 残高 0 円の口座（精算済みの貸し借りの相手）は、押すまでたたんでおく */
-  collapseZero?: boolean;
-}) {
-  const theme = useTheme();
-  const [showZero, setShowZero] = useState(false);
+function Section({ title, total, accounts }: { title: string; total: number; accounts: AccountBalance[] }) {
   if (accounts.length === 0) return null;
-  const zero = collapseZero ? accounts.filter((a) => a.balance === 0) : [];
-  const shown = collapseZero && !showZero ? accounts.filter((a) => a.balance !== 0) : accounts;
   return (
     <SectionCard title={title} right={<Amount value={total} variant="titleMedium" style={styles.total} />}>
-      {shown.map((a) => (
+      {accounts.map((a) => (
         <AccountRow key={a.id} account={a} />
       ))}
-      {zero.length > 0 && (
-        <TouchableRipple onPress={() => setShowZero(!showZero)} accessibilityState={{ expanded: showZero }}>
-          <View style={styles.zeroToggle}>
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              {showZero ? '0円の相手をたたむ' : `0円の相手（${zero.length}）`}
-            </Text>
-            <MaterialCommunityIcons
-              name={showZero ? 'chevron-up' : 'chevron-down'}
-              size={20}
-              color={theme.colors.onSurfaceVariant}
-            />
-          </View>
-        </TouchableRipple>
-      )}
     </SectionCard>
   );
 }
@@ -233,13 +204,17 @@ export default function HomeScreen() {
 
         <Section title="普段使う口座" total={summary.everydayTotal} accounts={summary.everyday} />
         <Section title="クレジットカード" total={0 - summary.creditCardUnpaid} accounts={summary.creditCards} />
+        {/* 精算が済んで 0 円の相手はホームに出さない（口座の管理の「過去の相手」から開ける） */}
         <Section
           title="貸している・立て替え"
           total={summary.receivableTotal}
-          accounts={summary.receivables}
-          collapseZero
+          accounts={summary.receivables.filter((a) => a.balance !== 0)}
         />
-        <Section title="借りている" total={0 - summary.payableTotal} accounts={summary.payables} collapseZero />
+        <Section
+          title="借りている"
+          total={0 - summary.payableTotal}
+          accounts={summary.payables.filter((a) => a.balance !== 0)}
+        />
 
         <ReservedSection total={summary.reservedTotal} accounts={summary.reserved} />
       </ScrollView>
@@ -266,11 +241,4 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   collapsibleIcon: { flex: 1 },
-  zeroToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: SPACING.row,
-    paddingVertical: 10,
-  },
 });
