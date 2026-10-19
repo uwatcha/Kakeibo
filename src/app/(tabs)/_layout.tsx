@@ -41,13 +41,14 @@ export default function TabsLayout() {
           // 用語の説明はヘッダーの小さなアイコンから開く
           headerRight: () => (
             <View style={styles.headerRight}>
-              <AvailableAccountsButton />
               <IconButton
                 icon="information-outline"
                 iconColor={theme.colors.primary}
                 accessibilityLabel="用語の説明"
                 onPress={() => router.push('/info')}
               />
+              {/* 記録・集計と同じく、汎用資産のボタンはいちばん右 */}
+              <AvailableAccountsButton />
             </View>
           ),
         }}
