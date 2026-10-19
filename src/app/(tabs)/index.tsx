@@ -20,9 +20,12 @@ import { useMovementsAfter } from '@/features/reports/hooks';
 import { findShortages } from '@/features/reports/shortage';
 import { monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
-import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
+import { formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { SPACING } from '@/theme';
+
+/** 予定を見る期間の終わり（期限なし） */
+const LAST_DATE = '9999-12-31';
 
 function AccountRow({ account }: { account: AccountBalance }) {
   return (
@@ -108,13 +111,13 @@ export default function HomeScreen() {
   const causeLabel = (m: Movement) =>
     (m.to_account_id ? accountName(m.to_account_id) : null) || m.payee || TRANSACTION_RULES[m.type].label;
 
-  // この先31日の予定で残高がマイナスになる口座（REQ-25）
+  // 入っている予定（来月以降も含めて全部）で残高がマイナスになる口座（REQ-25）
   const shortages = future.data
     ? findShortages(
         new Map(data.filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived).map((a) => [a.id, a.balance])),
         future.data,
         today,
-        addDays(today, 31),
+        LAST_DATE,
       )
     : [];
 
