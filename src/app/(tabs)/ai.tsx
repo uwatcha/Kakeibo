@@ -12,7 +12,7 @@ import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from
 import { type AiMessage, appendExchange, createConversation, fetchConversation, sendAiChat } from '@/features/ai/api';
 import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
-import { aiKeys, useAiStatus, useAiUsageToday, useConversation } from '@/features/ai/hooks';
+import { aiKeys, useAiStatus, useAiUsageToday, useConversation, useConversations } from '@/features/ai/hooks';
 import { daysUntilDeletion, RETENTION_DAYS, titleFrom } from '@/features/ai/retention';
 import { useCategories } from '@/features/categories/hooks';
 import { useEmployers } from '@/features/employers/hooks';
@@ -40,6 +40,8 @@ type ChatItem = {
 export default function AiChatScreen() {
   const { c: conversationId } = useLocalSearchParams<{ c?: string }>();
   const conversation = useConversation(conversationId);
+  // 開いたときに、期限が過ぎたピン留めなしの会話を消しておく（一覧の読み込みで消える）
+  useConversations();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const today = toTokyoDateString();
