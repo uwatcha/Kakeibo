@@ -15,8 +15,10 @@ import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
 const BEGINNING = '1900-01-01';
 const HEADER_HEIGHT = 48;
 const PADDING = 16;
-/** 横軸の目盛りは多くてもこの数まで（月の初めに付ける） */
-const MAX_LABELS = 8;
+/** 1日あたりの横幅。全期間が収まらないときは横にスクロールする */
+const DAY_SPACING = 16;
+/** 横軸の目盛りの間隔（日） */
+const LABEL_EVERY_DAYS = 7;
 
 /**
  * 汎用資産の全期間の推移を横向きで出す。端末の向きは変えず、画面全体を90度回して横長に見せる
@@ -52,12 +54,11 @@ export default function BalanceChartScreen() {
       start,
       end,
     );
-    const monthStarts = points.map((p, i) => (p.date.endsWith('-01') ? i : -1)).filter((i) => i >= 0);
-    const step = Math.max(1, Math.ceil(monthStarts.length / MAX_LABELS));
+    // 目盛りは最初の日と、そこから1週間ごと（月の初めは「11月」のように月を出す）
     const labelFor = (i: number) => {
-      if (i === 0) return `${Number(points[0].date.slice(5, 7))}/${Number(points[0].date.slice(8, 10))}`;
-      const k = monthStarts.indexOf(i);
-      return k >= 0 && k % step === 0 ? `${Number(points[i].date.slice(5, 7))}月` : '';
+      const date = points[i].date;
+      if (date.endsWith('-01')) return `${Number(date.slice(5, 7))}月`;
+      return i % LABEL_EVERY_DAYS === 0 ? `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}` : '';
     };
     const todayPoint = points.findLast((p) => p.date <= today);
 
@@ -88,6 +89,7 @@ export default function BalanceChartScreen() {
           width={width - PADDING * 2}
           height={height - HEADER_HEIGHT - PADDING * 2 - 56}
           labelFor={labelFor}
+          daySpacing={DAY_SPACING}
         />
       </>
     );

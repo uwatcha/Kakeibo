@@ -49,12 +49,14 @@ type Props = {
    * 今は渡していない
    */
   projection?: readonly BalancePoint[] | null;
+  /** 1日あたりの横幅。渡すと全体が幅に収まらなくても縮めず、横にスクロールできるようにして今日の付近から見せる */
+  daySpacing?: number;
 };
 
 /**
  * 日ごとの残高の折れ線。今日までは実線（下を塗る）、今日より後の予定は点線。今日の点に印を付ける
  */
-export function BalanceLineChart({ points, today, width, height, labelFor, projection }: Props) {
+export function BalanceLineChart({ points, today, width, height, labelFor, projection, daySpacing }: Props) {
   const theme = useTheme();
   const color = useLineColor();
   const count = points.length;
@@ -72,7 +74,10 @@ export function BalanceLineChart({ points, today, width, height, labelFor, proje
   const top = Math.ceil((max + margin - base) / 1000) * 1000;
 
   const plotWidth = Math.max(0, width - Y_AXIS_WIDTH - 24);
-  const spacing = count > 1 ? plotWidth / (count - 1) : plotWidth;
+  const fitSpacing = count > 1 ? plotWidth / (count - 1) : plotWidth;
+  // 収まるなら幅いっぱいに広げ、収まらないときだけスクロールさせる
+  const spacing = daySpacing ? Math.max(daySpacing, fitSpacing) : fitSpacing;
+  const scrollable = spacing > fitSpacing;
   const muted = { color: theme.colors.onSurfaceVariant, fontSize: 10 };
 
   if (count < 2) return <Text variant="bodySmall">表示できる日がありません</Text>;
@@ -111,6 +116,10 @@ export function BalanceLineChart({ points, today, width, height, labelFor, proje
       spacing={spacing}
       initialSpacing={4}
       endSpacing={4}
+      // 横にスクロールするときは、開いたときに今日（なければ最後）の付近を出す
+      disableScroll={!scrollable}
+      scrollToIndex={scrollable ? Math.max(0, todayIndex) : undefined}
+      scrollAnimation={false}
       maxValue={top}
       noOfSections={4}
       formatYLabel={(label: string) => compactYen(Number(label) + base)}
