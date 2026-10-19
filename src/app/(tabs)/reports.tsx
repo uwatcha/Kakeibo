@@ -8,11 +8,15 @@ import { Amount } from '@/components/Amount';
 import { Carousel } from '@/components/Carousel';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
+import { useAvailableAccountIds } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { buildBreakdown, type Comparison, compare, toDonutSlices } from '@/features/reports/breakdown';
-import { useCategoryExpense, useMonthComparison } from '@/features/reports/hooks';
 import { SincePaydayChart } from '@/features/reports/components/SincePaydayChart';
 import { sliceColor } from '@/features/reports/palette';
+import type { Transaction } from '@/features/transactions/api';
+import { useMonthTransactions } from '@/features/transactions/hooks';
+import { monthTotals } from '@/features/transactions/list';
+import { categoryExpenseRows, touchesAccounts } from '@/features/transactions/scope';
 import { addMonths, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatSignedYen, formatYen, MINUS } from '@/lib/money';
 import { RADIUS, SPACING } from '@/theme';
@@ -58,8 +62,10 @@ export default function ReportsScreen() {
   const theme = useTheme();
   const [month, setMonth] = useState(() => monthStart(toTokyoDateString()));
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const totals = useMonthComparison(month);
-  const expense = useCategoryExpense(month);
+  // 汎用資産に含める口座（右上のパネルで選ぶ）が関わる記録だけで集計する
+  const current = useMonthTransactions(month);
+  const previousMonth = useMonthTransactions(addMonths(month, -1));
+  const availableIds = useAvailableAccountIds();
   const categories = useCategories();
 
   const changeMonth = (delta: number) => {
@@ -68,8 +74,8 @@ export default function ReportsScreen() {
   };
 
   const refetch = () => {
-    totals.refetch();
-    expense.refetch();
+    current.refetch();
+    previousMonth.refetch();
     categories.refetch();
   };
 
@@ -83,8 +89,8 @@ export default function ReportsScreen() {
     </View>
   );
 
-  if (!totals.data || !expense.data || !categories.data) {
-    const error = totals.error ?? expense.error ?? categories.error;
+  if (!current.data || !previousMonth.data || !availableIds || !categories.data) {
+    const error = current.error ?? previousMonth.error ?? categories.error;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {header}
@@ -93,8 +99,11 @@ export default function ReportsScreen() {
     );
   }
 
-  const { current, previous } = totals.data;
-  const items = buildBreakdown(expense.data, categories.data);
+  const inScope = (list: readonly Transaction[]) => list.filter((t) => touchesAccounts(t, availableIds));
+  const currentScoped = inScope(current.data);
+  const thisMonth = monthTotals(currentScoped);
+  const lastMonth = monthTotals(inScope(previousMonth.data));
+  const items = buildBreakdown(categoryExpenseRows(currentScoped, categories.data), categories.data);
   const slices = toDonutSlices(items);
   const selected = slices.find((s) => s.key === selectedKey);
   const surface = theme.colors.elevation.level1;
@@ -106,17 +115,19 @@ export default function ReportsScreen() {
     <ScrollView
       style={{ backgroundColor: theme.colors.background }}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={totals.isRefetching || expense.isRefetching} onRefresh={refetch} />}
+      refreshControl={
+        <RefreshControl refreshing={current.isRefetching || previousMonth.isRefetching} onRefresh={refetch} />
+      }
     >
       {header}
 
       <SectionCard style={styles.tilesCard}>
         <View style={styles.tiles}>
-          <StatTile label="収入" comparison={compare(current.income, previous.income)} />
-          <StatTile label="支出" comparison={compare(current.expense, previous.expense)} />
+          <StatTile label="収入" comparison={compare(thisMonth.income, lastMonth.income)} />
+          <StatTile label="支出" comparison={compare(thisMonth.expense, lastMonth.expense)} />
           <StatTile
             label="差額"
-            comparison={compare(current.income - current.expense, previous.income - previous.expense)}
+            comparison={compare(thisMonth.income - thisMonth.expense, lastMonth.income - lastMonth.expense)}
             signed
           />
         </View>
@@ -156,7 +167,7 @@ export default function ReportsScreen() {
                             {selected ? selected.name : '合計'}
                           </Text>
                           <Text variant="titleMedium" style={styles.number}>
-                            {formatYen(selected ? selected.amount : current.expense)}
+                            {formatYen(selected ? selected.amount : thisMonth.expense)}
                           </Text>
                           {selected && <Text variant="bodySmall">{Math.round(selected.ratio * 100)}%</Text>}
                         </View>

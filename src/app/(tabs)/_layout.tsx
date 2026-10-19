@@ -52,7 +52,14 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="transactions" options={{ title: '記録', tabBarIcon: tabIcon('format-list-bulleted') }} />
+      <Tabs.Screen
+        name="transactions"
+        options={{
+          title: '記録',
+          tabBarIcon: tabIcon('format-list-bulleted'),
+          headerRight: () => <AvailableAccountsButton />,
+        }}
+      />
       <Tabs.Screen
         name="reports"
         options={{ title: '集計', tabBarIcon: tabIcon('chart-pie'), headerRight: () => <AvailableAccountsButton /> }}

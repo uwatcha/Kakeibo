@@ -7,13 +7,14 @@ import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
-import { useAccounts } from '@/features/accounts/hooks';
+import { useAccounts, useAvailableAccountIds } from '@/features/accounts/hooks';
 import type { Category } from '@/features/categories/api';
 import { useCategories } from '@/features/categories/hooks';
 import type { Transaction } from '@/features/transactions/api';
 import { useMonthTransactions, useSearchTransactions } from '@/features/transactions/hooks';
 import { TransactionDayList } from '@/features/transactions/components/TransactionDayList';
 import { monthTotals } from '@/features/transactions/list';
+import { touchesAccounts } from '@/features/transactions/scope';
 import { buildSearchFilter } from '@/features/transactions/search';
 import { addMonths, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
@@ -77,9 +78,16 @@ export default function TransactionsScreen() {
     setQuery('');
   };
 
-  const listSource = searching ? (searchResults.data ?? []) : (transactions.data ?? []);
+  // 汎用資産に含める口座（右上のパネルで選ぶ）が関わる記録だけを出し、月の収入・支出もそれで計算する
+  const availableIds = useAvailableAccountIds();
+  const listSource = (searching ? (searchResults.data ?? []) : (transactions.data ?? [])).filter(
+    (t) => !availableIds || touchesAccounts(t, availableIds),
+  );
   const ready =
-    (searching ? searchFilter === null || searchResults.data : transactions.data) && accounts.data && categories.data;
+    !!availableIds &&
+    (searching ? searchFilter === null || searchResults.data : transactions.data) &&
+    accounts.data &&
+    categories.data;
   const filtered = searching ? listSource : filterByCategory(listSource, categoryFilter, categories.data ?? []);
   const totals = monthTotals(filtered);
   // 月や検索語が変わったときだけ、予定の下まで送る
