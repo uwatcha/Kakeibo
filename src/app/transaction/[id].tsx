@@ -29,6 +29,7 @@ import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/fea
 import { defaultTypeForAccount, presetSide } from '@/features/transactions/accountPreset';
 import { guessCategory } from '@/features/transactions/categoryGuess';
 import { suggestPayees } from '@/features/transactions/payeeSuggest';
+import { isSalaryCategory } from '@/features/transactions/salary';
 import { isConfirmedOnSave, recordStatus } from '@/features/transactions/confirmation';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
@@ -68,13 +69,11 @@ type FormValues = {
   /** 本来の金額・利用ポイント（REQ-18）。空欄なら記録しない */
   listPrice: string;
   pointsUsed: string;
-  /** 収入を払ってくれた働き先（給与の支払い元） */
+  /** 収入元（給与を払ってくれた働き先）。カテゴリが「給与・アルバイト」のときは必須 */
   employerId: string | null;
 };
 
 const OTHER = 'other';
-/** 働き先を選んだときに入れる収入のカテゴリ（初期カテゴリの名前） */
-const SALARY_CATEGORY = '給与・アルバイト';
 
 type LastUsed = Awaited<ReturnType<typeof loadLastUsedAccounts>>;
 
@@ -108,7 +107,7 @@ export default function TransactionEditScreen() {
 
   // 種類ごとのルール（transactionRules.ts）で確かめる
   const resolver: Resolver<FormValues> = (values) => {
-    const errors: DraftErrors & { listPrice?: string; pointsUsed?: string } = validateDraft(
+    const errors: DraftErrors & { listPrice?: string; pointsUsed?: string; employerId?: string } = validateDraft(
       { ...values, amount: parseYen(values.amount) },
       accounts.data ?? [],
       categories.data ?? [],
@@ -118,6 +117,9 @@ export default function TransactionEditScreen() {
     }
     if (values.pointsUsed.trim() !== '' && parseNonNegativeYen(values.pointsUsed) === null) {
       errors.pointsUsed = '0以上の整数で入力してください';
+    }
+    if (values.type === 'income' && isSalaryCategory(values.categoryId, categories.data ?? []) && !values.employerId) {
+      errors.employerId = '収入元を選んでください';
     }
     const entries = Object.entries(errors);
     if (entries.length === 0) return { values, errors: {} };
@@ -154,6 +156,8 @@ export default function TransactionEditScreen() {
   const type = useWatch({ control, name: 'type' });
   const rule = TRANSACTION_RULES[type];
   const fromAccountId = useWatch({ control, name: 'fromAccountId' });
+  const categoryId = useWatch({ control, name: 'categoryId' });
+  const isSalary = isSalaryCategory(categoryId, categories.data ?? []);
 
   // カテゴリをどこから入れたか。自分で選んだものは自動で上書きしない。内容から予測したものは口座の既定より優先する
   const categorySource = useRef<'user' | 'payee' | 'account' | null>(null);
@@ -244,19 +248,11 @@ export default function TransactionEditScreen() {
     }
   };
 
-  // 働き先を選んだら、空いていれば内容に働き先の名前、カテゴリに「給与・アルバイト」を入れる（自分で選んだカテゴリは変えない）
+  // 収入元を選んだら、内容が空ならその名前を入れる
   const usableEmployers = employers.data ?? [];
   const fillFromEmployer = (employerId: string) => {
     const employer = usableEmployers.find((e) => e.id === employerId);
-    if (!employer) return;
-    if (getValues('payee').trim() === '') setValue('payee', employer.name);
-    if (categorySource.current !== 'user' && !getValues('categoryId')) {
-      const salary = categories.data?.find((c) => c.kind === 'income' && c.name === SALARY_CATEGORY && !c.is_archived);
-      if (salary) {
-        setValue('categoryId', salary.id);
-        categorySource.current = 'account';
-      }
-    }
+    if (employer && getValues('payee').trim() === '') setValue('payee', employer.name);
   };
 
   const onSubmit = async (values: FormValues, skipDuplicateCheck = false) => {
@@ -283,7 +279,10 @@ export default function TransactionEditScreen() {
       memo: values.memo.trim() || null,
       list_price: values.listPrice.trim() === '' ? null : parseNonNegativeYen(values.listPrice),
       points_used: values.pointsUsed.trim() === '' ? null : parseNonNegativeYen(values.pointsUsed),
-      employer_id: values.type === 'income' ? values.employerId : null,
+      employer_id:
+        values.type === 'income' && isSalaryCategory(values.categoryId, categories.data ?? [])
+          ? values.employerId
+          : null,
       is_confirmed: isConfirmedOnSave(values.date, toTokyoDateString()),
     };
     try {
@@ -501,29 +500,6 @@ export default function TransactionEditScreen() {
           </>
         )}
 
-        {type === 'income' && usableEmployers.length > 0 && (
-          <Controller
-            control={control}
-            name="employerId"
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.field}>
-                <Text variant="labelLarge">働き先（任意）</Text>
-                <ChipGroup
-                  options={usableEmployers
-                    .filter((e) => !e.is_archived || e.id === value)
-                    .map((e) => ({ value: e.id, label: e.name, icon: 'briefcase' }))}
-                  value={value}
-                  onChange={(next) => {
-                    onChange(next);
-                    if (next) fillFromEmployer(next);
-                  }}
-                  allowDeselect
-                />
-              </View>
-            )}
-          />
-        )}
-
         {rule.categoryKind && (
           <Controller
             control={control}
@@ -540,6 +516,34 @@ export default function TransactionEditScreen() {
                 }}
                 error={errors.categoryId?.message}
               />
+            )}
+          />
+        )}
+
+        {/* 給与・アルバイトの収入では、収入元（働き先）を必ず選ぶ */}
+        {type === 'income' && isSalary && (
+          <Controller
+            control={control}
+            name="employerId"
+            render={({ field: { onChange, value } }) => (
+              <View style={styles.field}>
+                <Text variant="labelLarge">収入元</Text>
+                {usableEmployers.some((e) => !e.is_archived || e.id === value) ? (
+                  <ChipGroup
+                    options={usableEmployers
+                      .filter((e) => !e.is_archived || e.id === value)
+                      .map((e) => ({ value: e.id, label: e.name, icon: 'briefcase' }))}
+                    value={value}
+                    onChange={(next) => {
+                      onChange(next);
+                      if (next) fillFromEmployer(next);
+                    }}
+                  />
+                ) : (
+                  <HelperText type="error">設定の「働き先と給料日」で働き先を登録してください</HelperText>
+                )}
+                {!!errors.employerId && <HelperText type="error">{errors.employerId.message}</HelperText>}
+              </View>
             )}
           />
         )}
