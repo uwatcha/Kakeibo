@@ -40,9 +40,46 @@ async function listModels(apiKey: string): Promise<Model[]> {
     .map((m) => ({ id: m.name.replace(/^models\//, ''), label: m.displayName ?? m.name, inputTokenLimit: m.inputTokenLimit ?? 0 }));
 }
 
-/** 最初に選ぶモデル: 無料枠で使いやすい Flash 系（lite でないもの）を優先 */
+async function generate(apiKey: string, model: string, system: string, messages: { role: string; text: string }[]) {
+  const res = await fetch(`${GEMINI}/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: messages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
+    }),
+  });
+  if (!res.ok) throw new GeminiError(res.status, await res.text());
+  return (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+  };
+}
+
+/** gemini-3.5-flash → [3, 5]。版の数字がないもの（-latest など）は空 */
+const version = (id: string) => (id.match(/gemini-(\d+(?:\.\d+)*)/)?.[1] ?? '').split('.').filter(Boolean).map(Number);
+
+/** 新しい版を上に。版の数字がない「-latest」は常に最新を指すので一番上 */
+function sortModels(models: Model[]): Model[] {
+  const key = (m: Model) => (/-latest$/.test(m.id) ? [Infinity] : version(m.id));
+  return [...models].sort((a, b) => {
+    const [x, y] = [key(a), key(b)];
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const d = (y[i] ?? 0) - (x[i] ?? 0);
+      if (d !== 0) return d;
+    }
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/**
+ * 最初に選ぶモデル・使えなくなったときの切り替え先: 常に最新の Flash を指す gemini-flash-latest を優先。
+ * 古い版は一覧に出ていても新しい利用者には使えない（404）ことがあるため
+ */
+const FALLBACK_MODEL = 'gemini-flash-latest';
 function defaultModel(models: Model[]): string | null {
-  const flash = models.filter((m) => /flash/.test(m.id) && !/lite/.test(m.id) && !/preview|exp/.test(m.id));
+  if (models.some((m) => m.id === FALLBACK_MODEL)) return FALLBACK_MODEL;
+  const flash = models.filter((m) => /flash/.test(m.id) && !/lite|preview|exp/.test(m.id));
   return (flash[0] ?? models[0])?.id ?? null;
 }
 
@@ -71,14 +108,14 @@ Deno.serve(async (req) => {
     switch (body.action) {
       case 'status': {
         if (!settings?.gemini_api_key) return json({ hasKey: false, model: null, models: [] });
-        const models = await listModels(settings.gemini_api_key);
+        const models = sortModels(await listModels(settings.gemini_api_key));
         return json({ hasKey: true, model: settings.model, models });
       }
       case 'save_key': {
         const key = String(body.key ?? '').trim();
         if (!key) return json({ error: 'API キーを入れてください' }, 400);
         // キーが使えるか、モデルの一覧が取れるかで確かめる
-        const models = await listModels(key);
+        const models = sortModels(await listModels(key));
         const model = settings?.model && models.some((m) => m.id === settings.model) ? settings.model : defaultModel(models);
         const { error } = await db
           .from('ai_settings')
@@ -102,19 +139,18 @@ Deno.serve(async (req) => {
       case 'chat': {
         if (!settings?.gemini_api_key || !settings.model) return json({ error: 'API キーを登録してください' }, 400);
         const messages = (body.messages ?? []) as { role: 'user' | 'model'; text: string }[];
-        const res = await fetch(`${GEMINI}/models/${settings.model}:generateContent`, {
-          method: 'POST',
-          headers: { 'x-goog-api-key': settings.gemini_api_key, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: String(body.system ?? '') }] },
-            contents: messages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
-          }),
-        });
-        if (!res.ok) throw new GeminiError(res.status, await res.text());
-        const out = (await res.json()) as {
-          candidates?: { content?: { parts?: { text?: string }[] } }[];
-          usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
-        };
+        const system = String(body.system ?? '');
+        let model = settings.model;
+        let out;
+        try {
+          out = await generate(settings.gemini_api_key, model, system, messages);
+        } catch (e) {
+          // 選んでいたモデルが使えなくなっていたら、最新の Flash に切り替えて送り直し、設定も変える
+          if (!(e instanceof GeminiError) || e.status !== 404 || model === FALLBACK_MODEL) throw e;
+          model = FALLBACK_MODEL;
+          out = await generate(settings.gemini_api_key, model, system, messages);
+          await db.from('ai_settings').update({ model, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+        }
         const text = (out.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
         const usage = {
           prompt: out.usageMetadata?.promptTokenCount ?? 0,
@@ -123,8 +159,8 @@ Deno.serve(async (req) => {
         };
         await db
           .from('ai_usage')
-          .insert({ user_id: user.id, model: settings.model, prompt_tokens: usage.prompt, output_tokens: usage.output });
-        return json({ text, usage, model: settings.model });
+          .insert({ user_id: user.id, model, prompt_tokens: usage.prompt, output_tokens: usage.output });
+        return json({ text, usage, model });
       }
       default:
         return json({ error: 'unknown action' }, 400);
@@ -134,9 +170,11 @@ Deno.serve(async (req) => {
       const message =
         e.status === 429
           ? '無料枠の上限に達しました。しばらく待ってから送ってください'
-          : e.status === 400 || e.status === 401 || e.status === 403
-            ? 'Gemini に断られました。API キーやモデルを確かめてください'
-            : 'Gemini につながりませんでした';
+          : e.status === 404
+            ? 'このモデルは使えなくなりました。設定でほかのモデルを選んでください'
+            : e.status === 400 || e.status === 401 || e.status === 403
+              ? 'Gemini に断られました。API キーやモデルを確かめてください'
+              : `Gemini につながりませんでした（${e.status}）`;
       return json({ error: message, status: e.status }, 502);
     }
     return json({ error: '処理できませんでした' }, 500);

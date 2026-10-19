@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Tabs } from 'expo-router';
 import { useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -44,6 +44,7 @@ export default function AiChatScreen() {
   const insets = useSafeAreaInsets();
   const today = toTokyoDateString();
   const status = useAiStatus();
+  const queryClient = useQueryClient();
   const usage = useAiUsageToday(today);
   const balances = useAccountBalances();
   const categories = useCategories();
@@ -145,6 +146,8 @@ export default function AiChatScreen() {
       ]);
       setLastTotal(reply.usage.total);
       usage.refetch();
+      // 使えなくなったモデルからサーバーが自動で切り替えたときは、表示のモデルも読み直す
+      if (reply.model !== status.data?.model) queryClient.invalidateQueries({ queryKey: aiKeys.status() });
     } catch (e) {
       setError(e instanceof Error ? e.message : '送れませんでした');
       // 送れなかった質問は入力欄に戻す
