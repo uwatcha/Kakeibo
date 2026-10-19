@@ -10,7 +10,6 @@ import { PaperProvider, useTheme } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { RecurringRunner } from '@/features/recurring/RecurringRunner';
-import { UpdateRunner } from '@/features/updates/UpdateRunner';
 import { themes } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -48,7 +47,7 @@ function RootNavigator() {
         <Stack.Screen name="categories/[id]" options={{ headerShown: true, title: 'カテゴリ' }} />
         <Stack.Screen name="employers/index" options={{ headerShown: true, title: '働き先と給料日' }} />
         <Stack.Screen name="employers/[id]" options={{ headerShown: true, title: '働き先' }} />
-        <Stack.Screen name="balance-adjust/[id]" options={{ headerShown: true, title: '残高を合わせる' }} />
+        <Stack.Screen name="account-history/[id]" options={{ headerShown: true, title: '口座' }} />
         <Stack.Screen name="card-settings/[id]" options={{ headerShown: true, title: 'カードの設定' }} />
         <Stack.Screen name="recurring/index" options={{ headerShown: true, title: '定期支払い' }} />
         <Stack.Screen name="recurring/[id]" options={{ headerShown: true, title: '定期支払い' }} />
@@ -73,7 +72,6 @@ export default function RootLayout() {
           <PaperProvider theme={theme}>
             <AuthProvider>
               <StatusBar style="auto" />
-              <UpdateRunner />
               <RecurringRunner />
               <RootNavigator />
             </AuthProvider>
