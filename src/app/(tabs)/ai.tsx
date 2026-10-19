@@ -10,6 +10,7 @@ import { QueryState } from '@/components/QueryState';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
 import { type AiMessage, sendAiChat } from '@/features/ai/api';
+import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
 import { aiKeys, useAiStatus, useAiUsageToday } from '@/features/ai/hooks';
 import { useCategories } from '@/features/categories/hooks';
@@ -30,13 +31,6 @@ type ChatItem = {
   /** AI に送る・AI から来た文（置き換え後の名前） */
   sent: string;
 };
-
-/** 返事の「**太字**」などの記号は、そのままだと読みにくいので外す */
-const plain = (text: string) =>
-  text
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/^#{1,6}\s*/gm, '')
-    .trim();
 
 /** 出納の記録をもとに、家計の相談に乗る AI（Gemini）とのチャット */
 export default function AiChatScreen() {
@@ -142,7 +136,7 @@ export default function AiChatScreen() {
       const reply = await sendAiChat(system, messages);
       setItems([
         ...history,
-        { id: nextId.current++, role: 'model', shown: plain(restoreText(reply.text, aliases)), sent: reply.text },
+        { id: nextId.current++, role: 'model', shown: restoreText(reply.text, aliases), sent: reply.text },
       ]);
       setLastTotal(reply.usage.total);
       usage.refetch();
@@ -178,9 +172,14 @@ export default function AiChatScreen() {
                   : [styles.modelBubble, { backgroundColor: theme.colors.surface }],
               ]}
             >
-              <Text variant="bodyMedium" selectable>
-                {item.shown}
-              </Text>
+              {item.role === 'model' ? (
+                // AI の返事は Markdown（見出し・太字・箇条書き・表）として表示する
+                <MarkdownText>{item.shown}</MarkdownText>
+              ) : (
+                <Text variant="bodyMedium" selectable>
+                  {item.shown}
+                </Text>
+              )}
             </View>
           )}
           ListFooterComponent={
