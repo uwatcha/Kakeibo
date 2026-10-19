@@ -76,3 +76,17 @@ export function nextPayday<T extends PaydayRule>(employers: readonly T[], today:
   }
   return best;
 }
+
+/**
+ * 集計で月を選んだときの給料日の期間: その月の給料日（start = 前の給料日、end = その月の最初の給料日）。
+ * 働き先が複数あれば、いちばん早い給料日で区切る。働き先がなければ null
+ */
+export function payPeriodForMonth<T extends PaydayRule>(
+  employers: readonly T[],
+  month: string,
+): { start: PaydayHit<T>; end: PaydayHit<T> } | null {
+  const end = nextPayday(employers, addDays(month, -1));
+  if (!end) return null;
+  const start = lastPayday(employers, addDays(end.date, -1));
+  return start ? { start, end } : null;
+}

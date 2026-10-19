@@ -1,4 +1,4 @@
-import { dailyBalances, projectUntil } from './balanceSeries';
+import { balancesWithPlans, dailyBalances, projectUntil } from './balanceSeries';
 
 const isTarget = (id: string) => id !== 'nisa';
 const move = (date: string, amount: number, from: string | null, to: string | null) => ({
@@ -75,5 +75,35 @@ describe('projectUntil', () => {
 
   it('今日が給料日なら予測しない', () => {
     expect(projectUntil([{ date: '2026-10-18', balance: 1000 }], '2026-11-10')).toBeNull();
+  });
+});
+
+describe('balancesWithPlans', () => {
+  const isTarget = (id: string) => id === 'bank';
+  const move = (date: string, amount: number, from: string | null, to: string | null) => ({
+    date,
+    amount,
+    from_account_id: from,
+    to_account_id: to,
+  });
+
+  it('今日より後の予定も残高に入れて日ごとに出す', () => {
+    // 今の残高 1000（10/20 の 300 の支払いは反映済み）。10/22 に 500 の入金予定
+    const movements = [move('2026-10-20', 300, 'bank', null), move('2026-10-22', 500, null, 'bank')];
+    expect(balancesWithPlans(1000, movements, isTarget, '2026-10-20', '2026-10-19', '2026-10-23')).toEqual([
+      { date: '2026-10-19', balance: 1300 },
+      { date: '2026-10-20', balance: 1000 },
+      { date: '2026-10-21', balance: 1000 },
+      { date: '2026-10-22', balance: 1500 },
+      { date: '2026-10-23', balance: 1500 },
+    ]);
+  });
+
+  it('期間がすべて未来でも出せる', () => {
+    const movements = [move('2026-11-01', 200, 'bank', null)];
+    expect(balancesWithPlans(1000, movements, isTarget, '2026-10-20', '2026-10-31', '2026-11-01')).toEqual([
+      { date: '2026-10-31', balance: 1000 },
+      { date: '2026-11-01', balance: 800 },
+    ]);
   });
 });

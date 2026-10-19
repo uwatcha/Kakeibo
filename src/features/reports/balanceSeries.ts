@@ -38,6 +38,30 @@ export function dailyBalances(
 }
 
 /**
+ * start〜end の各日の終わりの残高を、未来の日付の記録（予定）も含めて出す。
+ * currentBalance は今日までの記録で計算した残高（account_balances と同じ）。
+ * movements には min(start, today) より後の記録をすべて（未来の日付も）渡す。
+ */
+export function balancesWithPlans(
+  currentBalance: number,
+  movements: readonly Movement[],
+  isTarget: (accountId: string) => boolean,
+  today: string,
+  start: string,
+  end: string,
+): BalancePoint[] {
+  // 予定まで全部入れたときの残高にしてから、dailyBalances で差し戻す
+  let withPlans = currentBalance;
+  for (const m of movements) {
+    if (m.date <= today) continue;
+    if (m.to_account_id && isTarget(m.to_account_id)) withPlans += m.amount;
+    if (m.from_account_id && isTarget(m.from_account_id)) withPlans -= m.amount;
+  }
+  return dailyBalances(withPlans, movements, isTarget, start, end);
+}
+
+/**
+ * 【以前止めた機能。不要なら消す（CLAUDE.md「止めている機能」）】
  * 今日から次の給料日までの予測。前回の給料日から今日までの1日あたりの平均の増減がそのまま続くとした直線。
  * 先頭は今日の実績と同じ点。前回の給料日が今日なら勢いが出せないので null。
  */

@@ -181,7 +181,7 @@ export default function ReportsScreen() {
           {
             key: 'since-payday',
             label: '給料日からの推移',
-            content: <SincePaydayChart today={toTokyoDateString()} style={styles.page} />,
+            content: <SincePaydayChart month={month} today={toTokyoDateString()} style={styles.page} />,
           },
         ]}
       />

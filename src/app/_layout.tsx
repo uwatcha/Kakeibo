@@ -52,6 +52,10 @@ function RootNavigator() {
         <Stack.Screen name="card-settings/[id]" options={{ headerShown: true, title: 'カードの設定' }} />
         <Stack.Screen name="recurring/index" options={{ headerShown: true, title: '定期支払い' }} />
         <Stack.Screen name="recurring/[id]" options={{ headerShown: true, title: '定期支払い' }} />
+        <Stack.Screen
+          name="balance-chart"
+          options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade' }}
+        />
         <Stack.Screen name="info" options={{ headerShown: true, title: '用語の説明' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
