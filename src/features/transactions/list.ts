@@ -23,3 +23,8 @@ export function monthTotals(transactions: readonly Transaction[]): { income: num
   }
   return { income, expense };
 }
+
+/** その日の支出（支払いだけの合計）。記録画面の日付の見出しに出す */
+export function dayExpense(section: DaySection): number {
+  return section.data.reduce((sum, t) => (t.type === 'expense' ? sum + t.amount : sum), 0);
+}

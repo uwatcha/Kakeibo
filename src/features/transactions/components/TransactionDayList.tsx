@@ -13,11 +13,12 @@ import type { Category } from '@/features/categories/api';
 import { categoryIcon } from '@/features/categories/icons';
 import { categoryLabel } from '@/features/categories/tree';
 import { formatDay, toTokyoDateString } from '@/lib/date';
+import { formatYen } from '@/lib/money';
 import { positiveColor, positiveContainer, SPACING } from '@/theme';
 
 import type { Transaction } from '../api';
 import { recordStatus } from '../confirmation';
-import { type DaySection, groupByDate } from '../list';
+import { dayExpense, type DaySection, groupByDate } from '../list';
 import { TRANSACTION_RULES } from '../transactionRules';
 
 function describeAccounts(t: Transaction, accounts: readonly Account[]): string {
@@ -105,6 +106,7 @@ function TransactionRow({
 /** 1日分の記録を1枚のカードにまとめる */
 function DayCard({ section, planned = false, ...context }: RowContext & { section: DaySection; planned?: boolean }) {
   const theme = useTheme();
+  const expense = dayExpense(section);
   return (
     <View style={styles.day}>
       <View style={styles.dayHeader}>
@@ -112,6 +114,12 @@ function DayCard({ section, planned = false, ...context }: RowContext & { sectio
           {formatDay(section.date)}
         </Text>
         {planned && <StatusBadge status="planned" />}
+        {/* その日の支出の合計。右端はカードの中の金額とそろえる */}
+        {expense > 0 && (
+          <Text variant="labelLarge" style={[styles.dayTotal, { color: theme.colors.onSurfaceVariant }]}>
+            支出 {formatYen(expense)}
+          </Text>
+        )}
       </View>
       {/* 今日より後の日付はまだ残高に入っていないので、塗らずに破線の枠で見せる */}
       <SectionCard dashed={planned}>
@@ -191,6 +199,7 @@ const styles = StyleSheet.create({
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   future: { gap: 16, marginBottom: 16 },
   dayLabel: { paddingHorizontal: 4, fontWeight: '700' },
+  dayTotal: { marginLeft: 'auto', paddingRight: SPACING.row, fontVariant: ['tabular-nums'] },
   empty: { padding: 32, textAlign: 'center' },
   listContent: { padding: SPACING.screen, gap: 16, paddingBottom: 96 },
 });

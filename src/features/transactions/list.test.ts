@@ -1,5 +1,5 @@
 import type { Transaction } from './api';
-import { groupByDate, monthTotals } from './list';
+import { dayExpense, groupByDate, monthTotals } from './list';
 
 let seq = 0;
 function txn(overrides: Partial<Transaction>): Transaction {
@@ -51,5 +51,20 @@ describe('monthTotals', () => {
       txn({ type: 'transfer', amount: 15000, to_account_id: 'card' }),
     ];
     expect(monthTotals(list)).toEqual({ income: 50000, expense: 2000 });
+  });
+});
+
+describe('dayExpense', () => {
+  it('支払いだけを合計する', () => {
+    const section = {
+      date: '2026-10-18',
+      data: [
+        txn({ amount: 300 }),
+        txn({ type: 'income', amount: 1000 }),
+        txn({ type: 'transfer', amount: 500 }),
+        txn({ amount: 200 }),
+      ],
+    };
+    expect(dayExpense(section)).toBe(500);
   });
 });
