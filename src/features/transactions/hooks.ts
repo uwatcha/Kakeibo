@@ -6,6 +6,8 @@ import {
   createTransaction,
   deleteTransaction,
   fetchAccountTransactions,
+  fetchAdvancesFor,
+  fetchExpensesAround,
   fetchPayeeHistory,
   fetchMonthTransactions,
   fetchTransaction,
@@ -22,6 +24,8 @@ export const transactionKeys = {
   search: (filter: string) => [...transactionKeys.all, 'search', filter] as const,
   account: (accountId: string) => [...transactionKeys.all, 'account', accountId] as const,
   payees: () => [...transactionKeys.all, 'payees'] as const,
+  expensesAround: (date: string) => [...transactionKeys.all, 'expensesAround', date] as const,
+  advancesFor: (id: string) => [...transactionKeys.all, 'advancesFor', id] as const,
 };
 
 export function useMonthTransactions(month: string) {
@@ -46,6 +50,23 @@ export function useAccountTransactions(accountId: string) {
 
 export function usePayeeHistory() {
   return useQuery({ queryKey: transactionKeys.payees(), queryFn: fetchPayeeHistory });
+}
+
+/** 立て替えの「元の支払い」の候補（その日の前後1週間の支払い） */
+export function useExpensesAround(date: string, enabled: boolean) {
+  return useQuery({
+    queryKey: transactionKeys.expensesAround(date),
+    queryFn: () => fetchExpensesAround(date, 7),
+    enabled,
+  });
+}
+
+export function useAdvancesFor(expenseId: string | undefined) {
+  return useQuery({
+    queryKey: transactionKeys.advancesFor(expenseId ?? ''),
+    queryFn: () => fetchAdvancesFor(expenseId!),
+    enabled: !!expenseId,
+  });
 }
 
 export function useTransaction(id: string | undefined) {

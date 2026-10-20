@@ -23,6 +23,7 @@ describe('transactionsToCsv', () => {
       updated_at: '',
       is_confirmed: true,
       employer_id: null,
+      related_transaction_id: null,
     };
     const csv = transactionsToCsv(
       [

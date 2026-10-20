@@ -1,4 +1,4 @@
-import { addMonths } from '@/lib/date';
+import { addDays, addMonths } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
@@ -41,6 +41,31 @@ export async function fetchTransactionsSince(date: string): Promise<Transaction[
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+/** date の前後 days 日の支払い（立て替えの「元の支払い」を選ぶ候補。新しい順） */
+export async function fetchExpensesAround(date: string, days: number): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('type', 'expense')
+    .gte('date', addDays(date, -days))
+    .lte('date', addDays(date, days))
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+/** その支払いにひも付いた立て替え */
+export async function fetchAdvancesFor(expenseId: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('related_transaction_id', expenseId)
+    .order('date');
   if (error) throw error;
   return data;
 }

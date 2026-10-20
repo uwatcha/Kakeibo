@@ -418,6 +418,7 @@ export type Database = {
           payee: string | null
           points_used: number | null
           recurring_rule_id: string | null
+          related_transaction_id: string | null
           to_account_id: string | null
           type: Database["public"]["Enums"]["txn_type"]
           updated_at: string
@@ -437,6 +438,7 @@ export type Database = {
           payee?: string | null
           points_used?: number | null
           recurring_rule_id?: string | null
+          related_transaction_id?: string | null
           to_account_id?: string | null
           type: Database["public"]["Enums"]["txn_type"]
           updated_at?: string
@@ -456,6 +458,7 @@ export type Database = {
           payee?: string | null
           points_used?: number | null
           recurring_rule_id?: string | null
+          related_transaction_id?: string | null
           to_account_id?: string | null
           type?: Database["public"]["Enums"]["txn_type"]
           updated_at?: string
@@ -474,6 +477,13 @@ export type Database = {
             columns: ["user_id", "recurring_rule_id"]
             isOneToOne: false
             referencedRelation: "recurring_rules"
+            referencedColumns: ["user_id", "id"]
+          },
+          {
+            foreignKeyName: "transactions_related_fk"
+            columns: ["user_id", "related_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["user_id", "id"]
           },
           {

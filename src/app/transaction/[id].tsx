@@ -24,6 +24,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import type { Account } from '@/features/accounts/api';
 import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
+import { categoryLabel } from '@/features/categories/tree';
 import { useEmployers } from '@/features/employers/hooks';
 import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
 import { defaultTypeForAccount, presetSide } from '@/features/transactions/accountPreset';
@@ -36,7 +37,9 @@ import { CategoryPicker } from '@/features/transactions/components/CategoryPicke
 import { DateField } from '@/features/transactions/components/DateField';
 import {
   useCreateTransaction,
+  useAdvancesFor,
   useDeleteTransaction,
+  useExpensesAround,
   usePayeeHistory,
   useTransaction,
   useUpdateTransaction,
@@ -71,6 +74,8 @@ type FormValues = {
   pointsUsed: string;
   /** 収入元（給与を払ってくれた働き先）。カテゴリが「給与・アルバイト」のときは必須 */
   employerId: string | null;
+  /** 立て替えのときの元の支払い（No.43） */
+  relatedTransactionId: string | null;
 };
 
 const OTHER = 'other';
@@ -164,12 +169,19 @@ export default function TransactionEditScreen() {
       listPrice: '',
       pointsUsed: '',
       employerId: null,
+      relatedTransactionId: null,
     },
   });
   const type = useWatch({ control, name: 'type' });
   const rule = TRANSACTION_RULES[type];
   const fromAccountId = useWatch({ control, name: 'fromAccountId' });
   const categoryId = useWatch({ control, name: 'categoryId' });
+  const date = useWatch({ control, name: 'date' });
+  // 立て替えの「元の支払い」の候補と、支払いの記録にひも付いた立て替え
+  const nearbyExpenses = useExpensesAround(date, type === 'advance');
+  const linkedAdvances = useAdvancesFor(!isNew && type === 'expense' ? id : undefined);
+  const describeExpense = (t: Transaction) =>
+    `${Number(t.date.slice(5, 7))}/${Number(t.date.slice(8, 10))} ${t.payee || (categoryLabel(t.category_id, categories.data ?? []) ?? '支払い')} ${formatYen(t.amount)}`;
   const isSalary = isSalaryCategory(categoryId, categories.data ?? []);
 
   // カテゴリをどこから入れたか。自分で選んだものは自動で上書きしない。内容から予測したものは口座の既定より優先する
@@ -203,6 +215,7 @@ export default function TransactionEditScreen() {
       listPrice: t.list_price === null ? '' : String(t.list_price),
       pointsUsed: t.points_used === null ? '' : String(t.points_used),
       employerId: t.employer_id,
+      relatedTransactionId: t.related_transaction_id,
     });
   }, [transaction.data, reset]);
 
@@ -302,6 +315,7 @@ export default function TransactionEditScreen() {
         values.type === 'income' && isSalaryCategory(values.categoryId, categories.data ?? [])
           ? values.employerId
           : null,
+      related_transaction_id: values.type === 'advance' ? values.relatedTransactionId : null,
       is_confirmed: isConfirmedOnSave(values.date, toTokyoDateString()),
     };
     try {
@@ -565,6 +579,45 @@ export default function TransactionEditScreen() {
               </View>
             )}
           />
+        )}
+
+        {/* 立て替えは、何の支払いの立て替えかを選べる（前後1週間の支払いから） */}
+        {type === 'advance' && (
+          <Controller
+            control={control}
+            name="relatedTransactionId"
+            render={({ field: { onChange, value } }) => {
+              const options = (nearbyExpenses.data ?? []).map((t) => ({ value: t.id, label: describeExpense(t) }));
+              if (value && !options.some((o) => o.value === value)) options.unshift({ value, label: '選択中の支払い' });
+              return (
+                <View style={styles.field}>
+                  <Text variant="labelLarge">元の支払い（任意）</Text>
+                  {options.length > 0 ? (
+                    <ChipGroup options={options} value={value} onChange={onChange} allowDeselect />
+                  ) : (
+                    <HelperText type="info">前後1週間に支払いの記録はありません</HelperText>
+                  )}
+                </View>
+              );
+            }}
+          />
+        )}
+
+        {/* 支払いの記録では、ひも付いた立て替えを出し、押すと開く */}
+        {type === 'expense' && (linkedAdvances.data?.length ?? 0) > 0 && (
+          <View style={styles.field}>
+            <Text variant="labelLarge">この支払いの立て替え</Text>
+            {linkedAdvances.data!.map((t) => (
+              <Button
+                key={t.id}
+                mode="outlined"
+                icon="account-cash"
+                onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
+              >
+                {accountList.find((a) => a.id === t.to_account_id)?.name ?? ''} {formatYen(t.amount)}
+              </Button>
+            ))}
+          </View>
         )}
 
         <Controller
