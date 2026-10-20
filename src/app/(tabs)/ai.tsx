@@ -10,6 +10,7 @@ import { QueryState } from '@/components/QueryState';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
 import { type AiMessage, appendExchange, createConversation, fetchConversation, sendAiChat } from '@/features/ai/api';
+import { AutoTitler } from '@/features/ai/components/AutoTitler';
 import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
 import { aiKeys, useAiStatus, useAiUsageToday, useConversation, useConversations } from '@/features/ai/hooks';
@@ -41,7 +42,7 @@ export default function AiChatScreen() {
   const { c: conversationId } = useLocalSearchParams<{ c?: string }>();
   const conversation = useConversation(conversationId);
   // 開いたときに、期限が過ぎたピン留めなしの会話を消しておく（一覧の読み込みで消える）
-  useConversations();
+  const conversations = useConversations();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const today = toTokyoDateString();
@@ -180,6 +181,7 @@ export default function AiChatScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Tabs.Screen options={{ headerRight }} />
+      {conversations.data && <AutoTitler conversations={conversations.data} aliases={aliases} />}
 
       <KeyboardAvoidingView behavior="padding" style={styles.container} keyboardVerticalOffset={insets.top + 64}>
         <FlatList

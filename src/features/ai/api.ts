@@ -43,7 +43,9 @@ export type Conversation = {
   title: string;
   pinned: boolean;
   last_total_tokens: number;
+  created_at: string;
   updated_at: string;
+  title_generated: boolean;
 };
 export type StoredMessage = { id: number; role: 'user' | 'model'; shown: string; sent: string };
 
@@ -53,7 +55,7 @@ export async function fetchConversations(cutoff: string): Promise<Conversation[]
   if (purge.error) throw purge.error;
   const { data, error } = await supabase
     .from('ai_conversations')
-    .select('id, title, pinned, last_total_tokens, updated_at')
+    .select('id, title, pinned, last_total_tokens, created_at, updated_at, title_generated')
     .order('pinned', { ascending: false })
     .order('updated_at', { ascending: false });
   if (error) throw error;
@@ -64,7 +66,11 @@ export async function fetchConversation(
   id: string,
 ): Promise<{ conversation: Conversation; messages: StoredMessage[] }> {
   const [c, m] = await Promise.all([
-    supabase.from('ai_conversations').select('id, title, pinned, last_total_tokens, updated_at').eq('id', id).single(),
+    supabase
+      .from('ai_conversations')
+      .select('id, title, pinned, last_total_tokens, created_at, updated_at, title_generated')
+      .eq('id', id)
+      .single(),
     supabase.from('ai_messages').select('id, role, shown, sent').eq('conversation_id', id).order('id'),
   ]);
   if (c.error) throw c.error;
@@ -105,5 +111,13 @@ export async function setConversationPinned(id: string, pinned: boolean): Promis
 
 export async function deleteConversation(id: string): Promise<void> {
   const { error } = await supabase.from('ai_conversations').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** 会話（名前を置き換えた文）から、AI に短いタイトルを作ってもらう */
+export const generateTitle = (messages: AiMessage[]) => callAi<{ title: string }>({ action: 'title', messages });
+
+export async function saveGeneratedTitle(id: string, title: string): Promise<void> {
+  const { error } = await supabase.from('ai_conversations').update({ title, title_generated: true }).eq('id', id);
   if (error) throw error;
 }

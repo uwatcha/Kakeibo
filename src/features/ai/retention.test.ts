@@ -1,4 +1,4 @@
-import { daysUntilDeletion, deletionCutoff, titleFrom } from './retention';
+import { daysUntilDeletion, deletionCutoff, needsAutoTitle, titleFrom } from './retention';
 
 const now = new Date('2026-10-21T12:00:00Z');
 
@@ -20,5 +20,13 @@ describe('titleFrom', () => {
   it('1行目を30文字まで', () => {
     expect(titleFrom('  今月使いすぎ？\n詳しく')).toBe('今月使いすぎ？');
     expect(titleFrom('あ'.repeat(31))).toBe(`${'あ'.repeat(30)}…`);
+  });
+});
+
+describe('needsAutoTitle', () => {
+  it('作ってから1日たち、まだ付けていない会話だけ', () => {
+    expect(needsAutoTitle({ created_at: '2026-10-20T12:00:00Z', title_generated: false }, now)).toBe(true);
+    expect(needsAutoTitle({ created_at: '2026-10-20T13:00:00Z', title_generated: false }, now)).toBe(false);
+    expect(needsAutoTitle({ created_at: '2026-10-01T00:00:00Z', title_generated: true }, now)).toBe(false);
   });
 });

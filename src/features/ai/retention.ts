@@ -19,3 +19,11 @@ export function titleFrom(question: string): string {
   const line = question.trim().split('\n')[0];
   return line.length > 30 ? `${line.slice(0, 30)}…` : line;
 }
+
+/** 作ってからこの日数たった会話に、AI がタイトルを付ける（要件 No.44） */
+export const AUTO_TITLE_AFTER_DAYS = 1;
+
+/** AI にタイトルを付けてもらう会話か（作ってから1日たっていて、まだ付けていない） */
+export function needsAutoTitle(c: { created_at: string; title_generated: boolean }, now: Date): boolean {
+  return !c.title_generated && now.getTime() - new Date(c.created_at).getTime() >= AUTO_TITLE_AFTER_DAYS * DAY_MS;
+}

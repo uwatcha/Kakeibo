@@ -197,6 +197,32 @@ Deno.serve(async (req) => {
           .insert({ user_id: user.id, model, prompt_tokens: usage.prompt, output_tokens: usage.output });
         return json({ text, usage, model });
       }
+      case 'title': {
+        // 会話の中身から短いタイトルを作る。無料枠を節約するため軽いモデルで、混み合っていたら Flash に切り替える
+        if (!settings?.gemini_api_key) return json({ error: 'API キーを登録してください' }, 400);
+        const messages = (body.messages ?? []) as { role: 'user' | 'model'; text: string }[];
+        const transcript = messages.map((m) => `${m.role === 'user' ? '質問' : '答え'}: ${m.text}`).join('\n').slice(0, 4000);
+        const system =
+          '次の家計相談の会話に、内容が分かる日本語のタイトルを付けてください。20文字以内、記号や引用符なし、タイトルだけを1行で返す。「相手A」「内容1」のような名前はそのまま使う。';
+        let out;
+        for (const candidate of [LIGHT_FALLBACK_MODEL, FALLBACK_MODEL]) {
+          try {
+            out = await generateWithRetry(settings.gemini_api_key, candidate, system, [{ role: 'user', text: transcript }]);
+            break;
+          } catch (e) {
+            if (!(e instanceof GeminiError) || !(e.status === 404 || isTemporary(e.status))) throw e;
+          }
+        }
+        if (!out) return json({ error: 'Gemini が混み合っています' }, 502);
+        const title = (out.candidates?.[0]?.content?.parts ?? [])
+          .map((p) => p.text ?? '')
+          .join('')
+          .split('\n')[0]
+          .replace(/^["'「『]|["'」』]$/g, '')
+          .trim()
+          .slice(0, 30);
+        return json({ title });
+      }
       default:
         return json({ error: 'unknown action' }, 400);
     }
