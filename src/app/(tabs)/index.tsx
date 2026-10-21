@@ -25,7 +25,7 @@ import {
   transferOrder,
 } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
-import { lastPayday, nextPayday, paydaysBetween } from '@/features/employers/payday';
+import { allPaidDays, nextPayday } from '@/features/employers/payday';
 import { monthsLater } from '@/features/employers/salarySchedule';
 import { useDailyLiving } from '@/features/settings/hooks';
 import { paymentDateOf } from '@/features/accounts/cardStatements';
@@ -105,7 +105,8 @@ export default function HomeScreen() {
   const living = useDailyLiving(today);
   // 今の給料期間（前回の給料日から）のクレカの利用を数えるため、その前日より後の記録を読む
   const activeEmployers = employers.data?.filter((e) => !e.is_archived) ?? [];
-  const periodStart = lastPayday(activeEmployers, today)?.date ?? monthStart(today);
+  // 期間は「すべての給料をもらい終えた日」（月ごとにいちばん遅い給料日）で区切る。今の期間はその最後の日から
+  const periodStart = allPaidDays(activeEmployers, addDays(today, -70), today).at(-1) ?? monthStart(today);
   const periodMovements = useMovementsAfter(addDays(periodStart, -1));
 
   if (!data) {
@@ -134,14 +135,13 @@ export default function HomeScreen() {
   const cashAccounts = data.filter((a) => isAvailableAccount(a) && ASSET_KINDS.includes(a.kind) && !a.isArchived);
   const cashIds = new Set(cashAccounts.map((a) => a.id));
   const cashBalance = cashAccounts.reduce((sum, a) => sum + a.balance, 0);
-  // 期間の区切り: 働き先の給料日（無ければ月初め）を、次から3つ
+  // 期間の区切り: すべての給料をもらい終える日（無ければ月初め）を、次から3つ
   const paydaysOf = (list: typeof activeEmployers): string[] => {
     if (list.length === 0) {
       const first = addMonths(monthStart(today), 1);
       return [first, addMonths(first, 1), addMonths(first, 2)];
     }
-    const until = monthsLater(today, 4);
-    return [...new Set(list.flatMap((e) => paydaysBetween(e, today, until)))].sort().slice(0, 3);
+    return allPaidDays(list, today, monthsLater(today, 4)).slice(0, 3);
   };
   // 今の期間（前回の給料日から今日まで）に、含めるクレカで使った額と、それが引き落とされる日
   const currentCardUsage = (periodMovements.data ?? [])

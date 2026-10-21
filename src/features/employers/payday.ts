@@ -98,3 +98,20 @@ export function paydaysBetween(rule: PaydayRule, after: string, through: string)
   const months = (ty - ay) * 12 + (tm - am);
   return paydaysAround(rule, after, 1, months + 1).filter((d) => d > after && d <= through);
 }
+
+/**
+ * 期間の区切り（給料日までに使える額で使う）: 月ごとに、すべての働き先の給料をもらい終える日（その月でいちばん遅い給料日）。
+ * after より後、through までを古い順に返す
+ */
+export function allPaidDays(employers: readonly PaydayRule[], after: string, through: string): string[] {
+  const latestByMonth = new Map<string, string>();
+  for (const employer of employers) {
+    // 月をまたいでずれる給料日もあるので、前後1か月広めに取ってから月ごとにまとめる
+    for (const date of paydaysBetween(employer, addDays(after, -40), addDays(through, 40))) {
+      const month = date.slice(0, 7);
+      const current = latestByMonth.get(month);
+      if (!current || date > current) latestByMonth.set(month, date);
+    }
+  }
+  return [...latestByMonth.values()].filter((d) => d > after && d <= through).sort();
+}

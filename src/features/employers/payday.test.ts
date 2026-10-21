@@ -1,5 +1,6 @@
 import {
   actualPayday,
+  allPaidDays,
   isBusinessDay,
   lastPayday,
   nextPayday,
@@ -102,5 +103,19 @@ describe('paydaysBetween', () => {
   it('after より後、through までの給料日', () => {
     expect(paydaysBetween(rule, '2026-10-21', '2026-12-21')).toEqual(['2026-10-23', '2026-11-25']);
     expect(paydaysBetween(rule, '2026-10-23', '2026-12-25')).toEqual(['2026-11-25', '2026-12-25']);
+  });
+});
+
+describe('allPaidDays', () => {
+  // 仕送り 22日・acmeworks 25日（どちらも休みなら前の平日）
+  const employers = [
+    { payday: 22, payday_shift: 'before' as const },
+    { payday: 25, payday_shift: 'before' as const },
+  ];
+  it('月ごとに、いちばん遅い給料日で区切る', () => {
+    expect(allPaidDays(employers, '2026-10-21', '2026-12-31')).toEqual(['2026-10-23', '2026-11-25', '2026-12-25']);
+  });
+  it('今の期間の始まり（今日までの最後の区切り）', () => {
+    expect(allPaidDays(employers, '2026-08-21', '2026-10-21').at(-1)).toBe('2026-09-25');
   });
 });
