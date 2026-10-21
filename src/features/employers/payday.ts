@@ -98,3 +98,12 @@ export function paydaysBetween(rule: PaydayRule, after: string, through: string)
   const months = (ty - ay) * 12 + (tm - am);
   return paydaysAround(rule, after, 1, months + 1).filter((d) => d > after && d <= through);
 }
+
+/**
+ * メインの働き先: 給料の目安がいちばん大きい働き先。目安がどこにも入っていなければ、一覧の先頭（並び順）。
+ * 「給料日前の見込み」で使う
+ */
+export function mainEmployer<T extends { salary_amount: number | null }>(employers: readonly T[]): T | null {
+  if (employers.length === 0) return null;
+  return employers.reduce((best, e) => ((e.salary_amount ?? 0) > (best.salary_amount ?? 0) ? e : best), employers[0]);
+}

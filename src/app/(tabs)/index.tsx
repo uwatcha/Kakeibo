@@ -25,13 +25,13 @@ import {
   transferOrder,
 } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
-import { nextPayday } from '@/features/employers/payday';
+import { mainEmployer, nextPayday } from '@/features/employers/payday';
 import type { Movement } from '@/features/reports/api';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { findShortages, lowestAhead, planCovers, type ShortageCover } from '@/features/reports/shortage';
 import { lastCardPayment, monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
-import { formatDay, toTokyoDateString } from '@/lib/date';
+import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { cautionColor, SPACING } from '@/theme';
 
@@ -92,7 +92,7 @@ export default function HomeScreen() {
   const { data, isLoading, error, refetch, isRefetching } = useAccountBalances();
   const today = toTokyoDateString();
   // 押したカードの内訳を出す
-  const [breakdown, setBreakdown] = useState<'available' | 'net' | 'spendable' | 'monthEnd' | null>(null);
+  const [breakdown, setBreakdown] = useState<'available' | 'net' | 'spendable' | 'forecast' | null>(null);
   const employers = useEmployers();
   const future = useMovementsAfter(today);
 
@@ -121,9 +121,18 @@ export default function HomeScreen() {
     future.data && cardHorizon ? plannedEffect(future.data, (id) => targets.has(id), today, cardHorizon) : 0;
   const availableAmount = summary.availableNetWorth + availablePlanned;
 
-  // 月末の見込み（REQ-20）: 実質残高に月末までの予定（給料日の入金も含む）を反映した額
-  const monthEndForecast = future.data
-    ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, monthEnd(today))
+  // 給料日前の見込み（REQ-20 を変更）: 実質残高に含める口座の今の残高に、メインの働き先の次の給料日の前日までの予定を反映した額。
+  // 働き先がなければ月末までで「月末の見込み」
+  const main = mainEmployer(employers.data?.filter((e) => !e.is_archived) ?? []);
+  const mainPayday = main ? nextPayday([main], today) : null;
+  const forecastThrough = mainPayday
+    ? addDays(mainPayday.date, -1) < today
+      ? today
+      : addDays(mainPayday.date, -1)
+    : monthEnd(today);
+  const forecastTitle = mainPayday ? '給料日前の見込み' : '月末の見込み';
+  const forecast = future.data
+    ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, forecastThrough)
     : null;
 
   // ===== カードの内訳 =====
@@ -170,7 +179,7 @@ export default function HomeScreen() {
   const assets = data.filter((a) => a.balance > 0).sort((a, b) => b.balance - a.balance);
   const debts = data.filter((a) => a.balance < 0).sort((a, b) => a.balance - b.balance);
   type Sheet = { title: string; total: number; sections: BreakdownSection[]; note?: string };
-  const sheets: Record<'available' | 'net' | 'spendable' | 'monthEnd', Sheet | null | false> = {
+  const sheets: Record<'available' | 'net' | 'spendable' | 'forecast', Sheet | null | false> = {
     available: {
       title: '実質残高',
       total: availableAmount,
@@ -197,10 +206,10 @@ export default function HomeScreen() {
           : undefined,
       sections: [nowSection, plannedSection(spendable.through, spendable.amount - summary.availableNetWorth)],
     },
-    monthEnd: monthEndForecast !== null && {
-      title: '月末の見込み',
-      total: monthEndForecast,
-      sections: [nowSection, plannedSection(monthEnd(today), monthEndForecast - summary.availableNetWorth)],
+    forecast: forecast !== null && {
+      title: forecastTitle,
+      total: forecast,
+      sections: [nowSection, plannedSection(forecastThrough, forecast - summary.availableNetWorth)],
     },
   };
   const openSheet = breakdown ? sheets[breakdown] || null : null;
@@ -330,8 +339,15 @@ export default function HomeScreen() {
                   },
                 ]
               : []),
-            ...(monthEndForecast !== null
-              ? [{ title: '月末の見込み', amount: monthEndForecast, onPress: () => setBreakdown('monthEnd') }]
+            ...(forecast !== null
+              ? [
+                  {
+                    title: forecastTitle,
+                    amount: forecast,
+                    detail: `${formatDay(forecastThrough)}の終わり`,
+                    onPress: () => setBreakdown('forecast'),
+                  },
+                ]
               : []),
           ]}
         />
