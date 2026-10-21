@@ -1,5 +1,27 @@
 {
   "enabledPlugins": {
     "expo@claude-plugins-official": true
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Glass.aiff >/dev/null 2>&1 & osascript -e 'display notification \"作業が終わりました\" with title \"Claude Code（家計簿）\" sound name \"\"' >/dev/null 2>&1; exit 0"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Ping.aiff >/dev/null 2>&1 & osascript -e 'display notification \"確認を待っています\" with title \"Claude Code（家計簿）\"' >/dev/null 2>&1; exit 0"
+          }
+        ]
+      }
+    ]
   }
 }
