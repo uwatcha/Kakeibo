@@ -241,7 +241,7 @@ export default function HomeScreen() {
     total,
     rows: plannedRows(through, set),
   });
-  const livingNote = `生活費 1日 ${formatYen(living.daily)}（${living.manual !== null ? '設定した額' : '記録からの見積もり'}）`;
+  const livingNote = `生活費 1日 ${formatYen(living.daily)}`;
   // 給料日までに使える額・給料日前の見込みの内訳
   const budgetSections = (budget: Budget, through: string): BreakdownSection[] => [
     {
