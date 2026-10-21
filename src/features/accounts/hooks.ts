@@ -9,6 +9,7 @@ import {
   fetchAccountBalances,
   fetchAccountBalance,
   fetchCardSettings,
+  saveTransferOrder,
   type CardSettingsInsert,
   saveCardSettings,
   fetchAccounts,
@@ -90,4 +91,12 @@ export function useCardSettings(accountId: string) {
 export function useSaveCardSettings() {
   const invalidate = useInvalidateAccounts();
   return useMutation({ mutationFn: (values: CardSettingsInsert) => saveCardSettings(values), onSuccess: invalidate });
+}
+
+export function useSaveTransferOrder() {
+  const invalidate = useInvalidateAccounts();
+  return useMutation({
+    mutationFn: ({ used, unused }: { used: string[]; unused: string[] }) => saveTransferOrder(used, unused),
+    onSuccess: invalidate,
+  });
 }

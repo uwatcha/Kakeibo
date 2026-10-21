@@ -1,4 +1,4 @@
-import { availableBreakdown, summarizeBalances, type AccountBalance } from './summary';
+import { availableBreakdown, summarizeBalances, transferOrder, type AccountBalance } from './summary';
 
 let seq = 0;
 function account(overrides: Partial<AccountBalance>): AccountBalance {
@@ -11,7 +11,7 @@ function account(overrides: Partial<AccountBalance>): AccountBalance {
     isArchived: false,
     balance: 0,
     includeInAvailable: true,
-    transferPriority: 2,
+    transferPriority: 0,
     ...overrides,
   };
 }
@@ -105,5 +105,18 @@ describe('availableBreakdown', () => {
     expect(result.minus.map((a) => a.name)).toEqual(['父', 'カード']);
     expect(result.plusTotal).toBe(38000);
     expect(result.minusTotal).toBe(-79000);
+  });
+});
+
+describe('transferOrder', () => {
+  it('振替に使う資産の口座を、順番の小さい順に', () => {
+    const order = transferOrder([
+      account({ id: 'bankb', kind: 'bank', transferPriority: 2 }),
+      account({ id: 'banka', kind: 'bank', transferPriority: 1 }),
+      account({ id: 'nisa', kind: 'investment', transferPriority: 0 }),
+      account({ id: 'old', kind: 'cash', transferPriority: 3, isArchived: true }),
+      account({ id: 'card', kind: 'credit_card', transferPriority: 4 }),
+    ]);
+    expect(order).toEqual(['banka', 'bankb']);
   });
 });

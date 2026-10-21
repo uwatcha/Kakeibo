@@ -13,7 +13,7 @@ import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds
 import { AvailableBreakdownSheet } from '@/features/accounts/components/AvailableBreakdownSheet';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
-import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
+import { type AccountBalance, isAvailableAccount, summarizeBalances, transferOrder } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
 import { nextPayday } from '@/features/employers/payday';
 import type { Movement } from '@/features/reports/api';
@@ -118,12 +118,8 @@ export default function HomeScreen() {
     data.filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived).map((a) => [a.id, a.balance]),
   );
   const shortages = future.data ? findShortages(assetBalances, future.data, today, LAST_DATE) : [];
-  // ほかの口座からの振替で切り抜けられるか。振替元は口座の「振替の優先度」が「使わない」以外の資産の口座で、
-  // 優先度の高い口座から使う
-  const transferSources = data
-    .filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived && a.transferPriority > 0)
-    .sort((a, b) => b.transferPriority - a.transferPriority)
-    .map((a) => a.id);
+  // ほかの口座からの振替で切り抜けられるか。振替元は「振替の優先度」の画面で「振替に使う」にした口座で、上から順に使う
+  const transferSources = transferOrder(data);
   const covers =
     future.data && shortages.length > 0
       ? planCovers(shortages, lowestAhead(assetBalances, future.data, today), transferSources)

@@ -75,3 +75,18 @@ export async function saveCardSettings(values: CardSettingsInsert): Promise<void
   const { error } = await supabase.from('credit_card_settings').upsert(values);
   if (error) throw error;
 }
+
+/** 振替の優先度を保存する。used は上から順に 1, 2, 3...、unused は 0（振替に使わない） */
+export async function saveTransferOrder(used: readonly string[], unused: readonly string[]): Promise<void> {
+  const results = await Promise.all([
+    ...used.map((id, index) =>
+      supabase
+        .from('accounts')
+        .update({ transfer_priority: index + 1 })
+        .eq('id', id),
+    ),
+    ...unused.map((id) => supabase.from('accounts').update({ transfer_priority: 0 }).eq('id', id)),
+  ]);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+}

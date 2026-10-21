@@ -58,6 +58,7 @@ function RootNavigator() {
         />
         <Stack.Screen name="ai-history" options={{ headerShown: true, title: '会話の履歴' }} />
         <Stack.Screen name="ai-settings" options={{ headerShown: true, title: 'AI 相談の設定' }} />
+        <Stack.Screen name="transfer-order" options={{ headerShown: true, title: '振替の優先度' }} />
         <Stack.Screen name="info" options={{ headerShown: true, title: '用語の説明' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>

@@ -5,7 +5,7 @@ export type AccountBalance = {
   name: string;
   kind: AccountKind;
   isReserved: boolean;
-  /** 振替の提案で使う順（0 = 使わない、1 = 低、2 = 普通、3 = 高） */
+  /** 振替の提案で使う順番（0 = 使わない、1 以上 = 小さいほど先に使う） */
   transferPriority: number;
   isArchived: boolean;
   /** 負債はマイナス */
@@ -84,4 +84,12 @@ export function availableBreakdown(accounts: readonly AccountBalance[]): {
   const plus = included.filter((a) => a.balance > 0).sort((a, b) => b.balance - a.balance);
   const minus = included.filter((a) => a.balance < 0).sort((a, b) => a.balance - b.balance);
   return { plus, minus, plusTotal: sum(plus), minusTotal: sum(minus) };
+}
+
+/** 振替の提案で振替元にする口座の id（「振替に使う」にした資産の口座を、順番どおりに） */
+export function transferOrder(accounts: readonly AccountBalance[]): string[] {
+  return accounts
+    .filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived && a.transferPriority > 0)
+    .sort((a, b) => a.transferPriority - b.transferPriority)
+    .map((a) => a.id);
 }

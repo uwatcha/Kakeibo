@@ -49,6 +49,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <SectionCard>
           {navItem('口座の管理', 'wallet', '/accounts')}
+          {navItem('振替の優先度', 'swap-vertical', '/transfer-order')}
           {navItem('カテゴリの管理', 'shape', '/categories')}
           {navItem('働き先と給料日', 'briefcase', '/employers')}
           {navItem('定期支払い', 'autorenew', '/recurring')}
