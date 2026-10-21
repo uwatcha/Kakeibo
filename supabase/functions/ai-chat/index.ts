@@ -40,13 +40,23 @@ async function listModels(apiKey: string): Promise<Model[]> {
     .map((m) => ({ id: m.name.replace(/^models\//, ''), label: m.displayName ?? m.name, inputTokenLimit: m.inputTokenLimit ?? 0 }));
 }
 
-async function generate(apiKey: string, model: string, system: string, messages: { role: string; text: string }[]) {
+/** 送る1通。files は写真・PDF などのファイル（base64） */
+type Message = { role: string; text: string; files?: { mimeType: string; data: string }[] };
+
+async function generate(apiKey: string, model: string, system: string, messages: Message[], asJson = false) {
   const res = await fetch(`${GEMINI}/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
-      contents: messages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
+      contents: messages.map((m) => ({
+        role: m.role,
+        parts: [
+          ...(m.files ?? []).map((f) => ({ inline_data: { mime_type: f.mimeType, data: f.data } })),
+          { text: m.text },
+        ],
+      })),
+      ...(asJson ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
     }),
   });
   if (!res.ok) throw new GeminiError(res.status, await res.text());
@@ -86,15 +96,10 @@ const isTemporary = (status: number) => status === 500 || status === 502 || stat
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 一時的なエラーなら 1秒・3秒待って、最大2回送り直す */
-async function generateWithRetry(
-  apiKey: string,
-  model: string,
-  system: string,
-  messages: { role: string; text: string }[],
-) {
+async function generateWithRetry(apiKey: string, model: string, system: string, messages: Message[], asJson = false) {
   for (const wait of [1000, 3000, 0]) {
     try {
-      return await generate(apiKey, model, system, messages);
+      return await generate(apiKey, model, system, messages, asJson);
     } catch (e) {
       if (!(e instanceof GeminiError) || !isTemporary(e.status) || wait === 0) throw e;
       await sleep(wait);
@@ -196,6 +201,49 @@ Deno.serve(async (req) => {
           .from('ai_usage')
           .insert({ user_id: user.id, model, prompt_tokens: usage.prompt, output_tokens: usage.output });
         return json({ text, usage, model });
+      }
+      case 'extract': {
+        // 明細の写真・CSV などから記録を読み取る（AI入力）。返事は JSON の配列
+        if (!settings?.gemini_api_key || !settings.model) return json({ error: 'API キーを登録してください' }, 400);
+        const files = ((body.files ?? []) as { mimeType: string; data: string }[]).slice(0, 5);
+        const text = String(body.text ?? '').slice(0, 200_000);
+        const system = String(body.system ?? '');
+        const candidates = [...new Set([settings.model, FALLBACK_MODEL, LIGHT_FALLBACK_MODEL])];
+        let out;
+        let used = settings.model;
+        let lastError: unknown;
+        for (const candidate of candidates) {
+          try {
+            out = await generateWithRetry(
+              settings.gemini_api_key,
+              candidate,
+              system,
+              [{ role: 'user', text: text || '添付の内容から記録を読み取ってください。', files }],
+              true,
+            );
+            used = candidate;
+            break;
+          } catch (e) {
+            lastError = e;
+            if (!(e instanceof GeminiError) || !(e.status === 404 || isTemporary(e.status))) throw e;
+          }
+        }
+        if (!out) throw lastError;
+        const raw = (out.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
+        await db.from('ai_usage').insert({
+          user_id: user.id,
+          model: used,
+          prompt_tokens: out.usageMetadata?.promptTokenCount ?? 0,
+          output_tokens: out.usageMetadata?.candidatesTokenCount ?? 0,
+        });
+        let records: unknown = [];
+        try {
+          const parsed = JSON.parse(raw);
+          records = Array.isArray(parsed) ? parsed : (parsed?.records ?? []);
+        } catch {
+          return json({ error: '読み取れませんでした。写真をはっきり撮り直すか、別のファイルで試してください' }, 422);
+        }
+        return json({ records });
       }
       case 'title': {
         // 会話の中身から短いタイトルを作る。無料枠を節約するため軽いモデルで、混み合っていたら Flash に切り替える

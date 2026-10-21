@@ -38,7 +38,18 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-background-task",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "レシートや明細を撮って記録を読み取るために、カメラを使います",
+          "photosPermission": "レシートや明細の画像から記録を読み取るために、写真を使います",
+          "microphonePermission": false
+        }
+      ],
+      "expo-notifications",
+      "expo-document-picker"
     ],
     "experiments": {
       "typedRoutes": true,

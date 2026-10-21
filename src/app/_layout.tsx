@@ -8,6 +8,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PaperProvider, useTheme } from 'react-native-paper';
 
+// バックグラウンドで AI 相談を送り直すタスクは、起動したらすぐ（画面より先に）定義しておく
+import '@/features/ai/backgroundSend';
+import { PendingSendRunner } from '@/features/ai/components/PendingSendRunner';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { RecurringRunner } from '@/features/recurring/RecurringRunner';
 import { UpdateButton } from '@/features/updates/UpdateButton';
@@ -82,6 +85,7 @@ export default function RootLayout() {
             <AuthProvider>
               <StatusBar style="auto" />
               <RecurringRunner />
+              <PendingSendRunner />
               <RootNavigator />
               <UpdateButton />
             </AuthProvider>

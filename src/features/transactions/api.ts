@@ -45,6 +45,13 @@ export async function fetchTransactionsSince(date: string): Promise<Transaction[
   return data;
 }
 
+/** from〜to（両端を含む）の記録の日付と金額（AI入力で重複を確かめる） */
+export async function fetchDateAmountsBetween(from: string, to: string): Promise<{ date: string; amount: number }[]> {
+  const { data, error } = await supabase.from('transactions').select('date, amount').gte('date', from).lte('date', to);
+  if (error) throw error;
+  return data;
+}
+
 /** date の前後 days 日の支払い（立て替えの「元の支払い」を選ぶ候補。新しい順） */
 export async function fetchExpensesAround(date: string, days: number): Promise<Transaction[]> {
   const { data, error } = await supabase
@@ -97,6 +104,13 @@ export async function fetchTransaction(id: string): Promise<Transaction> {
 
 export async function createTransaction(values: TransactionInsert): Promise<void> {
   const { error } = await supabase.from('transactions').insert(values);
+  if (error) throw error;
+}
+
+/** まとめて追加する（AI入力） */
+export async function createTransactions(rows: TransactionInsert[]): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from('transactions').insert(rows);
   if (error) throw error;
 }
 

@@ -144,3 +144,7 @@ export async function saveGeneratedTitle(id: string, title: string): Promise<voi
     .eq('id', id);
   if (error) throw error;
 }
+
+/** 写真・ファイル（base64）やテキストから記録を読み取ってもらう（AI入力）。records は JSON の配列（features/ai/extract.ts で確かめる） */
+export const extractRecords = (system: string, text: string, files: { mimeType: string; data: string }[]) =>
+  callAi<{ records: unknown }>({ action: 'extract', system, text, files });

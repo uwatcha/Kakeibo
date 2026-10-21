@@ -140,7 +140,7 @@ export function maskText(text: string, aliases: Aliases): string {
 }
 
 /** AI の返事の中の置き換え後の名前を、元の名前に戻す */
-export function restoreText(text: string, aliases: Aliases): string {
+export function restoreText(text: string, aliases: Pick<Aliases, 'toReal'>): string {
   return replaceAll(text, aliases.toReal);
 }
 

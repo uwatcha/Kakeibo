@@ -1,3 +1,4 @@
+import { loadPending } from './pendingSend';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -19,7 +20,13 @@ export const aiKeys = {
   usage: (today: string) => [...aiKeys.all, 'usage', today] as const,
   conversations: () => [...aiKeys.all, 'conversations'] as const,
   conversation: (id: string) => [...aiKeys.all, 'conversations', id] as const,
+  pending: () => [...aiKeys.all, 'pending'] as const,
 };
+
+/** 混み合いで送れず、送り直しを待っている質問（端末に置いてある） */
+export function usePendingSends() {
+  return useQuery({ queryKey: aiKeys.pending(), queryFn: loadPending });
+}
 
 export function useAiStatus() {
   return useQuery({ queryKey: aiKeys.status(), queryFn: fetchAiStatus });

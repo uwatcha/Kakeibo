@@ -3,11 +3,11 @@ import { router, Tabs, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { ActivityIndicator, Button, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QueryState } from '@/components/QueryState';
-import { useAccountBalances } from '@/features/accounts/hooks';
+import { useAccountBalances, useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
 import { homeContext } from '@/features/ai/homeContext';
 import {
@@ -18,11 +18,21 @@ import {
   fetchConversation,
   sendAiChat,
 } from '@/features/ai/api';
+import { AiImport } from '@/features/ai/components/AiImport';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
 import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
 import { loadLastConversation, saveLastConversation } from '@/features/ai/lastConversation';
-import { aiKeys, useAiStatus, useAiUsageToday, useConversation, useConversations } from '@/features/ai/hooks';
+import { startBackgroundSend } from '@/features/ai/backgroundSend';
+import {
+  aiKeys,
+  useAiStatus,
+  useAiUsageToday,
+  useConversation,
+  useConversations,
+  usePendingSends,
+} from '@/features/ai/hooks';
+import { addPending, takePending } from '@/features/ai/pendingSend';
 import { daysUntilDeletion, RETENTION_DAYS, titleFrom } from '@/features/ai/retention';
 import { useCategories } from '@/features/categories/hooks';
 import { useHomeFigures } from '@/features/home/hooks';
@@ -68,6 +78,9 @@ export default function AiChatScreen() {
   const queryClient = useQueryClient();
   const usage = useAiUsageToday(today);
   const balances = useAccountBalances();
+  // AI入力で口座を選ぶため（記録の入力画面と同じ口座の一覧と残高）
+  const accountsQuery = useAccounts();
+  const balanceMap = useBalanceMap();
   // ホームに出ている額も渡す（「ホームの〜」のような質問に、画面と同じ数字で答えられるように）
   const home = useHomeFigures(today);
   const categories = useCategories();
@@ -82,6 +95,8 @@ export default function AiChatScreen() {
   // 返事を待っている間の質問（保存は返事と一緒にする）
   const [pending, setPending] = useState<ChatItem | null>(null);
   const [input, setInput] = useState('');
+  // 相談（チャット）か、入力（写真・ファイルから記録を読み取る）か
+  const [mode, setMode] = useState<'chat' | 'import'>('chat');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
@@ -104,6 +119,9 @@ export default function AiChatScreen() {
   // 混み合いで送れなかったとき、画面を開いている間は自動で送り直し続ける
   const [retry, setRetry] = useState<{ count: number; text: string } | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 送り直し待ちとして端末に置いた質問の id（アプリを閉じてもバックグラウンドで送り直す）
+  const pendingId = useRef<string | null>(null);
+  const pendingSends = usePendingSends();
   useEffect(
     () => () => {
       if (retryTimer.current) clearTimeout(retryTimer.current);
@@ -190,7 +208,13 @@ export default function AiChatScreen() {
     setRetry(null);
     setPending(null);
     setSending(false);
+    pendingId.current = null;
+    queryClient.invalidateQueries({ queryKey: aiKeys.pending() });
   };
+
+  // 送るたびに今の記録から作り直す（名前は置き換え済み）
+  const buildSystem = () =>
+    `${SYSTEM_PROMPT}\n\n# アプリの画面と用語\n${appGuideText()}\n\n# 家計の材料\n${buildContext(source, aliases)}${home.figures ? `\n\n${homeContext(home.figures, aliases)}` : ''}`;
 
   /** 送る。混み合いなどで失敗したら、30秒ごとに送り直す（最大 MAX_RETRIES 回） */
   const attempt = async (
@@ -200,9 +224,15 @@ export default function AiChatScreen() {
     tries: number,
   ) => {
     try {
-      const system = `${SYSTEM_PROMPT}\n\n# アプリの画面と用語\n${appGuideText()}\n\n# 家計の材料\n${buildContext(source, aliases)}${home.figures ? `\n\n${homeContext(home.figures, aliases)}` : ''}`;
+      const system = buildSystem();
       const messages: AiMessage[] = history.map((m) => ({ role: m.role, text: m.sent }));
       const reply = await sendAiChat(system, messages);
+      // 送り直し待ちにしていた質問を、バックグラウンドですでに送っていたら保存しない（その会話を開き直す）
+      if (pendingId.current && !(await takePending(pendingId.current))) {
+        queryClient.invalidateQueries({ queryKey: aiKeys.all });
+        finish();
+        return;
+      }
       // 質問と返事を保存する。初めての質問なら会話を作る
       const id = conversationId ?? (await createConversation(titleFrom(text)));
       await appendExchange(
@@ -220,6 +250,26 @@ export default function AiChatScreen() {
       if (reply.model !== status.data?.model) queryClient.invalidateQueries({ queryKey: aiKeys.status() });
       finish();
     } catch (e) {
+      if (e instanceof AiError && e.temporary && !pendingId.current) {
+        // 初めて混み合いで失敗したら、アプリを閉じても送り直せるよう端末に置く
+        pendingId.current = await addPending({
+          conversationId: conversationId ?? null,
+          question,
+          system: buildSystem(),
+          messages: history.map((m) => ({ role: m.role, text: m.sent })),
+          toReal: [...aliases.toReal],
+        });
+        startBackgroundSend();
+      }
+      if (e instanceof AiError && e.temporary && tries >= MAX_RETRIES) {
+        // 画面での送り直しはやめ、バックグラウンドに任せる（返事が来たら通知）
+        setRetry(null);
+        setPending(null);
+        setSending(false);
+        pendingId.current = null;
+        queryClient.invalidateQueries({ queryKey: aiKeys.pending() });
+        return;
+      }
       if (e instanceof AiError && e.temporary && tries < MAX_RETRIES) {
         setRetry({ count: tries + 1, text });
         retryTimer.current = setTimeout(() => attempt(text, question, history, tries + 1), RETRY_INTERVAL_MS);
@@ -247,110 +297,163 @@ export default function AiChatScreen() {
   const cancelRetry = () => {
     if (retryTimer.current) clearTimeout(retryTimer.current);
     if (retry) setInput(retry.text);
+    if (pendingId.current) takePending(pendingId.current);
     finish();
+  };
+
+  // 画面を閉じたあとも送り直しを待っている、この会話の質問（バックグラウンドで送り直している）
+  // （この画面で送っている間は、その質問は上の送り直しの表示に出ている）
+  const waiting = sending ? [] : (pendingSends.data ?? []).filter((p) => p.conversationId === (conversationId ?? null));
+  const cancelWaiting = async (id: string, text: string) => {
+    await takePending(id);
+    setInput(text);
+    queryClient.invalidateQueries({ queryKey: aiKeys.pending() });
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Tabs.Screen options={{ headerRight }} />
       {conversations.data && <AutoTitler conversations={conversations.data} aliases={aliases} />}
-
-      <View style={[styles.titleBar, { borderBottomColor: theme.colors.outlineVariant }]}>
-        <Text variant="titleSmall" numberOfLines={1} style={styles.title}>
-          {(conversationId && conversation.data?.conversation.title) || '新しいチャット'}
-        </Text>
-      </View>
-
-      <KeyboardAvoidingView
-        behavior="padding"
-        style={styles.container}
-        keyboardVerticalOffset={insets.top + 64 + TITLE_BAR_HEIGHT}
-      >
-        <FlatList
-          ref={listRef}
-          data={items}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.messages}
-          ListHeaderComponent={
-            // ピン留めしていない会話は消えることを、開いている会話でも分かるようにする
-            <Text variant="labelSmall" style={[styles.retention, { color: theme.colors.onSurfaceVariant }]}>
-              {conversation.data?.conversation.pinned && conversationId
-                ? 'ピン留め中の会話'
-                : conversationId && conversation.data
-                  ? `この会話はあと${daysUntilDeletion(conversation.data.conversation.updated_at, new Date())}日で消えます（履歴でピン留めすると残ります）`
-                  : `会話は保存され、ピン留めしなければ${RETENTION_DAYS}日で消えます`}
+      <SegmentedButtons
+        value={mode}
+        onValueChange={(v) => setMode(v as 'chat' | 'import')}
+        density="small"
+        style={styles.mode}
+        buttons={[
+          { value: 'chat', label: '相談', icon: 'chat-outline' },
+          { value: 'import', label: '入力', icon: 'text-recognition' },
+        ]}
+      />
+      {mode === 'import' ? (
+        <AiImport
+          today={today}
+          accounts={accountsQuery.data ?? []}
+          categories={categories.data!}
+          aliases={aliases}
+          balances={balanceMap}
+        />
+      ) : (
+        <>
+          <View style={[styles.titleBar, { borderBottomColor: theme.colors.outlineVariant }]}>
+            <Text variant="titleSmall" numberOfLines={1} style={styles.title}>
+              {(conversationId && conversation.data?.conversation.title) || '新しいチャット'}
             </Text>
-          }
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.bubble,
-                item.role === 'user'
-                  ? [styles.userBubble, { backgroundColor: theme.colors.primaryContainer }]
-                  : [styles.modelBubble, { backgroundColor: theme.colors.surface }],
-              ]}
-            >
-              {item.role === 'model' ? (
-                // AI の返事は Markdown（見出し・太字・箇条書き・表）として表示する
-                <MarkdownText>{item.shown}</MarkdownText>
-              ) : (
-                <Text variant="bodyMedium" selectable>
-                  {item.shown}
+          </View>
+
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={styles.container}
+            keyboardVerticalOffset={insets.top + 64 + TITLE_BAR_HEIGHT + MODE_BAR_HEIGHT}
+          >
+            <FlatList
+              ref={listRef}
+              data={items}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={styles.messages}
+              ListHeaderComponent={
+                // ピン留めしていない会話は消えることを、開いている会話でも分かるようにする
+                <Text variant="labelSmall" style={[styles.retention, { color: theme.colors.onSurfaceVariant }]}>
+                  {conversation.data?.conversation.pinned && conversationId
+                    ? 'ピン留め中の会話'
+                    : conversationId && conversation.data
+                      ? `この会話はあと${daysUntilDeletion(conversation.data.conversation.updated_at, new Date())}日で消えます（履歴でピン留めすると残ります）`
+                      : `会話は保存され、ピン留めしなければ${RETENTION_DAYS}日で消えます`}
                 </Text>
-              )}
-            </View>
-          )}
-          ListFooterComponent={
-            <>
-              {sending && !retry && <ActivityIndicator style={styles.thinking} />}
-              {retry && (
-                <View style={styles.retry}>
-                  <ActivityIndicator size="small" />
-                  <Text variant="bodySmall" style={[styles.retryText, { color: theme.colors.onSurfaceVariant }]}>
-                    混み合っているので送り直しています（{retry.count}回目）
-                  </Text>
-                  <Button compact onPress={cancelRetry}>
-                    やめる
-                  </Button>
+              }
+              onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+              renderItem={({ item }) => (
+                <View
+                  style={[
+                    styles.bubble,
+                    item.role === 'user'
+                      ? [styles.userBubble, { backgroundColor: theme.colors.primaryContainer }]
+                      : [styles.modelBubble, { backgroundColor: theme.colors.surface }],
+                  ]}
+                >
+                  {item.role === 'model' ? (
+                    // AI の返事は Markdown（見出し・太字・箇条書き・表）として表示する
+                    <MarkdownText>{item.shown}</MarkdownText>
+                  ) : (
+                    <Text variant="bodyMedium" selectable>
+                      {item.shown}
+                    </Text>
+                  )}
                 </View>
               )}
-              {error && (
-                <Text variant="bodySmall" style={[styles.error, { color: theme.colors.error }]}>
-                  {error}
-                </Text>
-              )}
-            </>
-          }
-        />
-        <View style={[styles.inputBar, { backgroundColor: theme.colors.surface }]}>
-          <TextInput
-            mode="outlined"
-            placeholder="家計について聞く"
-            value={input}
-            onChangeText={setInput}
-            multiline
-            dense
-            style={styles.input}
-          />
-          <IconButton
-            icon="send"
-            mode="contained"
-            accessibilityLabel="送る"
-            disabled={input.trim() === '' || sending}
-            onPress={send}
-          />
-        </View>
-      </KeyboardAvoidingView>
+              ListFooterComponent={
+                <>
+                  {sending && !retry && <ActivityIndicator style={styles.thinking} />}
+                  {retry && (
+                    <View style={styles.retry}>
+                      <ActivityIndicator size="small" />
+                      <Text variant="bodySmall" style={[styles.retryText, { color: theme.colors.onSurfaceVariant }]}>
+                        混み合っているので送り直しています（{retry.count}回目）
+                      </Text>
+                      <Button compact onPress={cancelRetry}>
+                        やめる
+                      </Button>
+                    </View>
+                  )}
+                  {waiting.map((p) => (
+                    <View key={p.id} style={styles.waiting}>
+                      <View
+                        style={[styles.bubble, styles.userBubble, { backgroundColor: theme.colors.primaryContainer }]}
+                      >
+                        <Text variant="bodyMedium">{p.question.shown}</Text>
+                      </View>
+                      <View style={styles.retry}>
+                        <ActivityIndicator size="small" />
+                        <Text variant="bodySmall" style={[styles.retryText, { color: theme.colors.onSurfaceVariant }]}>
+                          送り直し待ち（返事が来たら通知）
+                        </Text>
+                        <Button compact onPress={() => cancelWaiting(p.id, p.question.shown)}>
+                          やめる
+                        </Button>
+                      </View>
+                    </View>
+                  ))}
+                  {error && (
+                    <Text variant="bodySmall" style={[styles.error, { color: theme.colors.error }]}>
+                      {error}
+                    </Text>
+                  )}
+                </>
+              }
+            />
+            <View style={[styles.inputBar, { backgroundColor: theme.colors.surface }]}>
+              <TextInput
+                mode="outlined"
+                placeholder="家計について聞く"
+                value={input}
+                onChangeText={setInput}
+                multiline
+                dense
+                style={styles.input}
+              />
+              <IconButton
+                icon="send"
+                mode="contained"
+                accessibilityLabel="送る"
+                disabled={input.trim() === '' || sending}
+                onPress={send}
+              />
+            </View>
+          </KeyboardAvoidingView>
+        </>
+      )}
     </View>
   );
 }
+
+/** 相談・入力の切り替え（ボタンの高さ＋上の余白） */
+const MODE_BAR_HEIGHT = 48;
 
 /** トップバーの下の、会話のタイトルの帯の高さ */
 const TITLE_BAR_HEIGHT = 36;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  mode: { marginHorizontal: SPACING.screen, marginTop: 8 },
   titleBar: {
     height: TITLE_BAR_HEIGHT,
     justifyContent: 'center',
@@ -369,6 +472,7 @@ const styles = StyleSheet.create({
   retry: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
   retryText: { flex: 1 },
   retention: { textAlign: 'center' },
+  waiting: { gap: 6 },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 8, gap: 4 },
   input: { flex: 1, maxHeight: 120 },
 });

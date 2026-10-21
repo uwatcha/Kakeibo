@@ -5,6 +5,7 @@ import { accountKeys } from '@/features/accounts/hooks';
 import {
   confirmTransactions,
   createTransaction,
+  createTransactions,
   deleteTransaction,
   fetchAccountTransactions,
   fetchAdvancesFor,
@@ -94,6 +95,11 @@ function useInvalidateAfterWrite() {
 export function useCreateTransaction() {
   const invalidate = useInvalidateAfterWrite();
   return useMutation({ mutationFn: (values: TransactionInsert) => createTransaction(values), onSuccess: invalidate });
+}
+
+export function useCreateTransactions() {
+  const invalidate = useInvalidateAfterWrite();
+  return useMutation({ mutationFn: (rows: TransactionInsert[]) => createTransactions(rows), onSuccess: invalidate });
 }
 
 export function useUpdateTransaction() {
