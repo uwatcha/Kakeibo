@@ -17,6 +17,8 @@ type Page = {
    * 元の項目が別のものに変わったことが分かるよう、見出しの上に小さく薄い取り消し線で残す
    */
   replacedTitle?: string;
+  /** カードの下に添える、もう1つの見方の額（「次の給料日までなら」など）。マイナスは赤 */
+  sub?: { label: string; amount: number };
   /** negative なら金額を赤で出す（足りない額を正の数で出すとき） */
   tone?: 'negative';
   /** カードを押したとき（内訳を開く）。あれば右上に「内訳 ›」を出す */
@@ -75,6 +77,14 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
                 numberOfLines={1}
                 adjustsFontSizeToFit
               />
+              {page.sub && (
+                <View style={styles.sub}>
+                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {page.sub.label}
+                  </Text>
+                  <Amount value={page.sub.amount} variant="bodyLarge" style={styles.subAmount} />
+                </View>
+              )}
               {page.detail && (
                 <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                   {page.detail}
@@ -93,6 +103,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 28 },
   title: { fontWeight: '700' },
   amount: { fontWeight: '800', marginTop: 4 },
+  sub: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  subAmount: { fontWeight: '700' },
   replaced: { textDecorationLine: 'line-through', opacity: 0.7 },
   action: { margin: -8 },
   more: { flexDirection: 'row', alignItems: 'center' },

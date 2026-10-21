@@ -50,6 +50,8 @@ describe('computeBudget', () => {
     // 10/23〜11/24 の33日: 150,000 − 120,000 − 35,000 − 66,000 = −71,000
     expect(budget.shortfalls[0]).toEqual({ from: '2026-10-23', to: '2026-11-24', amount: 71000 });
     expect(budget.amount).toBe(100000 - 71000);
+    // 次の給料日までなら、先の不足は関係ない
+    expect(budget.untilPayday).toBe(100000);
   });
 
   it('給料日より前の引き落としは今のお金から払う（今の期間の利用でも二重には引かない）', () => {
@@ -63,6 +65,7 @@ describe('computeBudget', () => {
     expect(budget.planned).toBe(-30000);
     expect(budget.cardUsage).toBe(0);
     expect(budget.amount).toBe(70000);
+    expect(budget.untilPayday).toBe(70000);
   });
 
   it('今の期間に使った分が入っている先の請求は、その分を除いて不足を見る', () => {

@@ -194,6 +194,8 @@ export default function HomeScreen() {
         [showPerDay && perDay !== null ? `1日あたり ${formatYen(perDay)}` : null, `あと${daysLeft}日`]
           .filter(Boolean)
           .join('・'),
+      // 2か月先は見ずに、次の給料日まで乗り切れるかの額
+      sub: { label: next ? '次の給料日までなら' : '月末までなら', amount: budget.untilPayday },
       onPress: () => setBreakdown(sheet),
     };
   };
@@ -294,7 +296,11 @@ export default function HomeScreen() {
     spendable: spendable && {
       title: spendableTitle,
       total: spendable.amount,
-      note: [perDay !== null ? `1日あたり ${formatYen(perDay)}（あと${daysLeft}日）` : null, livingNote]
+      note: [
+        `${next ? '次の給料日までなら' : '月末までなら'} ${formatYen(spendable.untilPayday)}`,
+        perDay !== null ? `1日あたり ${formatYen(perDay)}（あと${daysLeft}日）` : null,
+        livingNote,
+      ]
         .filter(Boolean)
         .join('・'),
       sections: budgetSections(spendable, spendableThrough),

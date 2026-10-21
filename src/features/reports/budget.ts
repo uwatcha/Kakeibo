@@ -38,8 +38,13 @@ export type BudgetInput = {
 export type Shortfall = { from: string; to: string; amount: number };
 
 export type Budget = {
-  /** 給料日までに使える額 */
+  /** 給料日までに使える額（2か月先まで見通して、今から取り置く分も引いた額） */
   amount: number;
+  /**
+   * 次の給料日までなら使える額: 今の残高に給料日の前日までの予定（クレカの引き落としを含む）を足しただけの額。
+   * 給料日より後の支払い・取り置きは入れない。マイナスなら給料日までにお金が尽きる
+   */
+  untilPayday: number;
   /** 今日の翌日から給料日の前日までの予定（資産の口座の増減。クレカの引き落としを含む） */
   planned: number;
   /** 今の期間のクレカの利用のうち、給料日までの引き落としに入っていない分（今の額から引く） */
@@ -102,6 +107,7 @@ export function computeBudget(input: BudgetInput): Budget {
 
   return {
     amount: input.cashBalance + planned - cardUsage - reserve,
+    untilPayday: input.cashBalance + planned,
     planned,
     cardUsage,
     reserve,
