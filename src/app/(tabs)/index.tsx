@@ -181,6 +181,37 @@ export default function HomeScreen() {
   const forecastThrough = forecastPaydays.length > 0 ? addDays(forecastPaydays[0], -1) : today;
   const forecastTitle = main ? '給料日前の見込み' : '月末の見込み';
 
+  const spendableTitle = next ? '給料日までに使える額' : '月末までに使える額';
+  /** マイナスになったときの言い換え（「給料日までに使える額」→「給料日までに足りない額」など） */
+  const SHORTFALL_TITLES: Record<string, string> = {
+    給料日までに使える額: '給料日までに足りない額',
+    月末までに使える額: '月末までに足りない額',
+    給料日前の見込み: '給料日前に足りない額',
+    月末の見込み: '月末に足りない額',
+  };
+  // 使える額・見込みのカード。マイナスなら「足りない額」に言い換えて正の数を赤で出し、元の見出しを取り消し線で残す
+  const budgetPage = (
+    budget: Budget,
+    title: string,
+    showPerDay: boolean,
+    sheet: 'spendable' | 'forecast',
+    detail?: string,
+  ) => {
+    const short = budget.amount < 0;
+    return {
+      title: short ? SHORTFALL_TITLES[title] : title,
+      replacedTitle: short ? title : undefined,
+      tone: short ? ('negative' as const) : undefined,
+      amount: short ? 0 - budget.amount : budget.amount,
+      detail:
+        detail ??
+        [showPerDay && perDay !== null ? `1日あたり ${formatYen(perDay)}` : null, `あと${daysLeft}日`]
+          .filter(Boolean)
+          .join('・'),
+      onPress: () => setBreakdown(sheet),
+    };
+  };
+
   // ===== カードの内訳 =====
   const accountRows = (list: readonly AccountBalance[]): BreakdownRow[] =>
     list.map((a) => ({
@@ -275,7 +306,7 @@ export default function HomeScreen() {
       ],
     },
     spendable: spendable && {
-      title: next ? '給料日までに使える額' : '月末までに使える額',
+      title: spendableTitle,
       total: spendable.amount,
       note: [perDay !== null ? `1日あたり ${formatYen(perDay)}（あと${daysLeft}日）` : null, livingNote]
         .filter(Boolean)
@@ -414,27 +445,9 @@ export default function HomeScreen() {
               onPress: () => setBreakdown('available'),
             },
             { title: '純資産', amount: summary.netWorth, onPress: () => setBreakdown('net') },
-            ...(spendable
-              ? [
-                  {
-                    title: next ? '給料日までに使える額' : '月末までに使える額',
-                    amount: spendable.amount,
-                    detail: [perDay !== null ? `1日あたり ${formatYen(perDay)}` : null, `あと${daysLeft}日`]
-                      .filter(Boolean)
-                      .join('・'),
-                    onPress: () => setBreakdown('spendable'),
-                  },
-                ]
-              : []),
+            ...(spendable ? [budgetPage(spendable, spendableTitle, true, 'spendable')] : []),
             ...(forecastBudget
-              ? [
-                  {
-                    title: forecastTitle,
-                    amount: forecastBudget.amount,
-                    detail: `${formatDay(forecastThrough)}の終わり`,
-                    onPress: () => setBreakdown('forecast'),
-                  },
-                ]
+              ? [budgetPage(forecastBudget, forecastTitle, false, 'forecast', `${formatDay(forecastThrough)}の終わり`)]
               : []),
           ]}
         />

@@ -12,6 +12,13 @@ type Page = {
   detail?: string;
   /** カード右上の小さなボタン */
   action?: { icon: string; label: string; onPress: () => void };
+  /**
+   * 言い換える前の見出し（使える額がマイナスで「足りない額」に言い換えたときなど）。
+   * 元の項目が別のものに変わったことが分かるよう、見出しの上に小さく薄い取り消し線で残す
+   */
+  replacedTitle?: string;
+  /** negative なら金額を赤で出す（足りない額を正の数で出すとき） */
+  tone?: 'negative';
   /** カードを押したとき（内訳を開く）。あれば右上に「内訳 ›」を出す */
   onPress?: () => void;
 };
@@ -32,6 +39,11 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
             accessibilityLabel={page.onPress ? `${page.title}の内訳` : undefined}
           >
             <SectionCard style={styles.card}>
+              {page.replacedTitle && (
+                <Text variant="labelSmall" style={[styles.replaced, { color: theme.colors.onSurfaceVariant }]}>
+                  {page.replacedTitle}
+                </Text>
+              )}
               <View style={styles.header}>
                 <Text variant="titleMedium" style={styles.title}>
                   {page.title}
@@ -59,7 +71,7 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
               <Amount
                 value={page.amount}
                 variant="displaySmall"
-                style={styles.amount}
+                style={[styles.amount, page.tone === 'negative' && { color: theme.colors.error }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
               />
@@ -81,6 +93,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 28 },
   title: { fontWeight: '700' },
   amount: { fontWeight: '800', marginTop: 4 },
+  replaced: { textDecorationLine: 'line-through', opacity: 0.7 },
   action: { margin: -8 },
   more: { flexDirection: 'row', alignItems: 'center' },
 });
