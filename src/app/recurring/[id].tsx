@@ -1,14 +1,12 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
   Button,
-  Dialog,
   HelperText,
   List,
-  Portal,
   SegmentedButtons,
   Snackbar,
   Switch,
@@ -17,66 +15,27 @@ import {
   useTheme,
 } from 'react-native-paper';
 
-import { Amount } from '@/components/Amount';
-import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
-import { SectionCard } from '@/components/SectionCard';
 import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
-import type { RecurringRule } from '@/features/recurring/api';
+import { GeneratedRecords } from '@/features/recurring/components/GeneratedRecords';
 import {
-  useDeleteGenerated,
-  useDeleteRule,
-  useGeneratedTransactions,
-  useRules,
-  useSaveRule,
-  useSetRuleActive,
-} from '@/features/recurring/hooks';
+  emptyRuleForm,
+  isDayOfMonth,
+  type RuleFormValues,
+  type RuleType,
+  toRuleForm,
+  toRuleRow,
+  validateRuleForm,
+} from '@/features/recurring/formValues';
+import { useGeneratedTransactions, useRules, useSaveRule, useSetRuleActive } from '@/features/recurring/hooks';
 import { SHIFT_LABELS } from '@/features/recurring/labels';
-import { nextOccurrence, type RecurringShift } from '@/features/recurring/schedule';
+import { nextOccurrence } from '@/features/recurring/schedule';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { DateField } from '@/features/transactions/components/DateField';
-import {
-  amountKindOf,
-  type DraftErrors,
-  TRANSACTION_RULES,
-  validateDraft,
-} from '@/features/transactions/transactionRules';
+import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
-import { parseYen } from '@/lib/money';
-
-type RuleType = 'expense' | 'income' | 'transfer';
-
-type FormValues = {
-  name: string;
-  type: RuleType;
-  amount: string;
-  fromAccountId: string | null;
-  toAccountId: string | null;
-  categoryId: string | null;
-  intervalMonths: '1' | '2';
-  dayOfMonth: string;
-  holidayShift: RecurringShift;
-  startDate: string;
-};
-
-const isDay = (v: string) => /^\d{1,2}$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= 31;
-
-function toForm(rule: RecurringRule): FormValues {
-  return {
-    name: rule.name,
-    type: rule.type as RuleType,
-    amount: String(rule.amount),
-    fromAccountId: rule.from_account_id,
-    toAccountId: rule.to_account_id,
-    categoryId: rule.category_id,
-    intervalMonths: rule.interval_months === 2 ? '2' : '1',
-    dayOfMonth: String(rule.day_of_month),
-    holidayShift: rule.holiday_shift,
-    startDate: rule.start_date,
-  };
-}
 
 export default function RecurringRuleScreen() {
   const theme = useTheme();
@@ -91,30 +50,11 @@ export default function RecurringRuleScreen() {
   const generated = useGeneratedTransactions(isNew ? undefined : id);
   const save = useSaveRule();
   const setActive = useSetRuleActive();
-  const deleteGenerated = useDeleteGenerated();
-  const deleteRule = useDeleteRule();
-  const [confirm, setConfirm] = useState<'generated' | 'rule' | null>(null);
 
   const rule = rules.data?.find((r) => r.id === id);
 
-  // 記録の種類ごとのルール（transactionRules.ts）で口座・カテゴリを確かめる
-  const resolver: Resolver<FormValues> = (values) => {
-    const errors: DraftErrors & { name?: string; dayOfMonth?: string } = validateDraft(
-      {
-        type: values.type,
-        amount: parseYen(values.amount),
-        fromAccountId: values.fromAccountId,
-        toAccountId: values.toAccountId,
-        adjustmentDirection: 'increase',
-        categoryId: values.categoryId,
-        date: values.startDate,
-      },
-      accounts.data ?? [],
-      categories.data ?? [],
-    );
-    if (values.name.trim() === '') errors.name = '内容を入力してください';
-    if (!isDay(values.dayOfMonth)) errors.dayOfMonth = '1〜31の数字で入力してください';
-    const entries = Object.entries(errors);
+  const resolver: Resolver<RuleFormValues> = (values) => {
+    const entries = Object.entries(validateRuleForm(values, accounts.data ?? [], categories.data ?? []));
     if (entries.length === 0) return { values, errors: {} };
     return {
       values: {},
@@ -129,21 +69,7 @@ export default function RecurringRuleScreen() {
     setValue,
     getValues,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver,
-    defaultValues: {
-      name: '',
-      type: 'expense',
-      amount: '',
-      fromAccountId: null,
-      toAccountId: null,
-      categoryId: null,
-      intervalMonths: '1',
-      dayOfMonth: '27',
-      holidayShift: 'none',
-      startDate: today,
-    },
-  });
+  } = useForm<RuleFormValues>({ resolver, defaultValues: emptyRuleForm(today) });
   const [type, intervalMonths, dayOfMonth, holidayShift, startDate] = useWatch({
     control,
     name: ['type', 'intervalMonths', 'dayOfMonth', 'holidayShift', 'startDate'],
@@ -151,7 +77,7 @@ export default function RecurringRuleScreen() {
   const txRule = TRANSACTION_RULES[type];
 
   useEffect(() => {
-    if (rule) reset(toForm(rule));
+    if (rule) reset(toRuleForm(rule));
   }, [rule, reset]);
 
   const changeType = (next: RuleType) => {
@@ -163,24 +89,9 @@ export default function RecurringRuleScreen() {
     setValue('type', next);
   };
 
-  const onSubmit = async (values: FormValues) => {
-    const t = TRANSACTION_RULES[values.type];
+  const onSubmit = async (values: RuleFormValues) => {
     try {
-      await save.mutateAsync({
-        id: isNew ? null : id,
-        values: {
-          name: values.name.trim(),
-          type: values.type,
-          amount: parseYen(values.amount)!,
-          from_account_id: t.from ? values.fromAccountId : null,
-          to_account_id: t.to ? values.toAccountId : null,
-          category_id: t.categoryKind ? values.categoryId : null,
-          interval_months: Number(values.intervalMonths),
-          day_of_month: Number(values.dayOfMonth),
-          holiday_shift: values.holidayShift,
-          start_date: values.startDate,
-        },
-      });
+      await save.mutateAsync({ id: isNew ? null : id, values: toRuleRow(values) });
       router.back();
     } catch {
       // Snackbar で知らせる
@@ -206,7 +117,7 @@ export default function RecurringRuleScreen() {
     );
   }
 
-  const next = isDay(dayOfMonth)
+  const next = isDayOfMonth(dayOfMonth)
     ? nextOccurrence(
         {
           day_of_month: Number(dayOfMonth),
@@ -217,8 +128,8 @@ export default function RecurringRuleScreen() {
         today,
       )
     : null;
-  const busy = isSubmitting || setActive.isPending || deleteGenerated.isPending || deleteRule.isPending;
-  const failed = save.isError || setActive.isError || deleteGenerated.isError || deleteRule.isError;
+  const busy = isSubmitting || setActive.isPending;
+  const failed = save.isError || setActive.isError;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -405,80 +316,10 @@ export default function RecurringRuleScreen() {
           保存
         </Button>
 
-        {rule && (
-          <>
-            <SectionCard title={`追加した記録（${generated.data?.length ?? 0}件）`}>
-              {generated.data?.map((t) => (
-                <ListRow
-                  key={t.id}
-                  title={formatDay(t.date)}
-                  subtitle={t.date > today ? '予定' : undefined}
-                  right={<Amount value={t.amount} kind={amountKindOf(t.type)} variant="bodyLarge" />}
-                  onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
-                />
-              ))}
-            </SectionCard>
-            <Button
-              mode="outlined"
-              icon="delete-sweep"
-              textColor={theme.colors.error}
-              disabled={busy || !generated.data?.length}
-              onPress={() => setConfirm('generated')}
-            >
-              追加した記録をまとめて削除
-            </Button>
-            <Button
-              mode="text"
-              icon="delete"
-              textColor={theme.colors.error}
-              style={styles.button}
-              disabled={busy}
-              onPress={() => setConfirm('rule')}
-            >
-              この定期支払いを削除
-            </Button>
-          </>
-        )}
+        {rule && <GeneratedRecords ruleId={rule.id} generated={generated.data} today={today} busy={busy} />}
       </KeyboardAwareScrollView>
 
-      <Portal>
-        <Dialog visible={confirm !== null} onDismiss={() => setConfirm(null)}>
-          <Dialog.Title>
-            {confirm === 'generated'
-              ? `追加した記録 ${generated.data?.length ?? 0}件を削除しますか？`
-              : 'この定期支払いを削除しますか？'}
-          </Dialog.Title>
-          <Dialog.Content>
-            <Text variant="bodyMedium">削除すると元に戻せません。</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setConfirm(null)}>キャンセル</Button>
-            <Button
-              textColor={theme.colors.error}
-              onPress={async () => {
-                const target = confirm;
-                setConfirm(null);
-                try {
-                  if (target === 'generated') await deleteGenerated.mutateAsync(id);
-                  else {
-                    await deleteRule.mutateAsync(id);
-                    router.back();
-                  }
-                } catch {
-                  // Snackbar で知らせる
-                }
-              }}
-            >
-              削除
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      <Snackbar
-        visible={failed}
-        onDismiss={() => (save.reset(), setActive.reset(), deleteGenerated.reset(), deleteRule.reset())}
-      >
+      <Snackbar visible={failed} onDismiss={() => (save.reset(), setActive.reset())}>
         保存できませんでした。通信状態を確認してください
       </Snackbar>
     </View>
