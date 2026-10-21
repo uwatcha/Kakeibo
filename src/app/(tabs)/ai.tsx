@@ -20,9 +20,11 @@ import {
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
 import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
+import { loadLastConversation, saveLastConversation } from '@/features/ai/lastConversation';
 import { aiKeys, useAiStatus, useAiUsageToday, useConversation, useConversations } from '@/features/ai/hooks';
 import { daysUntilDeletion, RETENTION_DAYS, titleFrom } from '@/features/ai/retention';
 import { useCategories } from '@/features/categories/hooks';
+import { appGuideText } from '@/features/info/terms';
 import { useEmployers } from '@/features/employers/hooks';
 import { useRules } from '@/features/recurring/hooks';
 import { fetchTransactionsSince } from '@/features/transactions/api';
@@ -32,6 +34,9 @@ import { RADIUS, SPACING } from '@/theme';
 /** 混み合いで送れなかったときに送り直す間隔と回数（30秒ごと・最大20回 = 10分） */
 const RETRY_INTERVAL_MS = 30_000;
 const MAX_RETRIES = 20;
+
+/** アプリを起動してから、最後に開いていた会話を開き直したか（起動し直すまで1回だけ） */
+let restoredLastConversation = false;
 
 /** AI に渡す記録の期間（日） */
 const CONTEXT_DAYS = 90;
@@ -76,6 +81,22 @@ export default function AiChatScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
+
+  // 起動し直して会話が開いていないときは、最後に開いていた会話（なければいちばん新しい会話）を開く
+  useEffect(() => {
+    if (restoredLastConversation || conversationId || !conversations.data) return;
+    restoredLastConversation = true;
+    loadLastConversation().then((last) => {
+      const target = conversations.data.find((c) => c.id === last) ?? conversations.data[0];
+      if (target) router.setParams({ c: target.id });
+    });
+  }, [conversationId, conversations.data]);
+  // 開いている会話を覚えておく（新しいチャットにしたら忘れる）
+  useEffect(() => {
+    if (!conversationId) return;
+    restoredLastConversation = true;
+    saveLastConversation(conversationId);
+  }, [conversationId]);
   // 混み合いで送れなかったとき、画面を開いている間は自動で送り直し続ける
   const [retry, setRetry] = useState<{ count: number; text: string } | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,6 +134,7 @@ export default function AiChatScreen() {
         disabled={!conversationId || sending}
         onPress={() => {
           setError(null);
+          saveLastConversation(null);
           router.setParams({ c: undefined });
         }}
       />
@@ -174,7 +196,7 @@ export default function AiChatScreen() {
     tries: number,
   ) => {
     try {
-      const system = `${SYSTEM_PROMPT}\n\n# 家計の材料\n${buildContext(source, aliases)}`;
+      const system = `${SYSTEM_PROMPT}\n\n# アプリの画面と用語\n${appGuideText()}\n\n# 家計の材料\n${buildContext(source, aliases)}`;
       const messages: AiMessage[] = history.map((m) => ({ role: m.role, text: m.sent }));
       const reply = await sendAiChat(system, messages);
       // 質問と返事を保存する。初めての質問なら会話を作る
@@ -229,7 +251,17 @@ export default function AiChatScreen() {
       <Tabs.Screen options={{ headerRight }} />
       {conversations.data && <AutoTitler conversations={conversations.data} aliases={aliases} />}
 
-      <KeyboardAvoidingView behavior="padding" style={styles.container} keyboardVerticalOffset={insets.top + 64}>
+      <View style={[styles.titleBar, { borderBottomColor: theme.colors.outlineVariant }]}>
+        <Text variant="titleSmall" numberOfLines={1} style={styles.title}>
+          {(conversationId && conversation.data?.conversation.title) || '新しいチャット'}
+        </Text>
+      </View>
+
+      <KeyboardAvoidingView
+        behavior="padding"
+        style={styles.container}
+        keyboardVerticalOffset={insets.top + 64 + TITLE_BAR_HEIGHT}
+      >
         <FlatList
           ref={listRef}
           data={items}
@@ -310,8 +342,18 @@ export default function AiChatScreen() {
   );
 }
 
+/** トップバーの下の、会話のタイトルの帯の高さ */
+const TITLE_BAR_HEIGHT = 36;
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  titleBar: {
+    height: TITLE_BAR_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.screen,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  title: { fontWeight: '700' },
   center: { alignItems: 'center', justifyContent: 'center' },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   messages: { padding: SPACING.screen, gap: 10 },

@@ -61,7 +61,7 @@ export type Conversation = {
   last_total_tokens: number;
   created_at: string;
   updated_at: string;
-  title_generated: boolean;
+  title_generated_at: string | null;
 };
 export type StoredMessage = { id: number; role: 'user' | 'model'; shown: string; sent: string };
 
@@ -71,7 +71,7 @@ export async function fetchConversations(cutoff: string): Promise<Conversation[]
   if (purge.error) throw purge.error;
   const { data, error } = await supabase
     .from('ai_conversations')
-    .select('id, title, pinned, last_total_tokens, created_at, updated_at, title_generated')
+    .select('id, title, pinned, last_total_tokens, created_at, updated_at, title_generated_at')
     .order('pinned', { ascending: false })
     .order('updated_at', { ascending: false });
   if (error) throw error;
@@ -84,7 +84,7 @@ export async function fetchConversation(
   const [c, m] = await Promise.all([
     supabase
       .from('ai_conversations')
-      .select('id, title, pinned, last_total_tokens, created_at, updated_at, title_generated')
+      .select('id, title, pinned, last_total_tokens, created_at, updated_at, title_generated_at')
       .eq('id', id)
       .single(),
     supabase.from('ai_messages').select('id, role, shown, sent').eq('conversation_id', id).order('id'),
@@ -130,10 +130,17 @@ export async function deleteConversation(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** 会話（名前を置き換えた文）から、AI に短いタイトルを作ってもらう */
-export const generateTitle = (messages: AiMessage[]) => callAi<{ title: string }>({ action: 'title', messages });
+/**
+ * 会話（名前を置き換えた文）から、AI に短いタイトルを作ってもらう。
+ * currentTitle（置き換え後）を渡すと、話題が大きく変わっていなければそのまま返ってくる
+ */
+export const generateTitle = (messages: AiMessage[], currentTitle?: string) =>
+  callAi<{ title: string }>({ action: 'title', messages, currentTitle });
 
 export async function saveGeneratedTitle(id: string, title: string): Promise<void> {
-  const { error } = await supabase.from('ai_conversations').update({ title, title_generated: true }).eq('id', id);
+  const { error } = await supabase
+    .from('ai_conversations')
+    .update({ title, title_generated_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
 }

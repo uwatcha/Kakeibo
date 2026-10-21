@@ -56,7 +56,11 @@ export function ListRow({
             {title}
           </Text>
           {typeof subtitle === 'string' ? (
-            <Text variant="bodySmall" numberOfLines={wrap ? undefined : 1} style={{ color: theme.colors.onSurfaceVariant }}>
+            <Text
+              variant="bodySmall"
+              numberOfLines={wrap ? undefined : 1}
+              style={{ color: theme.colors.onSurfaceVariant }}
+            >
               {subtitle}
             </Text>
           ) : (

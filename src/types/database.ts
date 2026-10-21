@@ -102,7 +102,7 @@ export type Database = {
           last_total_tokens: number
           pinned: boolean
           title: string
-          title_generated: boolean
+          title_generated_at: string | null
           updated_at: string
           user_id: string
         }
@@ -112,7 +112,7 @@ export type Database = {
           last_total_tokens?: number
           pinned?: boolean
           title: string
-          title_generated?: boolean
+          title_generated_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -122,7 +122,7 @@ export type Database = {
           last_total_tokens?: number
           pinned?: boolean
           title?: string
-          title_generated?: boolean
+          title_generated_at?: string | null
           updated_at?: string
           user_id?: string
         }

@@ -24,9 +24,20 @@ describe('titleFrom', () => {
 });
 
 describe('needsAutoTitle', () => {
-  it('作ってから1日たち、まだ付けていない会話だけ', () => {
-    expect(needsAutoTitle({ created_at: '2026-10-20T12:00:00Z', title_generated: false }, now)).toBe(true);
-    expect(needsAutoTitle({ created_at: '2026-10-20T13:00:00Z', title_generated: false }, now)).toBe(false);
-    expect(needsAutoTitle({ created_at: '2026-10-01T00:00:00Z', title_generated: true }, now)).toBe(false);
+  const at = (created_at: string, updated_at: string, title_generated_at: string | null) => ({
+    created_at,
+    updated_at,
+    title_generated_at,
+  });
+  it('まだ付けていない会話は、作ってから1日たったら', () => {
+    expect(needsAutoTitle(at('2026-10-20T12:00:00Z', '2026-10-20T12:00:00Z', null), now)).toBe(true);
+    expect(needsAutoTitle(at('2026-10-20T13:00:00Z', '2026-10-20T13:00:00Z', null), now)).toBe(false);
+  });
+  it('付けたことがある会話は、そのあとにやりとりがあり、付けてから1日たったら', () => {
+    expect(needsAutoTitle(at('2026-10-01T00:00:00Z', '2026-10-21T00:00:00Z', '2026-10-20T00:00:00Z'), now)).toBe(true);
+    // やりとりがない
+    expect(needsAutoTitle(at('2026-10-01T00:00:00Z', '2026-10-19T00:00:00Z', '2026-10-20T00:00:00Z'), now)).toBe(false);
+    // 付けてから1日たっていない
+    expect(needsAutoTitle(at('2026-10-01T00:00:00Z', '2026-10-21T12:00:00Z', '2026-10-21T00:00:00Z'), now)).toBe(false);
   });
 });

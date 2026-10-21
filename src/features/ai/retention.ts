@@ -20,10 +20,17 @@ export function titleFrom(question: string): string {
   return line.length > 30 ? `${line.slice(0, 30)}…` : line;
 }
 
-/** 作ってからこの日数たった会話に、AI がタイトルを付ける（要件 No.44） */
+/** 作ってから・前に付けてからこの日数たった会話に、AI がタイトルを付ける（要件 No.44・改善要望で1日おきに） */
 export const AUTO_TITLE_AFTER_DAYS = 1;
 
-/** AI にタイトルを付けてもらう会話か（作ってから1日たっていて、まだ付けていない） */
-export function needsAutoTitle(c: { created_at: string; title_generated: boolean }, now: Date): boolean {
-  return !c.title_generated && now.getTime() - new Date(c.created_at).getTime() >= AUTO_TITLE_AFTER_DAYS * DAY_MS;
+type TitleState = { created_at: string; updated_at: string; title_generated_at: string | null };
+
+/**
+ * AI にタイトルを付けてもらう会話か。
+ * まだ付けていなければ作ってから1日たったとき、付けたことがあれば、そのあとにやりとりがあって1日たったとき
+ */
+export function needsAutoTitle(c: TitleState, now: Date): boolean {
+  const since = (iso: string) => now.getTime() - new Date(iso).getTime() >= AUTO_TITLE_AFTER_DAYS * DAY_MS;
+  if (c.title_generated_at === null) return since(c.created_at);
+  return new Date(c.updated_at) > new Date(c.title_generated_at) && since(c.title_generated_at);
 }

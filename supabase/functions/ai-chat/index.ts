@@ -202,8 +202,13 @@ Deno.serve(async (req) => {
         if (!settings?.gemini_api_key) return json({ error: 'API キーを登録してください' }, 400);
         const messages = (body.messages ?? []) as { role: 'user' | 'model'; text: string }[];
         const transcript = messages.map((m) => `${m.role === 'user' ? '質問' : '答え'}: ${m.text}`).join('\n').slice(0, 4000);
+        // 付け直しのときは今のタイトルを渡し、話題が大きく変わっていなければそのまま返してもらう
+        const currentTitle = typeof body.currentTitle === 'string' ? body.currentTitle.slice(0, 60) : '';
         const system =
-          '次の家計相談の会話に、内容が分かる日本語のタイトルを付けてください。20文字以内、記号や引用符なし、タイトルだけを1行で返す。「相手A」「内容1」のような名前はそのまま使う。';
+          '次の家計相談の会話に、内容が分かる日本語のタイトルを付けてください。20文字以内、記号や引用符なし、タイトルだけを1行で返す。「相手A」「内容1」のような名前はそのまま使う。' +
+          (currentTitle
+            ? `今のタイトルは「${currentTitle}」です。会話の話題が大きく変わっていなければ、今のタイトルを一字も変えずにそのまま返す。`
+            : '');
         let out;
         for (const candidate of [LIGHT_FALLBACK_MODEL, FALLBACK_MODEL]) {
           try {
