@@ -3,6 +3,7 @@ import { Button, Modal, Portal, Text, useTheme } from 'react-native-paper';
 
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
+import { formatDay } from '@/lib/date';
 import { RADIUS, SPACING } from '@/theme';
 
 import { ACCOUNT_KIND_INFO } from '../accountKinds';
@@ -13,10 +14,12 @@ type Props = {
   visible: boolean;
   onDismiss: () => void;
   accounts: readonly AccountBalance[];
+  /** 汎用資産に含めた予定（クレカの最後の引き落としの日まで）。なければ null */
+  planned: { through: string; amount: number } | null;
 };
 
 /** 汎用資産の内訳。プラスの口座とマイナスの口座（クレカの未払い・借りているお金など）を分けて並べる */
-export function AvailableBreakdownSheet({ visible, onDismiss, accounts }: Props) {
+export function AvailableBreakdownSheet({ visible, onDismiss, accounts, planned }: Props) {
   const theme = useTheme();
   const { plus, minus, plusTotal, minusTotal } = availableBreakdown(accounts);
 
@@ -50,10 +53,22 @@ export function AvailableBreakdownSheet({ visible, onDismiss, accounts }: Props)
         <Text variant="titleMedium" style={[styles.title, styles.bold]}>
           汎用資産の内訳
         </Text>
-        <Amount value={plusTotal + minusTotal} variant="headlineMedium" style={[styles.title, styles.total]} />
+        <Amount
+          value={plusTotal + minusTotal + (planned?.amount ?? 0)}
+          variant="headlineMedium"
+          style={[styles.title, styles.total]}
+        />
         <ScrollView style={styles.list}>
           {group('プラス', plus, plusTotal)}
           {group('マイナス', minus, minusTotal)}
+          {planned && (
+            <View style={styles.groupHeader}>
+              <Text variant="labelLarge" style={[styles.bold, { color: theme.colors.onSurfaceVariant }]}>
+                予定（{formatDay(planned.through)}まで）
+              </Text>
+              <Amount value={planned.amount} kind="delta" variant="labelLarge" style={styles.bold} />
+            </View>
+          )}
         </ScrollView>
         <Button onPress={onDismiss} style={styles.close}>
           閉じる

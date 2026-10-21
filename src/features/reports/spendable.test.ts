@@ -1,4 +1,4 @@
-import { monthEnd, plannedEffect, spendableUntil } from './spendable';
+import { lastCardPayment, monthEnd, plannedEffect, spendableUntil } from './spendable';
 
 const isTarget = (id: string) => id !== 'nisa';
 const move = (date: string, amount: number, from: string | null, to: string | null) => ({
@@ -56,5 +56,26 @@ describe('spendableUntil', () => {
 describe('monthEnd', () => {
   it('うるう年の2月', () => {
     expect(monthEnd('2028-02-10')).toBe('2028-02-29');
+  });
+});
+
+describe('lastCardPayment', () => {
+  const m = (date: string, from: string | null, to: string | null) => ({
+    date,
+    amount: 100,
+    from_account_id: from,
+    to_account_id: to,
+  });
+  const isCard = (id: string) => id === 'card';
+
+  it('含めるクレカへの、今日より後のいちばん後の引き落とし日', () => {
+    const movements = [m('2026-10-27', 'bank', 'card'), m('2026-11-27', 'bank', 'card'), m('2026-12-01', 'bank', null)];
+    expect(lastCardPayment(movements, isCard, '2026-10-21')).toBe('2026-11-27');
+  });
+
+  it('引き落としの予定がなければ null（今日以前は数えない）', () => {
+    expect(
+      lastCardPayment([m('2026-10-20', 'bank', 'card'), m('2026-10-30', 'bank', 'other')], isCard, '2026-10-21'),
+    ).toBeNull();
   });
 });

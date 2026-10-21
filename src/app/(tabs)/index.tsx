@@ -19,7 +19,7 @@ import { nextPayday } from '@/features/employers/payday';
 import type { Movement } from '@/features/reports/api';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { findShortages, lowestAhead, planCovers, type ShortageCover } from '@/features/reports/shortage';
-import { monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
+import { lastCardPayment, monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
@@ -102,6 +102,14 @@ export default function HomeScreen() {
   const spendable = future.data
     ? spendableUntil(summary.availableNetWorth, future.data, (id) => targets.has(id), today, next?.date ?? null)
     : null;
+  // 汎用資産: 含めるクレカのいちばん後の引き落としの予定日までの、ほかの予定（支出・収入）も含める
+  // （クレカの未払いは引き落としで消える前提なので、それまでの予定も合わせて見る）
+  const includedCards = new Set(data.filter((a) => a.kind === 'credit_card' && isAvailableAccount(a)).map((a) => a.id));
+  const cardHorizon = future.data ? lastCardPayment(future.data, (id) => includedCards.has(id), today) : null;
+  const availablePlanned =
+    future.data && cardHorizon ? plannedEffect(future.data, (id) => targets.has(id), today, cardHorizon) : 0;
+  const availableAmount = summary.availableNetWorth + availablePlanned;
+
   // 月末の見込み（REQ-20）: 汎用資産に月末までの予定（給料日の入金も含む）を反映した額
   const monthEndForecast = future.data
     ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, monthEnd(today))
@@ -220,7 +228,8 @@ export default function HomeScreen() {
           pages={[
             {
               title: '汎用資産',
-              amount: summary.availableNetWorth,
+              amount: availableAmount,
+              detail: cardHorizon ? `${formatDay(cardHorizon)}までの予定を含む` : undefined,
               onPress: () => setShowBreakdown(true),
             },
             { title: '純資産', amount: summary.netWorth },
@@ -277,7 +286,12 @@ export default function HomeScreen() {
           onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
         />
       )}
-      <AvailableBreakdownSheet visible={showBreakdown} onDismiss={() => setShowBreakdown(false)} accounts={data} />
+      <AvailableBreakdownSheet
+        visible={showBreakdown}
+        onDismiss={() => setShowBreakdown(false)}
+        accounts={data}
+        planned={cardHorizon ? { through: cardHorizon, amount: availablePlanned } : null}
+      />
     </View>
   );
 }

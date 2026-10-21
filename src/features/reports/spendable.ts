@@ -55,3 +55,21 @@ export function spendableUntil(
   const daysLeft = daysBetween(today, end) + 1;
   return { through: end, daysLeft, amount, perDay: amount > 0 ? Math.floor(amount / daysLeft) : null };
 }
+
+/**
+ * 汎用資産に予定を含める期限: 汎用資産に含めるクレカへの、いちばん後の引き落とし（振替）の予定日。
+ * クレカの未払いは引き落としで消える前提なので、それまでの他の予定（支出・収入）も合わせて見る。予定がなければ null
+ */
+export function lastCardPayment(
+  movements: readonly Movement[],
+  isIncludedCard: (accountId: string) => boolean,
+  today: string,
+): string | null {
+  let last: string | null = null;
+  for (const m of movements) {
+    if (m.date > today && m.to_account_id && isIncludedCard(m.to_account_id) && (!last || m.date > last)) {
+      last = m.date;
+    }
+  }
+  return last;
+}
