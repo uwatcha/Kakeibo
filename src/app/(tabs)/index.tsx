@@ -149,14 +149,6 @@ export default function HomeScreen() {
         {shortages.length > 0 && (
           <SectionCard
             title="足りなくなる口座"
-            // まだ作り込み中の機能であることを示す（2026-10-20 時点。CLAUDE.md の決定事項を参照）
-            right={
-              <View style={[styles.beta, { borderColor: theme.colors.outline }]}>
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  ベータ
-                </Text>
-              </View>
-            }
             // どこから振り替えても足りない口座があれば赤、振替で切り抜けられるものだけなら黄色
             left={
               <MaterialCommunityIcons
@@ -301,7 +293,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 96 },
   total: { fontWeight: '700' },
   transfer: { fontWeight: '700' },
-  beta: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   empty: { gap: 12, padding: 16 },
   collapsibleHeader: {
     flexDirection: 'row',
