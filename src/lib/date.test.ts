@@ -1,4 +1,5 @@
 import {
+  daysInclusive,
   addDays,
   addMonths,
   dateStringToLocalDate,
@@ -57,5 +58,12 @@ describe('addDays', () => {
     ['2026-12-31', 1, '2027-01-01'],
   ])('%s + %d → %s', (date, n, expected) => {
     expect(addDays(date, n)).toBe(expected);
+  });
+});
+
+describe('daysInclusive', () => {
+  it('両端を含めて数える', () => {
+    expect(daysInclusive('2026-10-21', '2026-10-21')).toBe(1);
+    expect(daysInclusive('2026-10-21', '2026-11-20')).toBe(31);
   });
 });

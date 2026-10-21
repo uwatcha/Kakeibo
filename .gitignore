@@ -49,8 +49,5 @@ supabase/.temp
 # Python
 __pycache__/
 
-# ダミーデータの id（scripts/seed-dummy.py）
-scripts/.dummy-data.json
-
 # ユーザーから受け取る実データ（CSV など）。git に入れない
 data/

@@ -1,6 +1,7 @@
-import { addDays } from '@/lib/date';
+import { addDays, daysInclusive } from '@/lib/date';
 
 import type { Movement } from './api';
+import { plannedEffect } from './plans';
 
 /**
  * 給料日までに使える額（2026-10-21 の改善要望。案2と案3を組み合わせた考え方）
@@ -41,7 +42,7 @@ export type Budget = {
   /** 給料日までに使える額（2か月先まで見通して、今から取り置く分も引いた額） */
   amount: number;
   /**
-   * 次の給料日までなら使える額: 今の残高に給料日の前日までの予定（クレカの引き落としを含む）を足しただけの額。
+   * 次の給料日までに残る額: 今の残高に給料日の前日までの予定（クレカの引き落としを含む）を足しただけの額。
    * 給料日より後の支払い・取り置きは入れない。マイナスなら給料日までにお金が尽きる
    */
   untilPayday: number;
@@ -55,19 +56,9 @@ export type Budget = {
   shortfalls: Shortfall[];
 };
 
-const daysBetween = (from: string, to: string) =>
-  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
-
 /** after より後、through まで（through を含む）の予定による、資産の口座の増減 */
-function cashEffect(input: BudgetInput, after: string, through: string): number {
-  let effect = 0;
-  for (const m of input.movements) {
-    if (m.date <= after || m.date > through) continue;
-    if (m.to_account_id && input.isCash(m.to_account_id)) effect += m.amount;
-    if (m.from_account_id && input.isCash(m.from_account_id)) effect -= m.amount;
-  }
-  return effect;
-}
+const cashEffect = (input: BudgetInput, after: string, through: string) =>
+  plannedEffect(input.movements, input.isCash, after, through);
 
 export function computeBudget(input: BudgetInput): Budget {
   const { today, paydays } = input;
@@ -96,7 +87,7 @@ export function computeBudget(input: BudgetInput): Budget {
     const net =
       cashEffect(input, addDays(from, -1), to) +
       (usageByPeriod.get(k) ?? 0) -
-      input.dailyLiving * daysBetween(from, to);
+      input.dailyLiving * daysInclusive(from, to);
     carry += net;
     if (carry < 0) {
       shortfalls.push({ from, to, amount: 0 - carry });
@@ -128,6 +119,6 @@ export function estimateDailyLiving(
   const used = expenses.filter((e) => !e.recurring && e.date >= since && e.date <= today);
   if (used.length === 0) return 0;
   const first = used.reduce((min, e) => (e.date < min ? e.date : min), today);
-  const span = Math.min(days, daysBetween(first, today));
+  const span = Math.min(days, daysInclusive(first, today));
   return Math.round(used.reduce((sum, e) => sum + e.amount, 0) / span);
 }

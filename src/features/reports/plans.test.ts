@@ -1,4 +1,4 @@
-import { lastCardPayment, monthEnd, plannedEffect, spendableUntil } from './spendable';
+import { effectOn, lastCardPayment, plannedEffect } from './plans';
 
 const isTarget = (id: string) => id !== 'nisa';
 const move = (date: string, amount: number, from: string | null, to: string | null) => ({
@@ -21,41 +21,11 @@ describe('plannedEffect', () => {
   });
 });
 
-describe('spendableUntil', () => {
-  it('次の給料日の前日までの予定を引き、1日あたりを出す', () => {
-    const result = spendableUntil(
-      30000,
-      [move('2026-10-20', 5000, 'bank', null)],
-      isTarget,
-      '2026-10-18',
-      '2026-10-23',
-    );
-    expect(result).toEqual({ through: '2026-10-22', daysLeft: 5, amount: 25000, perDay: 5000 });
-  });
-
-  it('給料日がなければ月末まで', () => {
-    expect(spendableUntil(31000, [], isTarget, '2026-10-01', null)).toMatchObject({
-      through: '2026-10-31',
-      daysLeft: 31,
-      perDay: 1000,
-    });
-  });
-
-  it('マイナスなら1日あたりは出さない', () => {
-    expect(spendableUntil(-8000, [], isTarget, '2026-10-18', '2026-10-23').perDay).toBeNull();
-  });
-
-  it('給料日が明日なら今日だけ', () => {
-    expect(spendableUntil(1000, [], isTarget, '2026-10-22', '2026-10-23')).toMatchObject({
-      through: '2026-10-22',
-      daysLeft: 1,
-    });
-  });
-});
-
-describe('monthEnd', () => {
-  it('うるう年の2月', () => {
-    expect(monthEnd('2028-02-10')).toBe('2028-02-29');
+describe('effectOn', () => {
+  it('対象に入れば +、出れば −、対象どうしは 0', () => {
+    expect(effectOn(move('2026-10-21', 100, null, 'bank'), isTarget)).toBe(100);
+    expect(effectOn(move('2026-10-21', 100, 'bank', 'nisa'), isTarget)).toBe(-100);
+    expect(effectOn(move('2026-10-21', 100, 'bank', 'wallet'), isTarget)).toBe(0);
   });
 });
 
