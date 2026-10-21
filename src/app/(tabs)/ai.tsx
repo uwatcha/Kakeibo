@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { QueryState } from '@/components/QueryState';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
+import { homeContext } from '@/features/ai/homeContext';
 import {
   AiError,
   type AiMessage,
@@ -24,6 +25,7 @@ import { loadLastConversation, saveLastConversation } from '@/features/ai/lastCo
 import { aiKeys, useAiStatus, useAiUsageToday, useConversation, useConversations } from '@/features/ai/hooks';
 import { daysUntilDeletion, RETENTION_DAYS, titleFrom } from '@/features/ai/retention';
 import { useCategories } from '@/features/categories/hooks';
+import { useHomeFigures } from '@/features/home/hooks';
 import { appGuideText } from '@/features/info/terms';
 import { useEmployers } from '@/features/employers/hooks';
 import { useRules } from '@/features/recurring/hooks';
@@ -66,6 +68,8 @@ export default function AiChatScreen() {
   const queryClient = useQueryClient();
   const usage = useAiUsageToday(today);
   const balances = useAccountBalances();
+  // ホームに出ている額も渡す（「ホームの〜」のような質問に、画面と同じ数字で答えられるように）
+  const home = useHomeFigures(today);
   const categories = useCategories();
   const employers = useEmployers();
   const rules = useRules();
@@ -196,7 +200,7 @@ export default function AiChatScreen() {
     tries: number,
   ) => {
     try {
-      const system = `${SYSTEM_PROMPT}\n\n# アプリの画面と用語\n${appGuideText()}\n\n# 家計の材料\n${buildContext(source, aliases)}`;
+      const system = `${SYSTEM_PROMPT}\n\n# アプリの画面と用語\n${appGuideText()}\n\n# 家計の材料\n${buildContext(source, aliases)}${home.figures ? `\n\n${homeContext(home.figures, aliases)}` : ''}`;
       const messages: AiMessage[] = history.map((m) => ({ role: m.role, text: m.sent }));
       const reply = await sendAiChat(system, messages);
       // 質問と返事を保存する。初めての質問なら会話を作る
