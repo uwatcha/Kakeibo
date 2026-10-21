@@ -12,7 +12,7 @@ type Props = {
   allowDeselect?: boolean;
   /** 列の最後に足すチップ（「すべて表示」など） */
   extra?: ReactNode;
-  /** 2 なら2行に分けて並べ、横スクロールは2行まとめて動く（少ないときは1行） */
+  /** 2 なら上下2つずつの列にして並べ（上→下→次の列の順）、横スクロールは2行まとめて動く（少ないときは1行） */
   rows?: 1 | 2;
 };
 
@@ -28,18 +28,27 @@ const SCROLL_MARGIN = 24;
 export function ChipGroup({ options, value, onChange, allowDeselect = false, extra, rows = 1 }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const chipLayouts = useRef(new Map<string, LayoutRectangle>());
+  // 2行のときチップの位置は列の中での位置なので、列の左端を足して横スクロールの中での位置にする
+  const columnX = useRef(new Map<string, number>());
   const viewport = useRef({ offset: 0, width: 0 });
   // 同じ選択で何度もスクロールしない（自分で横に動かしたあとに引き戻さない）
   const scrolledFor = useRef<string | null>(null);
 
+  const twoRows = rows === 2 && options.length > MIN_FOR_TWO_ROWS;
+  // 列に入っているチップ（列の位置が分かるまでスクロールを待つ）
+  const inColumn = useRef(new Set<string>());
+
   const scrollToSelected = (selected: string | null) => {
     if (!selected || scrolledFor.current === selected) return;
     const chip = chipLayouts.current.get(selected);
+    // 2行のときは列の位置が分かるまで待つ
+    if (inColumn.current.has(selected) && !columnX.current.has(selected)) return;
     const { offset, width } = viewport.current;
     if (!chip || width === 0) return;
+    const x = chip.x + (columnX.current.get(selected) ?? 0);
     scrolledFor.current = selected;
-    const visible = chip.x >= offset && chip.x + chip.width <= offset + width;
-    if (!visible) scrollRef.current?.scrollTo({ x: Math.max(0, chip.x - SCROLL_MARGIN), animated: true });
+    const visible = x >= offset && x + chip.width <= offset + width;
+    if (!visible) scrollRef.current?.scrollTo({ x: Math.max(0, x - SCROLL_MARGIN), animated: true });
   };
 
   useEffect(() => {
@@ -58,6 +67,11 @@ export function ChipGroup({ options, value, onChange, allowDeselect = false, ext
         onPress={() => onChange(selected && allowDeselect ? null : o.value)}
         onLayout={(e) => {
           chipLayouts.current.set(o.value, e.nativeEvent.layout);
+          if (twoRows) inColumn.current.add(o.value);
+          else {
+            inColumn.current.delete(o.value);
+            columnX.current.delete(o.value);
+          }
           // 最初に選ばれていたチップは、並んだ時点でスクロールする
           if (selected) scrollToSelected(o.value);
         }}
@@ -67,9 +81,9 @@ export function ChipGroup({ options, value, onChange, allowDeselect = false, ext
     );
   };
 
-  const twoRows = rows === 2 && options.length > MIN_FOR_TWO_ROWS;
-  // 前半を上の行、後半を下の行に置き、1つの横スクロールに入れて一緒に動かす
-  const half = Math.ceil(options.length / 2);
+  // 2つずつ縦に積んだ列を横に並べる。管理画面と同じ順のまま、先頭の項目が左に集まる
+  const columns: ChipOption[][] = [];
+  for (let i = 0; i < options.length; i += 2) columns.push(options.slice(i, i + 2));
 
   return (
     <ScrollView
@@ -88,11 +102,19 @@ export function ChipGroup({ options, value, onChange, allowDeselect = false, ext
     >
       {twoRows ? (
         <>
-          <View style={styles.row}>{options.slice(0, half).map(chip)}</View>
-          <View style={styles.row}>
-            {options.slice(half).map(chip)}
-            {extra}
-          </View>
+          {columns.map((column) => (
+            <View
+              key={column[0].value}
+              style={styles.column}
+              onLayout={(e) => {
+                for (const o of column) columnX.current.set(o.value, e.nativeEvent.layout.x);
+                if (column.some((o) => o.value === value)) scrollToSelected(value);
+              }}
+            >
+              {column.map(chip)}
+            </View>
+          ))}
+          {extra && <View style={styles.column}>{extra}</View>}
         </>
       ) : (
         <>
@@ -106,5 +128,6 @@ export function ChipGroup({ options, value, onChange, allowDeselect = false, ext
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
-  grid: { flexDirection: 'column' },
+  grid: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
+  column: { gap: 8, alignItems: 'flex-start' },
 });

@@ -19,6 +19,8 @@ type Props = {
   onPress?: () => void;
   onLongPress?: () => void;
   disabled?: boolean;
+  /** 名前と補足を1行で切らずに折り返す（内訳など、名前が長くても全部見せたいとき） */
+  wrap?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -33,6 +35,7 @@ export function ListRow({
   onPress,
   onLongPress,
   disabled,
+  wrap,
   style,
 }: Props) {
   const theme = useTheme();
@@ -49,11 +52,11 @@ export function ListRow({
             <MaterialCommunityIcons name={icon as IconName} size={24} color={color} style={styles.icon} />
           ))}
         <View style={styles.body}>
-          <Text variant="bodyLarge" numberOfLines={1}>
+          <Text variant="bodyLarge" numberOfLines={wrap ? undefined : 1}>
             {title}
           </Text>
           {typeof subtitle === 'string' ? (
-            <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+            <Text variant="bodySmall" numberOfLines={wrap ? undefined : 1} style={{ color: theme.colors.onSurfaceVariant }}>
               {subtitle}
             </Text>
           ) : (

@@ -63,6 +63,7 @@ export function BreakdownSheet({ visible, onDismiss, title, total, sections, not
                     title={row.title}
                     subtitle={row.subtitle}
                     icon={row.icon}
+                    wrap
                     right={<Amount value={row.amount} kind={row.kind} variant="bodyLarge" />}
                   />
                 ))}
