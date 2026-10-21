@@ -51,7 +51,6 @@ export type Database = {
           memo: string | null
           name: string
           opening_balance: number
-          sort_order: number
           transfer_priority: number
           user_id: string
         }
@@ -66,7 +65,6 @@ export type Database = {
           memo?: string | null
           name: string
           opening_balance?: number
-          sort_order?: number
           transfer_priority?: number
           user_id?: string
         }
@@ -81,7 +79,6 @@ export type Database = {
           memo?: string | null
           name?: string
           opening_balance?: number
-          sort_order?: number
           transfer_priority?: number
           user_id?: string
         }
@@ -564,24 +561,7 @@ export type Database = {
           is_reserved: boolean | null
           kind: Database["public"]["Enums"]["account_kind"] | null
           name: string | null
-          sort_order: number | null
           transfer_priority: number | null
-        }
-        Relationships: []
-      }
-      category_monthly_expense: {
-        Row: {
-          amount: number | null
-          category_id: string | null
-          month: string | null
-        }
-        Relationships: []
-      }
-      monthly_summary: {
-        Row: {
-          expense: number | null
-          income: number | null
-          month: string | null
         }
         Relationships: []
       }
