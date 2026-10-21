@@ -7,16 +7,32 @@ export type AiStatus = { hasKey: boolean; model: string | null; models: AiModel[
 export type AiMessage = { role: 'user' | 'model'; text: string };
 export type AiReply = { text: string; usage: { prompt: number; output: number; total: number }; model: string };
 
+/** AI 相談の失敗。temporary は混み合い・通信の失敗など、少し待てば通るかもしれないもの */
+export class AiError extends Error {
+  constructor(
+    message: string,
+    public temporary: boolean,
+  ) {
+    super(message);
+  }
+}
+
+/** Gemini の混み合い・一時的な障害の状態コード（Edge Function が status に入れて返す） */
+const TEMPORARY_STATUSES = [500, 502, 503, 504];
+
 /** Edge Function ai-chat を呼ぶ。失敗したら関数が返したメッセージで投げる */
 async function callAi<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('ai-chat', { body });
   if (error) {
-    let message = '通信できませんでした';
     if (error instanceof FunctionsHttpError) {
-      const detail = (await error.context.json().catch(() => null)) as { error?: string } | null;
-      if (detail?.error) message = detail.error;
+      const detail = (await error.context.json().catch(() => null)) as { error?: string; status?: number } | null;
+      throw new AiError(
+        detail?.error ?? '通信できませんでした',
+        detail?.status !== undefined && TEMPORARY_STATUSES.includes(detail.status),
+      );
     }
-    throw new Error(message);
+    // 関数まで届かなかった（電波が悪いなど）
+    throw new AiError('通信できませんでした', true);
   }
   return data as T;
 }

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Tabs, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { ActivityIndicator, Button, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
@@ -9,7 +9,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { QueryState } from '@/components/QueryState';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
-import { type AiMessage, appendExchange, createConversation, fetchConversation, sendAiChat } from '@/features/ai/api';
+import {
+  AiError,
+  type AiMessage,
+  appendExchange,
+  createConversation,
+  fetchConversation,
+  sendAiChat,
+} from '@/features/ai/api';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
 import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
@@ -21,6 +28,10 @@ import { useRules } from '@/features/recurring/hooks';
 import { fetchTransactionsSince } from '@/features/transactions/api';
 import { addDays, toTokyoDateString } from '@/lib/date';
 import { RADIUS, SPACING } from '@/theme';
+
+/** 混み合いで送れなかったときに送り直す間隔と回数（30秒ごと・最大20回 = 10分） */
+const RETRY_INTERVAL_MS = 30_000;
+const MAX_RETRIES = 20;
 
 /** AI に渡す記録の期間（日） */
 const CONTEXT_DAYS = 90;
@@ -65,6 +76,15 @@ export default function AiChatScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
+  // 混み合いで送れなかったとき、画面を開いている間は自動で送り直し続ける
+  const [retry, setRetry] = useState<{ count: number; text: string } | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    },
+    [],
+  );
 
   const stored: ChatItem[] = conversationId ? (conversation.data?.messages ?? []) : [];
   const items = pending ? [...stored, pending] : stored;
@@ -140,15 +160,19 @@ export default function AiChatScreen() {
   };
   const aliases = buildAliases(source);
 
-  const send = async () => {
-    const text = input.trim();
-    if (text === '' || sending) return;
-    const question = { shown: text, sent: maskText(text, aliases) };
-    const history = [...stored, { id: 'pending', role: 'user' as const, ...question }];
-    setPending(history[history.length - 1]);
-    setInput('');
-    setError(null);
-    setSending(true);
+  const finish = () => {
+    setRetry(null);
+    setPending(null);
+    setSending(false);
+  };
+
+  /** 送る。混み合いなどで失敗したら、30秒ごとに送り直す（最大 MAX_RETRIES 回） */
+  const attempt = async (
+    text: string,
+    question: { shown: string; sent: string },
+    history: ChatItem[],
+    tries: number,
+  ) => {
     try {
       const system = `${SYSTEM_PROMPT}\n\n# 家計の材料\n${buildContext(source, aliases)}`;
       const messages: AiMessage[] = history.map((m) => ({ role: m.role, text: m.sent }));
@@ -168,14 +192,36 @@ export default function AiChatScreen() {
       usage.refetch();
       // 使えなくなったモデルからサーバーが自動で切り替えたときは、表示のモデルも読み直す
       if (reply.model !== status.data?.model) queryClient.invalidateQueries({ queryKey: aiKeys.status() });
+      finish();
     } catch (e) {
+      if (e instanceof AiError && e.temporary && tries < MAX_RETRIES) {
+        setRetry({ count: tries + 1, text });
+        retryTimer.current = setTimeout(() => attempt(text, question, history, tries + 1), RETRY_INTERVAL_MS);
+        return;
+      }
       setError(e instanceof Error ? e.message : '送れませんでした');
       // 送れなかった質問は入力欄に戻す
       setInput(text);
-    } finally {
-      setPending(null);
-      setSending(false);
+      finish();
     }
+  };
+
+  const send = () => {
+    const text = input.trim();
+    if (text === '' || sending) return;
+    const question = { shown: text, sent: maskText(text, aliases) };
+    const history = [...stored, { id: 'pending', role: 'user' as const, ...question }];
+    setPending(history[history.length - 1]);
+    setInput('');
+    setError(null);
+    setSending(true);
+    attempt(text, question, history, 0);
+  };
+
+  const cancelRetry = () => {
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    if (retry) setInput(retry.text);
+    finish();
   };
 
   return (
@@ -221,7 +267,18 @@ export default function AiChatScreen() {
           )}
           ListFooterComponent={
             <>
-              {sending && <ActivityIndicator style={styles.thinking} />}
+              {sending && !retry && <ActivityIndicator style={styles.thinking} />}
+              {retry && (
+                <View style={styles.retry}>
+                  <ActivityIndicator size="small" />
+                  <Text variant="bodySmall" style={[styles.retryText, { color: theme.colors.onSurfaceVariant }]}>
+                    混み合っているので送り直しています（{retry.count}回目）
+                  </Text>
+                  <Button compact onPress={cancelRetry}>
+                    やめる
+                  </Button>
+                </View>
+              )}
               {error && (
                 <Text variant="bodySmall" style={[styles.error, { color: theme.colors.error }]}>
                   {error}
@@ -263,6 +320,8 @@ const styles = StyleSheet.create({
   modelBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
   thinking: { alignSelf: 'flex-start', marginLeft: 8 },
   error: { textAlign: 'center' },
+  retry: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
+  retryText: { flex: 1 },
   retention: { textAlign: 'center' },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 8, gap: 4 },
   input: { flex: 1, maxHeight: 120 },
