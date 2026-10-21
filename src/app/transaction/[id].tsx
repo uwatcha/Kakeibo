@@ -1,15 +1,13 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { Controller, type Resolver, useForm, type UseFormSetValue, useWatch } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
   Button,
-  Chip,
   Dialog,
   HelperText,
   IconButton,
-  List,
   Portal,
   SegmentedButtons,
   Snackbar,
@@ -21,92 +19,63 @@ import {
 import { ChipGroup } from '@/components/ChipGroup';
 import { QueryState } from '@/components/QueryState';
 import { StatusBadge } from '@/components/StatusBadge';
-import type { Account } from '@/features/accounts/api';
 import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
-import { categoryLabel } from '@/features/categories/tree';
 import { useEmployers } from '@/features/employers/hooks';
-import { fetchCategoryHistory, findSameDayAmount, type Transaction } from '@/features/transactions/api';
-import { defaultTypeForAccount, presetSide } from '@/features/transactions/accountPreset';
-import { guessCategory } from '@/features/transactions/categoryGuess';
-import { suggestPayees } from '@/features/transactions/payeeSuggest';
-import { isSalaryCategory } from '@/features/transactions/salary';
-import { isConfirmedOnSave, recordStatus } from '@/features/transactions/confirmation';
-import { AccountPicker } from '@/features/transactions/components/AccountPicker';
+import { findSameDayAmount, type Transaction } from '@/features/transactions/api';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { DateField } from '@/features/transactions/components/DateField';
+import { recordStatus } from '@/features/transactions/confirmation';
+import { AccountFields } from '@/features/transactions/form/AccountFields';
+import { LinkedAdvances, RelatedExpenseField } from '@/features/transactions/form/AdvanceLinks';
+import { DuplicateDialog } from '@/features/transactions/form/DuplicateDialog';
+import { EmployerField } from '@/features/transactions/form/EmployerField';
+import { PayeeField } from '@/features/transactions/form/PayeeField';
+import { PointsSection } from '@/features/transactions/form/PointsSection';
+import { useFormAssist } from '@/features/transactions/form/useFormAssist';
 import {
-  useCreateTransaction,
+  emptyFormValues,
+  type FormValues,
+  toFormValues,
+  toTransactionRow,
+  validateForm,
+} from '@/features/transactions/form/values';
+import {
   useAdvancesFor,
+  useCreateTransaction,
   useDeleteTransaction,
   useExpensesAround,
   usePayeeHistory,
   useTransaction,
   useUpdateTransaction,
 } from '@/features/transactions/hooks';
-import { loadLastUsedAccounts, saveLastUsedAccounts } from '@/features/transactions/lastUsedAccounts';
+import { saveLastUsedAccounts } from '@/features/transactions/lastUsedAccounts';
+import { isSalaryCategory } from '@/features/transactions/salary';
 import {
-  type AdjustmentDirection,
-  type DraftErrors,
-  normalizeAccounts,
   OTHER_TYPES,
   PRIMARY_TYPES,
   TRANSACTION_RULES,
   type TransactionType,
-  validateDraft,
 } from '@/features/transactions/transactionRules';
-import { formatDay, toTokyoDateString } from '@/lib/date';
-import { formatYen, parseNonNegativeYen, parseYen } from '@/lib/money';
+import { toTokyoDateString } from '@/lib/date';
+import { parseYen } from '@/lib/money';
 import { warningColors } from '@/theme';
-
-type FormValues = {
-  type: TransactionType;
-  amount: string;
-  fromAccountId: string | null;
-  toAccountId: string | null;
-  adjustmentDirection: AdjustmentDirection;
-  categoryId: string | null;
-  date: string;
-  payee: string;
-  memo: string;
-  /** 本来の金額・利用ポイント（REQ-18）。空欄なら記録しない */
-  listPrice: string;
-  pointsUsed: string;
-  /** 収入元（給与を払ってくれた働き先）。カテゴリが「給与・アルバイト」のときは必須 */
-  employerId: string | null;
-  /** 立て替えのときの元の支払い（No.43） */
-  relatedTransactionId: string | null;
-};
 
 const OTHER = 'other';
 
-type LastUsed = Awaited<ReturnType<typeof loadLastUsedAccounts>>;
-
-/** その種類で前回使った口座をフォームに入れる。残高調整は口座を fromAccountId にまとめて持つ */
-function applyLastUsed(setValue: UseFormSetValue<FormValues>, type: TransactionType, saved: LastUsed) {
-  const from = saved[type]?.fromAccountId ?? null;
-  const to = saved[type]?.toAccountId ?? null;
-  setValue('fromAccountId', type === 'adjustment' ? (from ?? to) : from);
-  setValue('toAccountId', type === 'adjustment' ? null : to);
-}
-
+/** 記録の入力・編集。フォームの値と確かめ方は features/transactions/form/values.ts、自動入力は useFormAssist */
 export default function TransactionEditScreen() {
   const theme = useTheme();
   // 口座の利用履歴の＋から開いたときは accountId にその口座が入っている
   // ホームの「足りなくなる口座」の振替の候補から開いたときは transferFrom / transferTo / amount が入っている
-  const {
-    id,
-    accountId: presetAccountId,
-    transferFrom,
-    transferTo,
-    amount: presetAmount,
-  } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id: string;
     accountId?: string;
     transferFrom?: string;
     transferTo?: string;
     amount?: string;
   }>();
+  const { id } = params;
   const isNew = id === 'new';
 
   const transaction = useTransaction(isNew ? undefined : id);
@@ -118,28 +87,10 @@ export default function TransactionEditScreen() {
   const remove = useDeleteTransaction();
   const payeeHistory = usePayeeHistory();
   const employers = useEmployers();
-  const [payeeFocused, setPayeeFocused] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // 「ポイント」は、保存済みの値があれば最初から開いておく。押したら押した方を優先
-  const [pointsOpen, setPointsOpen] = useState<boolean | null>(null);
 
-  // 種類ごとのルール（transactionRules.ts）で確かめる
   const resolver: Resolver<FormValues> = (values) => {
-    const errors: DraftErrors & { listPrice?: string; pointsUsed?: string; employerId?: string } = validateDraft(
-      { ...values, amount: parseYen(values.amount) },
-      accounts.data ?? [],
-      categories.data ?? [],
-    );
-    if (values.listPrice.trim() !== '' && parseNonNegativeYen(values.listPrice) === null) {
-      errors.listPrice = '0以上の整数（円）で入力してください';
-    }
-    if (values.pointsUsed.trim() !== '' && parseNonNegativeYen(values.pointsUsed) === null) {
-      errors.pointsUsed = '0以上の整数で入力してください';
-    }
-    if (values.type === 'income' && isSalaryCategory(values.categoryId, categories.data ?? []) && !values.employerId) {
-      errors.employerId = '収入元を選んでください';
-    }
-    const entries = Object.entries(errors);
+    const entries = Object.entries(validateForm(values, accounts.data ?? [], categories.data ?? []));
     if (entries.length === 0) return { values, errors: {} };
     return {
       values: {},
@@ -154,24 +105,7 @@ export default function TransactionEditScreen() {
     setValue,
     getValues,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver,
-    defaultValues: {
-      type: 'expense',
-      amount: '',
-      fromAccountId: null,
-      toAccountId: null,
-      adjustmentDirection: 'increase',
-      categoryId: null,
-      date: toTokyoDateString(),
-      payee: '',
-      memo: '',
-      listPrice: '',
-      pointsUsed: '',
-      employerId: null,
-      relatedTransactionId: null,
-    },
-  });
+  } = useForm<FormValues>({ resolver, defaultValues: emptyFormValues(toTokyoDateString()) });
   const type = useWatch({ control, name: 'type' });
   const rule = TRANSACTION_RULES[type];
   const fromAccountId = useWatch({ control, name: 'fromAccountId' });
@@ -180,112 +114,27 @@ export default function TransactionEditScreen() {
   // 立て替えの「元の支払い」の候補と、支払いの記録にひも付いた立て替え
   const nearbyExpenses = useExpensesAround(date, type === 'advance');
   const linkedAdvances = useAdvancesFor(!isNew && type === 'expense' ? id : undefined);
-  const describeExpense = (t: Transaction) =>
-    `${Number(t.date.slice(5, 7))}/${Number(t.date.slice(8, 10))} ${t.payee || (categoryLabel(t.category_id, categories.data ?? []) ?? '支払い')} ${formatYen(t.amount)}`;
   const isSalary = isSalaryCategory(categoryId, categories.data ?? []);
 
-  // カテゴリをどこから入れたか。自分で選んだものは自動で上書きしない。内容から予測したものは口座の既定より優先する
-  const categorySource = useRef<'user' | 'payee' | 'account' | null>(null);
-
-  // 新規の支払いで口座を選んだら、その口座の既定のカテゴリを入れる（自分で選んだ・内容から予測したときは除く）
-  useEffect(() => {
-    if (!isNew || type !== 'expense' || !accounts.data) return;
-    if (categorySource.current === 'user' || categorySource.current === 'payee') return;
-    if (categorySource.current === null && getValues('categoryId')) return;
-    const fallback = accounts.data.find((a) => a.id === fromAccountId)?.default_category_id ?? null;
-    setValue('categoryId', fallback);
-    categorySource.current = fallback ? 'account' : null;
-  }, [isNew, type, fromAccountId, accounts.data, getValues, setValue]);
+  const assist = useFormAssist({
+    isNew,
+    accounts: accounts.data,
+    employers: employers.data ?? [],
+    type,
+    fromAccountId,
+    getValues,
+    setValue,
+    presetAccountId: params.accountId,
+    presetTransfer: { from: params.transferFrom, to: params.transferTo, amount: params.amount },
+  });
 
   // 編集: 保存済みの記録をフォームに入れる
   useEffect(() => {
-    const t = transaction.data;
-    if (!t) return;
-    reset({
-      type: t.type,
-      amount: String(t.amount),
-      // 残高調整は口座を fromAccountId にまとめて持ち、保存時に向きで振り分ける（normalizeAccounts）
-      fromAccountId: t.type === 'adjustment' ? (t.from_account_id ?? t.to_account_id) : t.from_account_id,
-      toAccountId: t.type === 'adjustment' ? null : t.to_account_id,
-      adjustmentDirection: t.type === 'adjustment' && t.from_account_id ? 'decrease' : 'increase',
-      categoryId: t.category_id,
-      date: t.date,
-      payee: t.payee ?? '',
-      memo: t.memo ?? '',
-      listPrice: t.list_price === null ? '' : String(t.list_price),
-      pointsUsed: t.points_used === null ? '' : String(t.points_used),
-      employerId: t.employer_id,
-      relatedTransactionId: t.related_transaction_id,
-    });
+    if (transaction.data) reset(toFormValues(transaction.data));
   }, [transaction.data, reset]);
-
-  // 新規: 種類を選ぶたびに、その種類で前回使った口座を初期値にする（REQ-30）
-  // 口座の利用履歴から開いたときは、前回の口座の代わりにその口座を入れる（種類を変えても、使える欄なら入れ直す）
-  const lastUsed = useRef<LastUsed>({});
-  const preset = useRef<Account | null>(null);
-  const applyDefaults = (next: TransactionType) => {
-    applyLastUsed(setValue, next, lastUsed.current);
-    const account = preset.current;
-    const side = account ? presetSide(next, account.kind) : null;
-    if (account && side) setValue(side === 'from' ? 'fromAccountId' : 'toAccountId', account.id);
-  };
-  const initialized = useRef(false);
-  useEffect(() => {
-    if (!isNew || !accounts.data || initialized.current) return;
-    initialized.current = true;
-    preset.current = accounts.data.find((a) => a.id === presetAccountId) ?? null;
-    loadLastUsedAccounts().then((saved) => {
-      lastUsed.current = saved;
-      const presetType = preset.current ? defaultTypeForAccount(preset.current.kind) : null;
-      if (presetType) setValue('type', presetType);
-      const type = getValues('type');
-      applyLastUsed(setValue, type, saved);
-      const side = preset.current ? presetSide(type, preset.current.kind) : null;
-      if (preset.current && side) setValue(side === 'from' ? 'fromAccountId' : 'toAccountId', preset.current.id);
-      if (transferFrom && transferTo) {
-        setValue('type', 'transfer');
-        setValue('fromAccountId', transferFrom);
-        setValue('toAccountId', transferTo);
-        if (presetAmount) setValue('amount', presetAmount);
-      }
-    });
-  }, [isNew, accounts.data, presetAccountId, transferFrom, transferTo, presetAmount, getValues, setValue]);
-
-  const changeType = (next: TransactionType) => {
-    if (TRANSACTION_RULES[next].categoryKind !== TRANSACTION_RULES[getValues('type')].categoryKind) {
-      setValue('categoryId', null);
-      categorySource.current = null;
-    }
-    setValue('type', next);
-    if (isNew) applyDefaults(next);
-  };
 
   // 新しい記録で同じ日・同じ金額の記録があれば、保存する前に確かめる（REQ-17）
   const [duplicate, setDuplicate] = useState<{ values: FormValues; matches: Transaction[] } | null>(null);
-
-  // カテゴリが空のまま内容を入れたら、同じ内容の過去の記録でいちばん多いカテゴリを入れる（REQ-8）
-  const fillCategoryFromHistory = async (payee: string) => {
-    const currentType = getValues('type');
-    const canFill = !getValues('categoryId') || categorySource.current === 'account';
-    if (!TRANSACTION_RULES[currentType].categoryKind || !canFill || payee.trim() === '') return;
-    try {
-      const guessed = guessCategory(await fetchCategoryHistory(payee.trim(), currentType));
-      const stillFillable = !getValues('categoryId') || categorySource.current === 'account';
-      if (guessed && stillFillable && getValues('type') === currentType) {
-        setValue('categoryId', guessed);
-        categorySource.current = 'payee';
-      }
-    } catch {
-      // 予測できなくても入力は続けられる
-    }
-  };
-
-  // 収入元を選んだら、内容が空ならその名前を入れる
-  const usableEmployers = employers.data ?? [];
-  const fillFromEmployer = (employerId: string) => {
-    const employer = usableEmployers.find((e) => e.id === employerId);
-    if (employer && getValues('payee').trim() === '') setValue('payee', employer.name);
-  };
 
   const onSubmit = async (values: FormValues, skipDuplicateCheck = false) => {
     if (isNew && !skipDuplicateCheck) {
@@ -299,29 +148,11 @@ export default function TransactionEditScreen() {
         // 確かめられなくても保存は続ける
       }
     }
-    const { fromAccountId, toAccountId } = normalizeAccounts({ ...values, amount: parseYen(values.amount) });
-    const row = {
-      type: values.type,
-      amount: parseYen(values.amount)!,
-      from_account_id: fromAccountId,
-      to_account_id: toAccountId,
-      category_id: TRANSACTION_RULES[values.type].categoryKind ? values.categoryId : null,
-      date: values.date,
-      payee: values.payee.trim() || null,
-      memo: values.memo.trim() || null,
-      list_price: values.listPrice.trim() === '' ? null : parseNonNegativeYen(values.listPrice),
-      points_used: values.pointsUsed.trim() === '' ? null : parseNonNegativeYen(values.pointsUsed),
-      employer_id:
-        values.type === 'income' && isSalaryCategory(values.categoryId, categories.data ?? [])
-          ? values.employerId
-          : null,
-      related_transaction_id: values.type === 'advance' ? values.relatedTransactionId : null,
-      is_confirmed: isConfirmedOnSave(values.date, toTokyoDateString()),
-    };
+    const row = toTransactionRow(values, categories.data ?? [], toTokyoDateString());
     try {
       if (isNew) {
         await create.mutateAsync(row);
-        await saveLastUsedAccounts(values.type, { fromAccountId, toAccountId });
+        await saveLastUsedAccounts(values.type, { fromAccountId: row.from_account_id, toAccountId: row.to_account_id });
       } else {
         await update.mutateAsync({ id, values: row });
       }
@@ -371,9 +202,6 @@ export default function TransactionEditScreen() {
   }
 
   const saving = isSubmitting || remove.isPending;
-  const pointsExpanded =
-    pointsOpen ??
-    (transaction.data ? transaction.data.list_price !== null || transaction.data.points_used !== null : false);
   const accountList = accounts.data!;
 
   return (
@@ -420,7 +248,7 @@ export default function TransactionEditScreen() {
         )}
         <SegmentedButtons
           value={PRIMARY_TYPES.includes(type) ? type : OTHER}
-          onValueChange={(v) => changeType(v === OTHER ? 'advance' : (v as TransactionType))}
+          onValueChange={(v) => assist.changeType(v === OTHER ? 'advance' : (v as TransactionType))}
           buttons={[
             ...PRIMARY_TYPES.map((t) => ({ value: t, label: TRANSACTION_RULES[t].label })),
             { value: OTHER, label: 'その他' },
@@ -434,7 +262,7 @@ export default function TransactionEditScreen() {
               icon: TRANSACTION_RULES[t].icon,
             }))}
             value={type}
-            onChange={(v) => v && changeType(v as TransactionType)}
+            onChange={(v) => v && assist.changeType(v as TransactionType)}
           />
         )}
 
@@ -475,63 +303,7 @@ export default function TransactionEditScreen() {
           />
         )}
 
-        {type === 'adjustment' ? (
-          <Controller
-            control={control}
-            name="fromAccountId"
-            render={({ field: { onChange, value } }) => (
-              <AccountPicker
-                balances={balances}
-                rows={2}
-                label="口座"
-                kinds={rule.from!.kinds}
-                accounts={accountList}
-                value={value}
-                onChange={onChange}
-                error={errors.fromAccountId?.message ?? errors.toAccountId?.message}
-              />
-            )}
-          />
-        ) : (
-          <>
-            {rule.from && (
-              <Controller
-                control={control}
-                name="fromAccountId"
-                render={({ field: { onChange, value } }) => (
-                  <AccountPicker
-                    balances={balances}
-                    rows={2}
-                    label={rule.from!.label}
-                    kinds={rule.from!.kinds}
-                    accounts={accountList}
-                    value={value}
-                    onChange={onChange}
-                    error={errors.fromAccountId?.message}
-                  />
-                )}
-              />
-            )}
-            {rule.to && (
-              <Controller
-                control={control}
-                name="toAccountId"
-                render={({ field: { onChange, value } }) => (
-                  <AccountPicker
-                    balances={balances}
-                    rows={2}
-                    label={rule.to!.label}
-                    kinds={rule.to!.kinds}
-                    accounts={accountList}
-                    value={value}
-                    onChange={onChange}
-                    error={errors.toAccountId?.message}
-                  />
-                )}
-              />
-            )}
-          </>
-        )}
+        <AccountFields control={control} errors={errors} type={type} accounts={accountList} balances={balances} />
 
         {rule.categoryKind && (
           <Controller
@@ -544,7 +316,7 @@ export default function TransactionEditScreen() {
                 categories={categories.data!}
                 value={value}
                 onChange={(next) => {
-                  categorySource.current = 'user';
+                  assist.markCategoryChosen();
                   onChange(next);
                 }}
                 error={errors.categoryId?.message}
@@ -555,70 +327,19 @@ export default function TransactionEditScreen() {
 
         {/* 給与・アルバイトの収入では、収入元（働き先）を必ず選ぶ */}
         {type === 'income' && isSalary && (
-          <Controller
+          <EmployerField
             control={control}
-            name="employerId"
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.field}>
-                <Text variant="labelLarge">収入元</Text>
-                {usableEmployers.some((e) => !e.is_archived || e.id === value) ? (
-                  <ChipGroup
-                    options={usableEmployers
-                      .filter((e) => !e.is_archived || e.id === value)
-                      .map((e) => ({ value: e.id, label: e.name, icon: 'briefcase' }))}
-                    value={value}
-                    onChange={(next) => {
-                      onChange(next);
-                      if (next) fillFromEmployer(next);
-                    }}
-                  />
-                ) : (
-                  <HelperText type="error">設定の「働き先と給料日」で働き先を登録してください</HelperText>
-                )}
-                {!!errors.employerId && <HelperText type="error">{errors.employerId.message}</HelperText>}
-              </View>
-            )}
+            errors={errors}
+            employers={employers.data ?? []}
+            onPick={assist.fillFromEmployer}
           />
         )}
 
-        {/* 立て替えは、何の支払いの立て替えかを選べる（前後1週間の支払いから） */}
         {type === 'advance' && (
-          <Controller
-            control={control}
-            name="relatedTransactionId"
-            render={({ field: { onChange, value } }) => {
-              const options = (nearbyExpenses.data ?? []).map((t) => ({ value: t.id, label: describeExpense(t) }));
-              if (value && !options.some((o) => o.value === value)) options.unshift({ value, label: '選択中の支払い' });
-              return (
-                <View style={styles.field}>
-                  <Text variant="labelLarge">元の支払い（任意）</Text>
-                  {options.length > 0 ? (
-                    <ChipGroup options={options} value={value} onChange={onChange} allowDeselect />
-                  ) : (
-                    <HelperText type="info">前後1週間に支払いの記録はありません</HelperText>
-                  )}
-                </View>
-              );
-            }}
-          />
+          <RelatedExpenseField control={control} expenses={nearbyExpenses.data ?? []} categories={categories.data!} />
         )}
 
-        {/* 支払いの記録では、ひも付いた立て替えを出し、押すと開く */}
-        {type === 'expense' && (linkedAdvances.data?.length ?? 0) > 0 && (
-          <View style={styles.field}>
-            <Text variant="labelLarge">この支払いの立て替え</Text>
-            {linkedAdvances.data!.map((t) => (
-              <Button
-                key={t.id}
-                mode="outlined"
-                icon="account-cash"
-                onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
-              >
-                {accountList.find((a) => a.id === t.to_account_id)?.name ?? ''} {formatYen(t.amount)}
-              </Button>
-            ))}
-          </View>
-        )}
+        {type === 'expense' && <LinkedAdvances advances={linkedAdvances.data ?? []} accounts={accountList} />}
 
         <Controller
           control={control}
@@ -627,44 +348,7 @@ export default function TransactionEditScreen() {
         />
         {!!errors.date && <HelperText type="error">{errors.date.message}</HelperText>}
 
-        <Controller
-          control={control}
-          name="payee"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <View>
-              <TextInput
-                mode="outlined"
-                label="内容（任意）"
-                value={value}
-                onChangeText={onChange}
-                onFocus={() => setPayeeFocused(true)}
-                onBlur={() => {
-                  setPayeeFocused(false);
-                  onBlur();
-                  fillCategoryFromHistory(value);
-                }}
-              />
-              {/* 入力中の文字を含む過去の内容。押すとそれを入れて、カテゴリも予測する */}
-              {payeeFocused && (
-                <View style={styles.suggestions}>
-                  {suggestPayees(payeeHistory.data ?? [], value).map((payee) => (
-                    <Chip
-                      key={payee}
-                      compact
-                      icon="history"
-                      onPress={() => {
-                        onChange(payee);
-                        fillCategoryFromHistory(payee);
-                      }}
-                    >
-                      {payee}
-                    </Chip>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-        />
+        <PayeeField control={control} history={payeeHistory.data ?? []} onCommit={assist.fillCategoryFromPayee} />
         <Controller
           control={control}
           name="memo"
@@ -680,43 +364,13 @@ export default function TransactionEditScreen() {
           )}
         />
 
-        <List.Accordion
-          title="ポイント"
-          left={(props) => <List.Icon {...props} icon="ticket-percent" />}
-          expanded={pointsExpanded}
-          onPress={() => setPointsOpen(!pointsExpanded)}
-          style={styles.accordion}
-        >
-          <View style={styles.pointsRow}>
-            {(
-              [
-                ['listPrice', '本来の金額'],
-                ['pointsUsed', '利用ポイント'],
-              ] as const
-            ).map(([name, label]) => (
-              <Controller
-                key={name}
-                control={control}
-                name={name}
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    mode="outlined"
-                    label={label}
-                    keyboardType="number-pad"
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    error={!!errors[name]}
-                    style={styles.pointsInput}
-                  />
-                )}
-              />
-            ))}
-          </View>
-          {!!(errors.listPrice ?? errors.pointsUsed) && (
-            <HelperText type="error">{(errors.listPrice ?? errors.pointsUsed)?.message}</HelperText>
-          )}
-        </List.Accordion>
+        <PointsSection
+          control={control}
+          errors={errors}
+          initiallyOpen={
+            !!transaction.data && (transaction.data.list_price !== null || transaction.data.points_used !== null)
+          }
+        />
 
         <Button
           mode="contained"
@@ -730,29 +384,15 @@ export default function TransactionEditScreen() {
       </KeyboardAwareScrollView>
 
       <Portal>
-        <Dialog visible={duplicate !== null} onDismiss={() => setDuplicate(null)}>
-          <Dialog.Title>同じ日・同じ金額の記録があります</Dialog.Title>
-          <Dialog.Content>
-            {duplicate?.matches.map((m) => (
-              <Text key={m.id} variant="bodyMedium">
-                {formatDay(m.date)} {TRANSACTION_RULES[m.type].label} {formatYen(m.amount)}
-                {m.payee ? `（${m.payee}）` : ''}
-              </Text>
-            ))}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setDuplicate(null)}>やめる</Button>
-            <Button
-              onPress={() => {
-                const values = duplicate!.values;
-                setDuplicate(null);
-                onSubmit(values, true);
-              }}
-            >
-              保存する
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
+        <DuplicateDialog
+          matches={duplicate?.matches ?? null}
+          onCancel={() => setDuplicate(null)}
+          onSave={() => {
+            const values = duplicate!.values;
+            setDuplicate(null);
+            onSubmit(values, true);
+          }}
+        />
         <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
           <Dialog.Title>この記録を削除しますか？</Dialog.Title>
           <Dialog.Content>
@@ -778,13 +418,8 @@ export default function TransactionEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  field: { gap: 4 },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   confirmBar: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 8, paddingLeft: 12 },
   confirmSpacer: { flex: 1 },
-  accordion: { paddingHorizontal: 0 },
-  pointsRow: { flexDirection: 'row', gap: 8 },
-  pointsInput: { flex: 1 },
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 48, gap: 12 },
   amount: { fontSize: 24 },
