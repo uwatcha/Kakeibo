@@ -72,3 +72,16 @@ export function summarizeBalances(accounts: AccountBalance[]): BalanceSummary {
     payableTotal: negate(sum(payables)),
   };
 }
+
+/** 汎用資産の内訳: 含める口座のうち、プラスの口座（多い順）とマイナスの口座（マイナスが大きい順）。0 円は出さない */
+export function availableBreakdown(accounts: readonly AccountBalance[]): {
+  plus: AccountBalance[];
+  minus: AccountBalance[];
+  plusTotal: number;
+  minusTotal: number;
+} {
+  const included = accounts.filter(isAvailableAccount);
+  const plus = included.filter((a) => a.balance > 0).sort((a, b) => b.balance - a.balance);
+  const minus = included.filter((a) => a.balance < 0).sort((a, b) => a.balance - b.balance);
+  return { plus, minus, plusTotal: sum(plus), minusTotal: sum(minus) };
+}

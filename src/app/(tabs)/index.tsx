@@ -10,6 +10,7 @@ import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
+import { AvailableBreakdownSheet } from '@/features/accounts/components/AvailableBreakdownSheet';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
@@ -80,6 +81,7 @@ export default function HomeScreen() {
   const theme = useTheme();
   const { data, isLoading, error, refetch, isRefetching } = useAccountBalances();
   const today = toTokyoDateString();
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const employers = useEmployers();
   const future = useMovementsAfter(today);
 
@@ -223,6 +225,7 @@ export default function HomeScreen() {
             {
               title: '汎用資産',
               amount: summary.availableNetWorth,
+              onPress: () => setShowBreakdown(true),
             },
             { title: '純資産', amount: summary.netWorth },
             ...(spendable
@@ -278,6 +281,7 @@ export default function HomeScreen() {
           onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
         />
       )}
+      <AvailableBreakdownSheet visible={showBreakdown} onDismiss={() => setShowBreakdown(false)} accounts={data} />
     </View>
   );
 }

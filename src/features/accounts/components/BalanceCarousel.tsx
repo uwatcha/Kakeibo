@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { IconButton, Text, useTheme } from 'react-native-paper';
 
 import { Amount } from '@/components/Amount';
@@ -11,6 +11,8 @@ type Page = {
   detail?: string;
   /** カード右上の小さなボタン */
   action?: { icon: string; label: string; onPress: () => void };
+  /** カードを押したとき（汎用資産の内訳を開くなど） */
+  onPress?: () => void;
 };
 
 /** ホーム上部の金額カード。横にスワイプして切り替える */
@@ -22,35 +24,42 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
         key: page.title,
         label: page.title,
         content: (
-          <SectionCard style={styles.card}>
-            <View style={styles.header}>
-              <Text variant="titleMedium" style={styles.title}>
-                {page.title}
-              </Text>
-              {page.action && (
-                <IconButton
-                  icon={page.action.icon}
-                  size={20}
-                  iconColor={theme.colors.primary}
-                  accessibilityLabel={page.action.label}
-                  onPress={page.action.onPress}
-                  style={styles.action}
-                />
+          <Pressable
+            onPress={page.onPress}
+            disabled={!page.onPress}
+            accessibilityRole={page.onPress ? 'button' : undefined}
+            accessibilityLabel={page.onPress ? `${page.title}の内訳` : undefined}
+          >
+            <SectionCard style={styles.card}>
+              <View style={styles.header}>
+                <Text variant="titleMedium" style={styles.title}>
+                  {page.title}
+                </Text>
+                {page.action && (
+                  <IconButton
+                    icon={page.action.icon}
+                    size={20}
+                    iconColor={theme.colors.primary}
+                    accessibilityLabel={page.action.label}
+                    onPress={page.action.onPress}
+                    style={styles.action}
+                  />
+                )}
+              </View>
+              <Amount
+                value={page.amount}
+                variant="displaySmall"
+                style={styles.amount}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              />
+              {page.detail && (
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {page.detail}
+                </Text>
               )}
-            </View>
-            <Amount
-              value={page.amount}
-              variant="displaySmall"
-              style={styles.amount}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            />
-            {page.detail && (
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                {page.detail}
-              </Text>
-            )}
-          </SectionCard>
+            </SectionCard>
+          </Pressable>
         ),
       }))}
     />

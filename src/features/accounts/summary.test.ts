@@ -1,4 +1,4 @@
-import { summarizeBalances, type AccountBalance } from './summary';
+import { availableBreakdown, summarizeBalances, type AccountBalance } from './summary';
 
 let seq = 0;
 function account(overrides: Partial<AccountBalance>): AccountBalance {
@@ -88,5 +88,22 @@ describe('summarizeBalances', () => {
     expect(empty.availableNetWorth).toBe(0);
     expect(empty.creditCardUnpaid).toBe(0);
     expect(empty.everyday).toEqual([]);
+  });
+});
+
+describe('availableBreakdown', () => {
+  it('含める口座をプラスとマイナスに分ける（0 円と含めない口座は出さない）', () => {
+    const result = availableBreakdown([
+      account({ name: '財布', balance: 8000 }),
+      account({ name: 'サンプル銀行', balance: 30000 }),
+      account({ name: 'カード', kind: 'credit_card', balance: -29000 }),
+      account({ name: '父', kind: 'payable', balance: -50000 }),
+      account({ name: 'さくら', kind: 'receivable', balance: 0 }),
+      account({ name: 'NISA', kind: 'investment', balance: 42000, includeInAvailable: false }),
+    ]);
+    expect(result.plus.map((a) => a.name)).toEqual(['サンプル銀行', '財布']);
+    expect(result.minus.map((a) => a.name)).toEqual(['父', 'カード']);
+    expect(result.plusTotal).toBe(38000);
+    expect(result.minusTotal).toBe(-79000);
   });
 });
