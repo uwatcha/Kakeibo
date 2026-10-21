@@ -241,7 +241,6 @@ export default function HomeScreen() {
     total,
     rows: plannedRows(through, set),
   });
-  const livingNote = `生活費 1日 ${formatYen(living.daily)}`;
   // 給料日までに使える額・給料日前の見込みの内訳
   const budgetSections = (budget: Budget, through: string): BreakdownSection[] => [
     {
@@ -306,7 +305,6 @@ export default function HomeScreen() {
       note: [
         `${untilPaydaySub(spendable.untilPayday).label} ${formatYen(Math.abs(spendable.untilPayday))}`,
         perDay !== null ? `1日あたり ${formatYen(perDay)}（あと${daysLeft}日）` : null,
-        livingNote,
       ]
         .filter(Boolean)
         .join('・'),
