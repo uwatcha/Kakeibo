@@ -8,9 +8,7 @@ import {
   Dialog,
   HelperText,
   Portal,
-  SegmentedButtons,
   Snackbar,
-  Text,
   TextInput,
   useTheme,
 } from 'react-native-paper';
@@ -33,15 +31,21 @@ export default function SettingsScreen() {
   // 生活費（給料日までに使える額の取り置きの計算に使う）。空なら記録から自動で見積もる
   const living = useDailyLiving(toTokyoDateString());
   const saveLiving = useSaveMonthlyLivingCost();
-  const [livingInput, setLivingInput] = useState<string | null>(null);
-  // 入れる額が1日分か1か月分か（保存は1か月分。1日分は30倍する）
-  const [livingUnit, setLivingUnit] = useState<'day' | 'month'>('day');
+  // 1日と1か月の2つの欄。片方を入れると、もう片方を30日で換算して入れる（保存は1か月分）
+  const [livingForm, setLivingForm] = useState<{ day: string; month: string } | null>(null);
+  const convert = (text: string, factor: number, divide: boolean) => {
+    const value = parseNonNegativeYen(text);
+    return value === null ? '' : String(divide ? Math.round(value / factor) : value * factor);
+  };
   const livingSubtitle =
     living.manual !== null
       ? `1日 ${formatYen(Math.round(living.manual / 30))}・月 ${formatYen(living.manual)}（設定した額）`
       : `自動: 1日 ${formatYen(living.estimated ?? 0)}・月 ${formatYen((living.estimated ?? 0) * 30)}`;
-  const livingValue = livingInput === null ? null : parseNonNegativeYen(livingInput);
-  const livingMonthly = livingValue === null ? null : livingUnit === 'day' ? livingValue * 30 : livingValue;
+  const livingMonthly = livingForm === null ? null : parseNonNegativeYen(livingForm.month);
+  const livingInvalid =
+    livingForm !== null &&
+    ((livingForm.day.trim() !== '' && parseNonNegativeYen(livingForm.day) === null) ||
+      (livingForm.month.trim() !== '' && livingMonthly === null));
 
   const runExport = async (kind: 'csv' | 'backup') => {
     setExporting(kind);
@@ -81,10 +85,13 @@ export default function SettingsScreen() {
             subtitle={livingSubtitle}
             icon="cart-outline"
             right={chevron}
-            onPress={() => {
-              setLivingUnit('day');
-              setLivingInput(living.manual !== null ? String(Math.round(living.manual / 30)) : '');
-            }}
+            onPress={() =>
+              setLivingForm(
+                living.manual !== null
+                  ? { day: String(Math.round(living.manual / 30)), month: String(living.manual) }
+                  : { day: '', month: '' },
+              )
+            }
           />
           {navItem('カテゴリの管理', 'shape', '/categories')}
           {navItem('働き先と給料日', 'briefcase', '/employers')}
@@ -102,58 +109,43 @@ export default function SettingsScreen() {
         </Button>
       </ScrollView>
       <Portal>
-        <Dialog visible={livingInput !== null} onDismiss={() => setLivingInput(null)}>
+        <Dialog visible={livingForm !== null} onDismiss={() => setLivingForm(null)}>
           <Dialog.Title>生活費</Dialog.Title>
           <Dialog.Content style={styles.dialog}>
-            <SegmentedButtons
-              value={livingUnit}
-              onValueChange={(v) => {
-                // 単位を切り替えたら、入っている額も換算する
-                if (livingValue !== null)
-                  setLivingInput(String(v === 'day' ? Math.round(livingValue / 30) : livingValue * 30));
-                setLivingUnit(v as 'day' | 'month');
-              }}
-              buttons={[
-                { value: 'day', label: '1日' },
-                { value: 'month', label: '1か月' },
-              ]}
+            <TextInput
+              mode="outlined"
+              label="1日"
+              keyboardType="number-pad"
+              value={livingForm?.day ?? ''}
+              onChangeText={(day) => setLivingForm({ day, month: convert(day, 30, false) })}
+              right={<TextInput.Affix text="円" />}
             />
             <TextInput
               mode="outlined"
-              label={livingUnit === 'day' ? '1日の生活費' : '1か月の生活費'}
+              label="1か月"
               keyboardType="number-pad"
-              value={livingInput ?? ''}
-              onChangeText={setLivingInput}
+              value={livingForm?.month ?? ''}
+              onChangeText={(month) => setLivingForm({ day: convert(month, 30, true), month })}
               right={<TextInput.Affix text="円" />}
             />
-            <HelperText
-              type="error"
-              visible={livingInput !== null && livingInput.trim() !== '' && livingValue === null}
-            >
+            <HelperText type="error" visible={livingInvalid}>
               0以上の整数（円）で入力してください
             </HelperText>
-            {livingMonthly !== null && (
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                {livingUnit === 'day'
-                  ? `月 ${formatYen(livingMonthly)}`
-                  : `1日 ${formatYen(Math.round(livingMonthly / 30))}`}
-              </Text>
-            )}
           </Dialog.Content>
           <Dialog.Actions>
             <Button
               onPress={() => {
                 saveLiving.mutate(null);
-                setLivingInput(null);
+                setLivingForm(null);
               }}
             >
               自動に戻す
             </Button>
             <Button
-              disabled={livingMonthly === null}
+              disabled={livingMonthly === null || livingInvalid}
               onPress={() => {
                 saveLiving.mutate(livingMonthly);
-                setLivingInput(null);
+                setLivingForm(null);
               }}
             >
               保存
