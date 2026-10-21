@@ -8,6 +8,7 @@ import {
   fetchAccount,
   fetchAccountBalances,
   fetchAccountBalance,
+  fetchAllCardSettings,
   fetchCardSettings,
   saveTransferOrder,
   type CardSettingsInsert,
@@ -99,4 +100,8 @@ export function useSaveTransferOrder() {
     mutationFn: ({ used, unused }: { used: string[]; unused: string[] }) => saveTransferOrder(used, unused),
     onSuccess: invalidate,
   });
+}
+
+export function useAllCardSettings() {
+  return useQuery({ queryKey: [...accountKeys.all, 'cardSettings'], queryFn: fetchAllCardSettings });
 }

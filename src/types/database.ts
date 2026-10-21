@@ -535,6 +535,24 @@ export type Database = {
           },
         ]
       }
+      user_settings: {
+        Row: {
+          monthly_living_cost: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          monthly_living_cost?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          monthly_living_cost?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       account_balances: {

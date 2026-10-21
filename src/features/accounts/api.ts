@@ -90,3 +90,10 @@ export async function saveTransferOrder(used: readonly string[], unused: readonl
   const failed = results.find((r) => r.error);
   if (failed?.error) throw failed.error;
 }
+
+/** すべてのクレカの締め日・引き落とし日 */
+export async function fetchAllCardSettings(): Promise<CardSettings[]> {
+  const { data, error } = await supabase.from('credit_card_settings').select('*');
+  if (error) throw error;
+  return data;
+}

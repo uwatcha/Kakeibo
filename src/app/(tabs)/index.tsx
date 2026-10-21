@@ -16,7 +16,7 @@ import {
   BreakdownSheet,
 } from '@/features/accounts/components/BreakdownSheet';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
-import { useAccountBalances } from '@/features/accounts/hooks';
+import { useAccountBalances, useAllCardSettings } from '@/features/accounts/hooks';
 import {
   type AccountBalance,
   availableBreakdown,
@@ -25,14 +25,18 @@ import {
   transferOrder,
 } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
-import { mainEmployer, nextPayday } from '@/features/employers/payday';
+import { lastPayday, mainEmployer, nextPayday, paydaysBetween } from '@/features/employers/payday';
+import { monthsLater } from '@/features/employers/salarySchedule';
+import { useDailyLiving } from '@/features/settings/hooks';
+import { paymentDateOf } from '@/features/accounts/cardStatements';
 import type { Movement } from '@/features/reports/api';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { findShortages, lowestAhead, planCovers, type ShortageCover } from '@/features/reports/shortage';
-import { lastCardPayment, monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
+import { type Budget, computeBudget } from '@/features/reports/budget';
+import { lastCardPayment, plannedEffect } from '@/features/reports/spendable';
 import { useUnconfirmed } from '@/features/transactions/hooks';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
-import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
+import { addDays, addMonths, formatDay, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { cautionColor, SPACING, warningColors } from '@/theme';
 
@@ -97,6 +101,12 @@ export default function HomeScreen() {
   const employers = useEmployers();
   const future = useMovementsAfter(today);
   const unconfirmed = useUnconfirmed(today);
+  const cardSettings = useAllCardSettings();
+  const living = useDailyLiving(today);
+  // 今の給料期間（前回の給料日から）のクレカの利用を数えるため、その前日より後の記録を読む
+  const activeEmployers = employers.data?.filter((e) => !e.is_archived) ?? [];
+  const periodStart = lastPayday(activeEmployers, today)?.date ?? monthStart(today);
+  const periodMovements = useMovementsAfter(addDays(periodStart, -1));
 
   if (!data) {
     return (
@@ -109,12 +119,8 @@ export default function HomeScreen() {
   const summary = summarizeBalances(data);
   const hasAccounts = data.some((a) => !a.isArchived);
 
-  // 次の給料日の前日（働き先がなければ月末）までの予定を反映した、使える額
-  const next = nextPayday(employers.data?.filter((e) => !e.is_archived) ?? [], today);
+  const next = nextPayday(activeEmployers, today);
   const targets = new Set(data.filter(isAvailableAccount).map((a) => a.id));
-  const spendable = future.data
-    ? spendableUntil(summary.availableNetWorth, future.data, (id) => targets.has(id), today, next?.date ?? null)
-    : null;
   // 実質残高: 含めるクレカのいちばん後の引き落としの予定日までの、ほかの予定（支出・収入）も含める
   // （クレカの未払いは引き落としで消える前提なので、それまでの予定も合わせて見る）
   const includedCards = new Set(data.filter((a) => a.kind === 'credit_card' && isAvailableAccount(a)).map((a) => a.id));
@@ -123,19 +129,57 @@ export default function HomeScreen() {
     future.data && cardHorizon ? plannedEffect(future.data, (id) => targets.has(id), today, cardHorizon) : 0;
   const availableAmount = summary.availableNetWorth + availablePlanned;
 
-  // 給料日前の見込み（REQ-20 を変更）: 実質残高に含める口座の今の残高に、メインの働き先の次の給料日の前日までの予定を反映した額。
-  // 働き先がなければ月末までで「月末の見込み」
-  const main = mainEmployer(employers.data?.filter((e) => !e.is_archived) ?? []);
-  const mainPayday = main ? nextPayday([main], today) : null;
-  const forecastThrough = mainPayday
-    ? addDays(mainPayday.date, -1) < today
-      ? today
-      : addDays(mainPayday.date, -1)
-    : monthEnd(today);
-  const forecastTitle = mainPayday ? '給料日前の見込み' : '月末の見込み';
-  const forecast = future.data
-    ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, forecastThrough)
-    : null;
+  // ===== 給料日までに使える額・給料日前の見込み（reports/budget.ts の computeBudget）=====
+  // 資産の口座（現金・銀行など。実質残高に含めるもの）と、含めるクレカ
+  const cashAccounts = data.filter((a) => isAvailableAccount(a) && ASSET_KINDS.includes(a.kind) && !a.isArchived);
+  const cashIds = new Set(cashAccounts.map((a) => a.id));
+  const cashBalance = cashAccounts.reduce((sum, a) => sum + a.balance, 0);
+  // 期間の区切り: 働き先の給料日（無ければ月初め）を、次から3つ
+  const paydaysOf = (list: typeof activeEmployers): string[] => {
+    if (list.length === 0) {
+      const first = addMonths(monthStart(today), 1);
+      return [first, addMonths(first, 1), addMonths(first, 2)];
+    }
+    const until = monthsLater(today, 4);
+    return [...new Set(list.flatMap((e) => paydaysBetween(e, today, until)))].sort().slice(0, 3);
+  };
+  // 今の期間（前回の給料日から今日まで）に、含めるクレカで使った額と、それが引き落とされる日
+  const currentCardUsage = (periodMovements.data ?? [])
+    .filter(
+      (m) =>
+        !m.overdue &&
+        m.date >= periodStart &&
+        m.date <= today &&
+        !!m.from_account_id &&
+        includedCards.has(m.from_account_id),
+    )
+    .map((m) => {
+      const schedule = cardSettings.data?.find((c) => c.account_id === m.from_account_id);
+      return { amount: m.amount, paymentDate: schedule ? paymentDateOf(schedule, m.date) : null };
+    });
+  const budgetFor = (paydays: string[]) =>
+    future.data && periodMovements.data && cardSettings.data && living.ready && paydays.length > 0
+      ? computeBudget({
+          today,
+          cashBalance,
+          movements: future.data,
+          isCash: (id) => cashIds.has(id),
+          paydays,
+          currentCardUsage,
+          dailyLiving: living.daily,
+        })
+      : null;
+  const spendablePaydays = paydaysOf(activeEmployers);
+  const spendable = budgetFor(spendablePaydays);
+  const spendableThrough = spendablePaydays.length > 0 ? addDays(spendablePaydays[0], -1) : today;
+  const daysLeft = Math.max(1, Math.round((Date.parse(spendableThrough) - Date.parse(today)) / 86_400_000) + 1);
+  const perDay = spendable && spendable.amount > 0 ? Math.floor(spendable.amount / daysLeft) : null;
+  // 4枚目: メインの働き先（給料の目安がいちばん大きい）の給料日で区切る。働き先がなければ月末まで
+  const main = mainEmployer(activeEmployers);
+  const forecastPaydays = main ? paydaysOf([main]) : spendablePaydays;
+  const forecastBudget = budgetFor(forecastPaydays);
+  const forecastThrough = forecastPaydays.length > 0 ? addDays(forecastPaydays[0], -1) : today;
+  const forecastTitle = main ? '給料日前の見込み' : '月末の見込み';
 
   // ===== カードの内訳 =====
   const accountRows = (list: readonly AccountBalance[]): BreakdownRow[] =>
@@ -147,14 +191,14 @@ export default function HomeScreen() {
       kind: 'balance',
     }));
   // 今日より後、through までの予定のうち、実質残高に含める口座の残高を動かすもの（含める口座どうしの振替は入れない）
-  const plannedRows = (through: string): BreakdownRow[] =>
+  const plannedRows = (through: string, set: ReadonlySet<string>): BreakdownRow[] =>
     (future.data ?? [])
       .filter((m) => m.date > today && m.date <= through)
       .map((m) => ({
         m,
         effect:
-          (m.to_account_id && targets.has(m.to_account_id) ? m.amount : 0) -
-          (m.from_account_id && targets.has(m.from_account_id) ? m.amount : 0),
+          (m.to_account_id && set.has(m.to_account_id) ? m.amount : 0) -
+          (m.from_account_id && set.has(m.from_account_id) ? m.amount : 0),
       }))
       .filter(({ effect }) => effect !== 0)
       .sort((a, b) => a.m.date.localeCompare(b.m.date))
@@ -166,17 +210,48 @@ export default function HomeScreen() {
         amount: effect,
         kind: 'delta',
       }));
-  const included = data.filter((a) => isAvailableAccount(a) && a.balance !== 0).sort((a, b) => b.balance - a.balance);
-  const nowSection: BreakdownSection = {
-    title: '実質残高に含める口座の今の残高',
-    total: summary.availableNetWorth,
-    rows: accountRows(included),
-  };
-  const plannedSection = (through: string, total: number): BreakdownSection => ({
+  const plannedSection = (through: string, total: number, set: ReadonlySet<string>): BreakdownSection => ({
     title: `予定（${formatDay(through)}まで）`,
     total,
-    rows: plannedRows(through),
+    rows: plannedRows(through, set),
   });
+  const livingNote = `生活費 1日 ${formatYen(living.daily)}（${living.manual !== null ? '設定した額' : '記録からの見積もり'}）`;
+  // 給料日までに使える額・給料日前の見込みの内訳
+  const budgetSections = (budget: Budget, through: string): BreakdownSection[] => [
+    {
+      title: '今の残高（現金・銀行など）',
+      total: cashBalance,
+      rows: accountRows(cashAccounts.filter((a) => a.balance !== 0).sort((a, b) => b.balance - a.balance)),
+    },
+    plannedSection(through, budget.planned, cashIds),
+    {
+      title: '今の期間のクレカの利用',
+      total: 0 - budget.cardUsage,
+      rows:
+        budget.cardUsage > 0
+          ? [
+              {
+                key: 'card',
+                icon: 'credit-card',
+                title: '給料日の後に引き落とされる分',
+                amount: 0 - budget.cardUsage,
+                kind: 'delta',
+              },
+            ]
+          : [],
+    },
+    {
+      title: '取り置き（先の給料で足りない分）',
+      total: 0 - budget.reserve,
+      rows: budget.shortfalls.map((f) => ({
+        key: f.from,
+        icon: 'piggy-bank-outline',
+        title: `${formatDay(f.from)}〜${formatDay(f.to)}の不足`,
+        amount: 0 - f.amount,
+        kind: 'delta',
+      })),
+    },
+  ];
   const available = availableBreakdown(data);
   const assets = data.filter((a) => a.balance > 0).sort((a, b) => b.balance - a.balance);
   const debts = data.filter((a) => a.balance < 0).sort((a, b) => a.balance - b.balance);
@@ -188,7 +263,7 @@ export default function HomeScreen() {
       sections: [
         { title: 'プラスの口座', total: available.plusTotal, rows: accountRows(available.plus) },
         { title: 'マイナスの口座', total: available.minusTotal, rows: accountRows(available.minus) },
-        ...(cardHorizon ? [plannedSection(cardHorizon, availablePlanned)] : []),
+        ...(cardHorizon ? [plannedSection(cardHorizon, availablePlanned, targets)] : []),
       ],
     },
     net: {
@@ -202,16 +277,16 @@ export default function HomeScreen() {
     spendable: spendable && {
       title: next ? '給料日までに使える額' : '月末までに使える額',
       total: spendable.amount,
-      note:
-        spendable.perDay !== null
-          ? `1日あたり ${formatYen(spendable.perDay)}（あと${spendable.daysLeft}日）`
-          : undefined,
-      sections: [nowSection, plannedSection(spendable.through, spendable.amount - summary.availableNetWorth)],
+      note: [perDay !== null ? `1日あたり ${formatYen(perDay)}（あと${daysLeft}日）` : null, livingNote]
+        .filter(Boolean)
+        .join('・'),
+      sections: budgetSections(spendable, spendableThrough),
     },
-    forecast: forecast !== null && {
+    forecast: forecastBudget && {
       title: forecastTitle,
-      total: forecast,
-      sections: [nowSection, plannedSection(forecastThrough, forecast - summary.availableNetWorth)],
+      total: forecastBudget.amount,
+      note: livingNote,
+      sections: budgetSections(forecastBudget, forecastThrough),
     },
   };
   const openSheet = breakdown ? sheets[breakdown] || null : null;
@@ -344,21 +419,18 @@ export default function HomeScreen() {
                   {
                     title: next ? '給料日までに使える額' : '月末までに使える額',
                     amount: spendable.amount,
-                    detail: [
-                      spendable.perDay !== null ? `1日あたり ${formatYen(spendable.perDay)}` : null,
-                      `あと${spendable.daysLeft}日`,
-                    ]
+                    detail: [perDay !== null ? `1日あたり ${formatYen(perDay)}` : null, `あと${daysLeft}日`]
                       .filter(Boolean)
                       .join('・'),
                     onPress: () => setBreakdown('spendable'),
                   },
                 ]
               : []),
-            ...(forecast !== null
+            ...(forecastBudget
               ? [
                   {
                     title: forecastTitle,
-                    amount: forecast,
+                    amount: forecastBudget.amount,
                     detail: `${formatDay(forecastThrough)}の終わり`,
                     onPress: () => setBreakdown('forecast'),
                   },

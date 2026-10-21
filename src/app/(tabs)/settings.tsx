@@ -2,12 +2,24 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { type Href, router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Snackbar, useTheme } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Button,
+  Dialog,
+  HelperText,
+  Portal,
+  Snackbar,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
 
 import { ListRow } from '@/components/ListRow';
 import { SectionCard } from '@/components/SectionCard';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { exportBackupJson, exportTransactionsCsv } from '@/features/export/exportData';
+import { useDailyLiving, useSaveMonthlyLivingCost } from '@/features/settings/hooks';
+import { toTokyoDateString } from '@/lib/date';
+import { formatYen, parseNonNegativeYen } from '@/lib/money';
 import { supabase } from '@/lib/supabase';
 import { SPACING } from '@/theme';
 
@@ -16,6 +28,15 @@ export default function SettingsScreen() {
   const { session } = useAuth();
   const [exporting, setExporting] = useState<'csv' | 'backup' | null>(null);
   const [exportFailed, setExportFailed] = useState(false);
+  // 生活費（給料日までに使える額の取り置きの計算に使う）。空なら記録から自動で見積もる
+  const living = useDailyLiving(toTokyoDateString());
+  const saveLiving = useSaveMonthlyLivingCost();
+  const [livingInput, setLivingInput] = useState<string | null>(null);
+  const livingSubtitle =
+    living.manual !== null
+      ? `月 ${formatYen(living.manual)}（設定した額）`
+      : `自動: 月 ${formatYen((living.estimated ?? 0) * 30)}（1日 ${formatYen(living.estimated ?? 0)}）`;
+  const livingValue = livingInput === null ? null : parseNonNegativeYen(livingInput);
 
   const runExport = async (kind: 'csv' | 'backup') => {
     setExporting(kind);
@@ -50,6 +71,13 @@ export default function SettingsScreen() {
         <SectionCard>
           {navItem('口座の管理', 'wallet', '/accounts')}
           {navItem('振替の優先度', 'swap-vertical', '/transfer-order')}
+          <ListRow
+            title="生活費"
+            subtitle={livingSubtitle}
+            icon="cart-outline"
+            right={chevron}
+            onPress={() => setLivingInput(living.manual !== null ? String(living.manual) : '')}
+          />
           {navItem('カテゴリの管理', 'shape', '/categories')}
           {navItem('働き先と給料日', 'briefcase', '/employers')}
           {navItem('定期支払い', 'autorenew', '/recurring')}
@@ -65,6 +93,49 @@ export default function SettingsScreen() {
           ログアウト
         </Button>
       </ScrollView>
+      <Portal>
+        <Dialog visible={livingInput !== null} onDismiss={() => setLivingInput(null)}>
+          <Dialog.Title>1か月の生活費</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="生活費（空なら自動）"
+              keyboardType="number-pad"
+              value={livingInput ?? ''}
+              onChangeText={setLivingInput}
+              right={<TextInput.Affix text="円" />}
+            />
+            <HelperText
+              type="error"
+              visible={livingInput !== null && livingInput.trim() !== '' && livingValue === null}
+            >
+              0以上の整数（円）で入力してください
+            </HelperText>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                saveLiving.mutate(null);
+                setLivingInput(null);
+              }}
+            >
+              自動に戻す
+            </Button>
+            <Button
+              disabled={livingInput === null || livingInput.trim() === '' || livingValue === null}
+              onPress={() => {
+                saveLiving.mutate(livingValue);
+                setLivingInput(null);
+              }}
+            >
+              保存
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+      <Snackbar visible={saveLiving.isError} onDismiss={saveLiving.reset}>
+        保存できませんでした
+      </Snackbar>
       <Snackbar visible={exportFailed} onDismiss={() => setExportFailed(false)}>
         書き出せませんでした
       </Snackbar>

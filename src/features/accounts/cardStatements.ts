@@ -64,3 +64,9 @@ export function cardStatements(
       };
     });
 }
+
+/** その日の利用が引き落とされる日（締め日で回を決め、引き落とし日は休みなら次の平日） */
+export function paymentDateOf(schedule: CardSchedule, chargeDate: string): string {
+  const [py, pm] = fromIndex(closingMonthOf(schedule, chargeDate) + schedule.payment_month_offset);
+  return actualPayday(py, pm, { payday: schedule.payment_day, payday_shift: 'after' });
+}
