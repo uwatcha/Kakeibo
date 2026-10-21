@@ -184,3 +184,19 @@ export function normalizeAccounts(draft: TransactionDraft): {
     toAccountId: rule.to ? draft.toAccountId : null,
   };
 }
+
+/** 記録の金額の見せ方（Amount の kind）: 収入は緑「+」、支出は「−」、それ以外は灰色で符号なし */
+export function amountKindOf(type: TransactionType): 'income' | 'expense' | 'neutral' {
+  return type === 'income' ? 'income' : type === 'expense' ? 'expense' : 'neutral';
+}
+
+type RecordAccounts = { type: TransactionType; from_account_id: string | null; to_account_id: string | null };
+
+/** 記録（定期支払いのルールも）の口座の書き方: 両方あれば「A → B」、残高調整は「A（増）」、片方なら名前だけ */
+export function describeAccounts(t: RecordAccounts, accounts: readonly { id: string; name: string }[]): string {
+  const name = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '';
+  if (t.from_account_id && t.to_account_id) return `${name(t.from_account_id)} → ${name(t.to_account_id)}`;
+  if (t.type === 'adjustment')
+    return `${name(t.from_account_id ?? t.to_account_id)}（${t.to_account_id ? '増' : '減'}）`;
+  return name(t.from_account_id ?? t.to_account_id);
+}

@@ -19,15 +19,7 @@ import { positiveColor, positiveContainer, SPACING } from '@/theme';
 import type { Transaction } from '../api';
 import { recordStatus } from '../confirmation';
 import { dayExpense, type DaySection, groupByDate } from '../list';
-import { TRANSACTION_RULES } from '../transactionRules';
-
-function describeAccounts(t: Transaction, accounts: readonly Account[]): string {
-  const name = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '';
-  if (t.from_account_id && t.to_account_id) return `${name(t.from_account_id)} → ${name(t.to_account_id)}`;
-  if (t.type === 'adjustment')
-    return `${name(t.from_account_id ?? t.to_account_id)}（${t.to_account_id ? '増' : '減'}）`;
-  return name(t.from_account_id ?? t.to_account_id);
-}
+import { amountKindOf, describeAccounts, TRANSACTION_RULES } from '../transactionRules';
 
 type RowContext = {
   accounts: readonly Account[];
@@ -51,7 +43,7 @@ function TransactionRow({
   const title = t.payee || category;
   const subtitle = [t.payee ? category : null, describeAccounts(t, accounts)].filter(Boolean).join('・');
   // 収支に入る記録だけ符号を付ける（振替・貸し借りなどは自分のお金の置き場所が変わるだけなので符号なし）
-  const kind = t.type === 'income' ? 'income' : t.type === 'expense' ? 'expense' : 'neutral';
+  const kind = amountKindOf(t.type);
   const icon = isFlow ? categoryIcon(t.category_id, categories, rule.icon) : rule.icon;
   const iconColors =
     kind === 'income'

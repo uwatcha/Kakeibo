@@ -8,9 +8,8 @@ import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { useAccounts } from '@/features/accounts/hooks';
-import type { Transaction } from '@/features/transactions/api';
 import { useConfirmTransactions, useUnconfirmed } from '@/features/transactions/hooks';
-import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
+import { amountKindOf, describeAccounts, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { SPACING } from '@/theme';
 
@@ -42,8 +41,6 @@ export default function UnconfirmedScreen() {
     );
   }
 
-  const name = (id: string | null) => accounts.data.find((a) => a.id === id)?.name ?? '';
-  const where = (t: Transaction) => [name(t.from_account_id), name(t.to_account_id)].filter(Boolean).join(' → ');
   const items = unconfirmed.data;
 
   return (
@@ -58,17 +55,16 @@ export default function UnconfirmedScreen() {
           <>
             <SectionCard title={`${items.length}件`}>
               {items.map((t) => {
-                const kind = t.type === 'income' ? 'income' : t.type === 'expense' ? 'expense' : 'neutral';
                 return (
                   <ListRow
                     key={t.id}
                     title={t.payee || TRANSACTION_RULES[t.type].label}
-                    subtitle={`${formatDay(t.date)}・${where(t)}`}
+                    subtitle={`${formatDay(t.date)}・${describeAccounts(t, accounts.data)}`}
                     icon={TRANSACTION_RULES[t.type].icon}
                     onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
                     right={
                       <View style={styles.right}>
-                        <Amount value={t.amount} kind={kind} variant="bodyLarge" />
+                        <Amount value={t.amount} kind={amountKindOf(t.type)} variant="bodyLarge" />
                         <IconButton
                           icon="check-circle-outline"
                           iconColor={theme.colors.primary}

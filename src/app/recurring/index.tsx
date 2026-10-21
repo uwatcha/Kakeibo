@@ -12,7 +12,7 @@ import type { RecurringRule } from '@/features/recurring/api';
 import { useRules } from '@/features/recurring/hooks';
 import { scheduleLabel } from '@/features/recurring/labels';
 import { nextOccurrence } from '@/features/recurring/schedule';
-import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
+import { amountKindOf, describeAccounts, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { SPACING } from '@/theme';
 
@@ -26,13 +26,9 @@ export default function RecurringRulesScreen() {
   const accounts = useAccounts();
   const today = toTokyoDateString();
 
-  const accountName = (id: string | null) => accounts.data?.find((a) => a.id === id)?.name ?? '';
   const describe = (rule: RecurringRule) => {
     const next = rule.is_active ? nextOccurrence(rule, today) : null;
-    const where =
-      rule.type === 'transfer'
-        ? `${accountName(rule.from_account_id)} → ${accountName(rule.to_account_id)}`
-        : accountName(rule.from_account_id ?? rule.to_account_id);
+    const where = describeAccounts(rule, accounts.data ?? []);
     return [scheduleLabel(rule), where, next ? `次回 ${formatDay(next)}` : null].filter(Boolean).join('・');
   };
 
@@ -43,14 +39,7 @@ export default function RecurringRulesScreen() {
       subtitle={describe(rule)}
       icon={TRANSACTION_RULES[rule.type].icon}
       iconColor={rule.is_active ? undefined : theme.colors.onSurfaceVariant}
-      right={
-        <Amount
-          value={rule.amount}
-          kind={rule.type === 'income' ? 'income' : rule.type === 'expense' ? 'expense' : 'neutral'}
-          variant="bodyLarge"
-          style={styles.amount}
-        />
-      }
+      right={<Amount value={rule.amount} kind={amountKindOf(rule.type)} variant="bodyLarge" style={styles.amount} />}
       onPress={() => openRule(rule.id)}
     />
   );

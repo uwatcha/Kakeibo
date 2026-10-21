@@ -37,7 +37,12 @@ import { nextOccurrence, type RecurringShift } from '@/features/recurring/schedu
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { DateField } from '@/features/transactions/components/DateField';
-import { type DraftErrors, TRANSACTION_RULES, validateDraft } from '@/features/transactions/transactionRules';
+import {
+  amountKindOf,
+  type DraftErrors,
+  TRANSACTION_RULES,
+  validateDraft,
+} from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { parseYen } from '@/lib/money';
 
@@ -408,13 +413,7 @@ export default function RecurringRuleScreen() {
                   key={t.id}
                   title={formatDay(t.date)}
                   subtitle={t.date > today ? '予定' : undefined}
-                  right={
-                    <Amount
-                      value={t.amount}
-                      kind={t.type === 'income' ? 'income' : t.type === 'expense' ? 'expense' : 'neutral'}
-                      variant="bodyLarge"
-                    />
-                  }
+                  right={<Amount value={t.amount} kind={amountKindOf(t.type)} variant="bodyLarge" />}
                   onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
                 />
               ))}
