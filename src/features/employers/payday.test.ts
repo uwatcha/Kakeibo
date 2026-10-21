@@ -1,4 +1,12 @@
-import { actualPayday, isBusinessDay, lastPayday, nextPayday, payPeriodForMonth, scheduledPayday } from './payday';
+import {
+  actualPayday,
+  isBusinessDay,
+  lastPayday,
+  nextPayday,
+  paydaysBetween,
+  payPeriodForMonth,
+  scheduledPayday,
+} from './payday';
 
 const before = (payday: number) => ({ payday, payday_shift: 'before' as const });
 const after = (payday: number) => ({ payday, payday_shift: 'after' as const });
@@ -85,5 +93,14 @@ describe('payPeriodForMonth', () => {
 
   it('働き先がなければ null', () => {
     expect(payPeriodForMonth([], '2026-10-01')).toBeNull();
+  });
+});
+
+describe('paydaysBetween', () => {
+  // 25日払い・休みなら前の平日（10/25 は日曜 → 10/23、11/25 は水曜、12/25 は金曜）
+  const rule = { payday: 25, payday_shift: 'before' as const };
+  it('after より後、through までの給料日', () => {
+    expect(paydaysBetween(rule, '2026-10-21', '2026-12-21')).toEqual(['2026-10-23', '2026-11-25']);
+    expect(paydaysBetween(rule, '2026-10-23', '2026-12-25')).toEqual(['2026-11-25', '2026-12-25']);
   });
 });

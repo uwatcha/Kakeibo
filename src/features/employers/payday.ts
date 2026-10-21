@@ -90,3 +90,11 @@ export function payPeriodForMonth<T extends PaydayRule>(
   const start = lastPayday(employers, addDays(end.date, -1));
   return start ? { start, end } : null;
 }
+
+/** after より後、through まで（through を含む）の給料日 */
+export function paydaysBetween(rule: PaydayRule, after: string, through: string): string[] {
+  const [ay, am] = after.split('-').map(Number);
+  const [ty, tm] = through.split('-').map(Number);
+  const months = (ty - ay) * 12 + (tm - am);
+  return paydaysAround(rule, after, 1, months + 1).filter((d) => d > after && d <= through);
+}

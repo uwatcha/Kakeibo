@@ -24,6 +24,7 @@ describe('transactionsToCsv', () => {
       is_confirmed: true,
       employer_id: null,
       related_transaction_id: null,
+      auto_salary: false,
     };
     const csv = transactionsToCsv(
       [

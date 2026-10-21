@@ -305,6 +305,9 @@ export type Database = {
           name: string
           payday: number
           payday_shift: Database["public"]["Enums"]["payday_shift"]
+          salary_account_id: string | null
+          salary_amount: number | null
+          salary_generated_until: string | null
           sort_order: number
           user_id: string
         }
@@ -315,6 +318,9 @@ export type Database = {
           name: string
           payday: number
           payday_shift?: Database["public"]["Enums"]["payday_shift"]
+          salary_account_id?: string | null
+          salary_amount?: number | null
+          salary_generated_until?: string | null
           sort_order?: number
           user_id?: string
         }
@@ -325,10 +331,21 @@ export type Database = {
           name?: string
           payday?: number
           payday_shift?: Database["public"]["Enums"]["payday_shift"]
+          salary_account_id?: string | null
+          salary_amount?: number | null
+          salary_generated_until?: string | null
           sort_order?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "employers_salary_account_fk"
+            columns: ["user_id", "salary_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
       }
       recurring_rules: {
         Row: {
@@ -412,6 +429,7 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          auto_salary: boolean
           category_id: string | null
           created_at: string
           date: string
@@ -432,6 +450,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          auto_salary?: boolean
           category_id?: string | null
           created_at?: string
           date?: string
@@ -452,6 +471,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          auto_salary?: boolean
           category_id?: string | null
           created_at?: string
           date?: string

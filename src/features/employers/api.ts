@@ -11,9 +11,11 @@ export async function fetchEmployers(): Promise<Employer[]> {
   return data;
 }
 
-export async function createEmployer(values: EmployerInsert): Promise<void> {
-  const { error } = await supabase.from('employers').insert(values);
+/** 作った働き先の id を返す */
+export async function createEmployer(values: EmployerInsert): Promise<string> {
+  const { data, error } = await supabase.from('employers').insert(values).select('id').single();
   if (error) throw error;
+  return data.id;
 }
 
 export async function updateEmployer(id: string, values: EmployerUpdate): Promise<void> {
