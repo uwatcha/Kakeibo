@@ -1,5 +1,5 @@
 import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
-import type { BreakdownRow, BreakdownSection } from '@/features/accounts/components/BreakdownSheet';
+import type { BreakdownRow, BreakdownSection } from './components/BreakdownSheet';
 import { type AccountBalance, availableBreakdown } from '@/features/accounts/summary';
 import type { Movement } from '@/features/reports/api';
 import { effectOn } from '@/features/reports/plans';
