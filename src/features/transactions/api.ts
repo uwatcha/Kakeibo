@@ -70,6 +70,25 @@ export async function fetchAdvancesFor(expenseId: string): Promise<Transaction[]
   return data;
 }
 
+/** 日付が過ぎたのに未確認の記録（古い順）。確認するまで残高・集計に入らない */
+export async function fetchUnconfirmed(today: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('is_confirmed', false)
+    .lte('date', today)
+    .order('date')
+    .order('created_at');
+  if (error) throw error;
+  return data;
+}
+
+/** まとめて確認済みにする */
+export async function confirmTransactions(ids: readonly string[]): Promise<void> {
+  const { error } = await supabase.from('transactions').update({ is_confirmed: true }).in('id', ids);
+  if (error) throw error;
+}
+
 export async function fetchTransaction(id: string): Promise<Transaction> {
   const { data, error } = await supabase.from('transactions').select('*').eq('id', id).single();
   if (error) throw error;

@@ -70,3 +70,12 @@ describe('dayExpense', () => {
     expect(dayExpense(section)).toBe(500);
   });
 });
+
+describe('未確認の記録', () => {
+  it('月の収入・支出と1日の支出に入れない', () => {
+    const pending = txn({ amount: 9999, is_confirmed: false });
+    const done = txn({ amount: 100 });
+    expect(monthTotals([pending, done]).expense).toBe(100);
+    expect(dayExpense({ date: '2026-10-18', data: [pending, done] })).toBe(100);
+  });
+});

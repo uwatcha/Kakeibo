@@ -24,11 +24,12 @@ describe('categoryExpenseRows', () => {
   it('小分類は大分類にまとめ、支払いだけを数える', () => {
     const rows = categoryExpenseRows(
       [
-        { type: 'expense', amount: 100, category_id: 'food' },
-        { type: 'expense', amount: 200, category_id: 'eatout' },
-        { type: 'expense', amount: 50, category_id: null },
-        { type: 'income', amount: 999, category_id: null },
-        { type: 'transfer', amount: 999, category_id: null },
+        { type: 'expense', amount: 100, category_id: 'food', is_confirmed: true },
+        { type: 'expense', amount: 7777, category_id: 'food', is_confirmed: false },
+        { type: 'expense', amount: 200, category_id: 'eatout', is_confirmed: true },
+        { type: 'expense', amount: 50, category_id: null, is_confirmed: true },
+        { type: 'income', amount: 999, category_id: null, is_confirmed: true },
+        { type: 'transfer', amount: 999, category_id: null, is_confirmed: true },
       ],
       categories,
     );

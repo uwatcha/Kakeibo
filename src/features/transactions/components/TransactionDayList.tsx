@@ -99,6 +99,8 @@ function TransactionRow({
         )
       }
       onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: t.id } })}
+      // 未確認の記録は残高・集計に入っていないので、薄く出して確認済みの記録と見分ける
+      style={unconfirmed ? styles.unconfirmed : undefined}
     />
   );
 }
@@ -195,6 +197,7 @@ const styles = StyleSheet.create({
   subtitle: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   subtitleText: { flexShrink: 1 },
   amount: { fontWeight: '700' },
+  unconfirmed: { opacity: 0.6 },
   day: { gap: 6 },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   future: { gap: 16, marginBottom: 16 },

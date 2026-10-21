@@ -9,7 +9,7 @@ type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const BADGES = {
   planned: { label: '予定', icon: 'calendar-clock' },
-  unconfirmed: { label: '未確認', icon: 'alert-circle-outline' },
+  unconfirmed: { label: '未確認・残高に未反映', icon: 'alert-circle-outline' },
 } as const satisfies Record<string, { label: string; icon: IconName }>;
 
 /** 記録の状態の小さな印。予定は落ち着いた色、未確認は橙で目立たせる */

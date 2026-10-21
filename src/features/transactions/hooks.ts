@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountKeys } from '@/features/accounts/hooks';
 
 import {
+  confirmTransactions,
   createTransaction,
   deleteTransaction,
   fetchAccountTransactions,
   fetchAdvancesFor,
   fetchExpensesAround,
+  fetchUnconfirmed,
   fetchPayeeHistory,
   fetchMonthTransactions,
   fetchTransaction,
@@ -26,6 +28,7 @@ export const transactionKeys = {
   payees: () => [...transactionKeys.all, 'payees'] as const,
   expensesAround: (date: string) => [...transactionKeys.all, 'expensesAround', date] as const,
   advancesFor: (id: string) => [...transactionKeys.all, 'advancesFor', id] as const,
+  unconfirmed: (today: string) => [...transactionKeys.all, 'unconfirmed', today] as const,
 };
 
 export function useMonthTransactions(month: string) {
@@ -104,4 +107,15 @@ export function useUpdateTransaction() {
 export function useDeleteTransaction() {
   const invalidate = useInvalidateAfterWrite();
   return useMutation({ mutationFn: (id: string) => deleteTransaction(id), onSuccess: invalidate });
+}
+
+/** 日付が過ぎたのに未確認の記録 */
+export function useUnconfirmed(today: string) {
+  return useQuery({ queryKey: transactionKeys.unconfirmed(today), queryFn: () => fetchUnconfirmed(today) });
+}
+
+/** 確認済みにすると残高・集計に入るので、記録・残高・集計をまとめて読み直す */
+export function useConfirmTransactions() {
+  const invalidate = useInvalidateAfterWrite();
+  return useMutation({ mutationFn: (ids: string[]) => confirmTransactions(ids), onSuccess: invalidate });
 }

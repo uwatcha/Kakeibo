@@ -14,14 +14,15 @@ export function touchesAccounts(t: Movement, accountIds: ReadonlySet<string>): b
   );
 }
 
-/** 支払いを大分類ごとに合計する（小分類は大分類にまとめる。未分類は category_id = null） */
+/** 確認済みの支払いを大分類ごとに合計する（小分類は大分類にまとめる。未分類は category_id = null） */
 export function categoryExpenseRows(
-  transactions: readonly { type: string; amount: number; category_id: string | null }[],
+  transactions: readonly { type: string; amount: number; category_id: string | null; is_confirmed: boolean }[],
   categories: readonly Category[],
 ): CategoryExpenseRow[] {
   const totals = new Map<string | null, number>();
   for (const t of transactions) {
-    if (t.type !== 'expense') continue;
+    // 未確認の記録（予定・確認待ち）は集計に入れない
+    if (t.type !== 'expense' || !t.is_confirmed) continue;
     const category = categories.find((c) => c.id === t.category_id);
     const key = category ? (category.parent_id ?? category.id) : null;
     totals.set(key, (totals.get(key) ?? 0) + t.amount);

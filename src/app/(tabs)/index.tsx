@@ -30,10 +30,11 @@ import type { Movement } from '@/features/reports/api';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { findShortages, lowestAhead, planCovers, type ShortageCover } from '@/features/reports/shortage';
 import { lastCardPayment, monthEnd, plannedEffect, spendableUntil } from '@/features/reports/spendable';
+import { useUnconfirmed } from '@/features/transactions/hooks';
 import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { addDays, formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
-import { cautionColor, SPACING } from '@/theme';
+import { cautionColor, SPACING, warningColors } from '@/theme';
 
 /** 予定を見る期間の終わり（期限なし） */
 const LAST_DATE = '9999-12-31';
@@ -95,6 +96,7 @@ export default function HomeScreen() {
   const [breakdown, setBreakdown] = useState<'available' | 'net' | 'spendable' | 'forecast' | null>(null);
   const employers = useEmployers();
   const future = useMovementsAfter(today);
+  const unconfirmed = useUnconfirmed(today);
 
   if (!data) {
     return (
@@ -245,6 +247,19 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
+        {/* 日付が過ぎたのに未確認の記録（確認するまで残高に入らない） */}
+        {(unconfirmed.data?.length ?? 0) > 0 && (
+          <SectionCard>
+            <ListRow
+              title={`未確認の記録 ${unconfirmed.data!.length}件`}
+              icon="alert-circle-outline"
+              iconColor={warningColors(theme.dark).color}
+              right={<MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.onSurfaceVariant} />}
+              onPress={() => router.push('/unconfirmed')}
+            />
+          </SectionCard>
+        )}
+
         {shortages.length > 0 && (
           <SectionCard
             title="足りなくなる口座"
