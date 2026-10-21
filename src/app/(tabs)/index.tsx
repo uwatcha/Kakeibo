@@ -182,6 +182,13 @@ export default function HomeScreen() {
     月末までに使える額: '月末までに足りない額',
   };
   // 使える額・見込みのカード。マイナスなら「足りない額」に言い換えて正の数を赤で出し、元の見出しを取り消し線で残す
+  // 次の給料日（働き先がなければ月末）までに残る額。マイナスなら「足りない額」と言い換えて、正の額を赤で出す
+  const untilPaydaySub = (amount: number) => {
+    const until = next ? '次の給料日まで' : '月末まで';
+    return amount < 0
+      ? { label: `${until}に足りない額`, amount: 0 - amount, tone: 'negative' as const }
+      : { label: `${until}に残る額`, amount };
+  };
   const budgetPage = (budget: Budget, title: string, showPerDay: boolean, sheet: 'spendable', detail?: string) => {
     const short = budget.amount < 0;
     return {
@@ -195,7 +202,7 @@ export default function HomeScreen() {
           .filter(Boolean)
           .join('・'),
       // 2か月先は見ずに、次の給料日まで乗り切れるかの額
-      sub: { label: next ? '次の給料日までなら' : '月末までなら', amount: budget.untilPayday },
+      sub: untilPaydaySub(budget.untilPayday),
       onPress: () => setBreakdown(sheet),
     };
   };
@@ -297,7 +304,7 @@ export default function HomeScreen() {
       title: spendableTitle,
       total: spendable.amount,
       note: [
-        `${next ? '次の給料日までなら' : '月末までなら'} ${formatYen(spendable.untilPayday)}`,
+        `${untilPaydaySub(spendable.untilPayday).label} ${formatYen(Math.abs(spendable.untilPayday))}`,
         perDay !== null ? `1日あたり ${formatYen(perDay)}（あと${daysLeft}日）` : null,
         livingNote,
       ]

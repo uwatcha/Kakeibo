@@ -17,8 +17,8 @@ type Page = {
    * 元の項目が別のものに変わったことが分かるよう、見出しの上に小さく薄い取り消し線で残す
    */
   replacedTitle?: string;
-  /** カードの下に添える、もう1つの見方の額（「次の給料日までなら」など）。マイナスは赤 */
-  sub?: { label: string; amount: number };
+  /** カードの下に添える、もう1つの見方の額（「次の給料日までに残る額」など）。マイナスは赤、tone が negative なら正の額を赤 */
+  sub?: { label: string; amount: number; tone?: 'negative' };
   /** negative なら金額を赤で出す（足りない額を正の数で出すとき） */
   tone?: 'negative';
   /** カードを押したとき（内訳を開く）。あれば右上に「内訳 ›」を出す */
@@ -82,7 +82,11 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
                   <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                     {page.sub.label}
                   </Text>
-                  <Amount value={page.sub.amount} variant="bodyLarge" style={styles.subAmount} />
+                  <Amount
+                    value={page.sub.amount}
+                    variant="bodyLarge"
+                    style={[styles.subAmount, page.sub.tone === 'negative' && { color: theme.colors.error }]}
+                  />
                 </View>
               )}
               {page.detail && (
