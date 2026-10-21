@@ -4,7 +4,18 @@ import { useEffect } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Button, HelperText, List, RadioButton, Snackbar, Switch, TextInput, useTheme } from 'react-native-paper';
+import {
+  Button,
+  HelperText,
+  List,
+  RadioButton,
+  SegmentedButtons,
+  Snackbar,
+  Switch,
+  Text,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
 import { z } from 'zod';
 
 import { QueryState } from '@/components/QueryState';
@@ -29,6 +40,7 @@ const schema = z.object({
   kind: z.enum(ACCOUNT_KINDS as [string, ...string[]]),
   openingBalance: z.string().refine((v) => parseNonNegativeYen(v) !== null, '0以上の整数（円）で入力してください'),
   isReserved: z.boolean(),
+  transferPriority: z.enum(['0', '1', '2', '3']),
   defaultCategoryId: z.string().nullable(),
   memo: z.string().max(200, '200文字以内にしてください'),
 });
@@ -56,10 +68,19 @@ export default function AccountEditScreen() {
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', kind: 'cash', openingBalance: '', isReserved: false, defaultCategoryId: null, memo: '' },
+    defaultValues: {
+      name: '',
+      kind: 'cash',
+      openingBalance: '',
+      isReserved: false,
+      defaultCategoryId: null,
+      memo: '',
+      transferPriority: '2',
+    },
   });
   const kind = useWatch({ control, name: 'kind' }) as Kind;
 
@@ -70,6 +91,7 @@ export default function AccountEditScreen() {
         kind: account.data.kind,
         openingBalance: String(fromOpeningBalance(account.data.kind, balance.data)),
         isReserved: account.data.is_reserved,
+        transferPriority: String(account.data.transfer_priority) as '0' | '1' | '2' | '3',
         memo: account.data.memo ?? '',
         defaultCategoryId: account.data.default_category_id,
       });
@@ -83,6 +105,8 @@ export default function AccountEditScreen() {
       name: values.name,
       // 普段使わない口座の区別は資産と貸し借りの相手だけ
       is_reserved: canBeReserved(valuesKind) && values.isReserved,
+      // 振替元になれるのは資産の口座だけ
+      transfer_priority: ASSET_KINDS.includes(valuesKind) ? Number(values.transferPriority) : 0,
       memo: values.memo.trim() || null,
       default_category_id: canPay(valuesKind) ? values.defaultCategoryId : null,
     };
@@ -178,7 +202,14 @@ export default function AccountEditScreen() {
           control={control}
           name="kind"
           render={({ field: { onChange, value } }) => (
-            <RadioButton.Group onValueChange={onChange} value={value}>
+            <RadioButton.Group
+              onValueChange={(next) => {
+                onChange(next);
+                // 投資はすぐに引き出せないので、振替の初期値は「使わない」
+                setValue('transferPriority', next === 'investment' ? '0' : '2');
+              }}
+              value={value}
+            >
               {ACCOUNT_KINDS.map((k) => (
                 <RadioButton.Item key={k} label={ACCOUNT_KIND_INFO[k].label} value={k} disabled={!isNew} />
               ))}
@@ -219,6 +250,29 @@ export default function AccountEditScreen() {
                 value={value}
                 onChange={onChange}
               />
+            )}
+          />
+        )}
+
+        {/* 足りなくなる口座への振替の提案で、この口座から振り替えるか・どの順で使うか */}
+        {ASSET_KINDS.includes(kind) && (
+          <Controller
+            control={control}
+            name="transferPriority"
+            render={({ field: { onChange, value } }) => (
+              <View style={styles.priority}>
+                <Text variant="labelLarge">振替の優先度</Text>
+                <SegmentedButtons
+                  value={value}
+                  onValueChange={onChange}
+                  buttons={[
+                    { value: '0', label: '使わない' },
+                    { value: '1', label: '低' },
+                    { value: '2', label: '普通' },
+                    { value: '3', label: '高' },
+                  ]}
+                />
+              </View>
             )}
           />
         )}
@@ -301,6 +355,7 @@ export default function AccountEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  priority: { gap: 6, marginVertical: 8 },
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 48 },
   subheader: { paddingHorizontal: 0 },

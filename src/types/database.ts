@@ -52,6 +52,7 @@ export type Database = {
           name: string
           opening_balance: number
           sort_order: number
+          transfer_priority: number
           user_id: string
         }
         Insert: {
@@ -66,6 +67,7 @@ export type Database = {
           name: string
           opening_balance?: number
           sort_order?: number
+          transfer_priority?: number
           user_id?: string
         }
         Update: {
@@ -80,6 +82,7 @@ export type Database = {
           name?: string
           opening_balance?: number
           sort_order?: number
+          transfer_priority?: number
           user_id?: string
         }
         Relationships: [
@@ -524,6 +527,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["account_kind"] | null
           name: string | null
           sort_order: number | null
+          transfer_priority: number | null
         }
         Relationships: []
       }

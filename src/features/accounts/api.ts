@@ -21,6 +21,7 @@ export async function fetchAccountBalances(): Promise<AccountBalance[]> {
       isArchived: row.is_archived!,
       balance: row.balance ?? 0,
       includeInAvailable: row.include_in_available!,
+      transferPriority: row.transfer_priority!,
     }))
     .sort(compareAccounts);
 }

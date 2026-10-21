@@ -9,7 +9,7 @@ import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
-import { ACCOUNT_KIND_INFO, type AccountKind, ASSET_KINDS } from '@/features/accounts/accountKinds';
+import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
 import { type AccountBalance, isAvailableAccount, summarizeBalances } from '@/features/accounts/summary';
@@ -23,9 +23,6 @@ import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { cautionColor, SPACING } from '@/theme';
-
-/** 足りなくなる口座への振替元にできる口座の種類 */
-const TRANSFER_SOURCE_KINDS: readonly AccountKind[] = ['cash', 'bank', 'emoney'];
 
 /** 予定を見る期間の終わり（期限なし） */
 const LAST_DATE = '9999-12-31';
@@ -119,11 +116,11 @@ export default function HomeScreen() {
     data.filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived).map((a) => [a.id, a.balance]),
   );
   const shortages = future.data ? findShortages(assetBalances, future.data, today, LAST_DATE) : [];
-  // ほかの口座からの振替で切り抜けられるか。振替元は現金・銀行・電子マネー（投資はすぐ引き出せないので除く）で、
-  // 普段使う口座を先に使う
+  // ほかの口座からの振替で切り抜けられるか。振替元は口座の「振替の優先度」が「使わない」以外の資産の口座で、
+  // 優先度の高い口座から使う
   const transferSources = data
-    .filter((a) => TRANSFER_SOURCE_KINDS.includes(a.kind) && !a.isArchived)
-    .sort((a, b) => Number(a.isReserved) - Number(b.isReserved))
+    .filter((a) => ASSET_KINDS.includes(a.kind) && !a.isArchived && a.transferPriority > 0)
+    .sort((a, b) => b.transferPriority - a.transferPriority)
     .map((a) => a.id);
   const covers =
     future.data && shortages.length > 0

@@ -11,6 +11,7 @@ function account(overrides: Partial<AccountBalance>): AccountBalance {
     isArchived: false,
     balance: 0,
     includeInAvailable: true,
+    transferPriority: 2,
     ...overrides,
   };
 }

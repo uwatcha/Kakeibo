@@ -5,6 +5,8 @@ export type AccountBalance = {
   name: string;
   kind: AccountKind;
   isReserved: boolean;
+  /** 振替の提案で使う順（0 = 使わない、1 = 低、2 = 普通、3 = 高） */
+  transferPriority: number;
   isArchived: boolean;
   /** 負債はマイナス */
   balance: number;
