@@ -2,7 +2,6 @@ import {
   actualPayday,
   isBusinessDay,
   lastPayday,
-  mainEmployer,
   nextPayday,
   paydaysBetween,
   payPeriodForMonth,
@@ -103,16 +102,5 @@ describe('paydaysBetween', () => {
   it('after より後、through までの給料日', () => {
     expect(paydaysBetween(rule, '2026-10-21', '2026-12-21')).toEqual(['2026-10-23', '2026-11-25']);
     expect(paydaysBetween(rule, '2026-10-23', '2026-12-25')).toEqual(['2026-11-25', '2026-12-25']);
-  });
-});
-
-describe('mainEmployer', () => {
-  it('給料の目安がいちばん大きい働き先。なければ先頭', () => {
-    const a = { name: 'a', salary_amount: null };
-    const b = { name: 'b', salary_amount: 50000 };
-    const c = { name: 'c', salary_amount: 80000 };
-    expect(mainEmployer([a, b, c])?.name).toBe('c');
-    expect(mainEmployer([a, { name: 'd', salary_amount: null }])?.name).toBe('a');
-    expect(mainEmployer([])).toBeNull();
   });
 });

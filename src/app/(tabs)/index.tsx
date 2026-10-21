@@ -25,7 +25,7 @@ import {
   transferOrder,
 } from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
-import { lastPayday, mainEmployer, nextPayday, paydaysBetween } from '@/features/employers/payday';
+import { lastPayday, nextPayday, paydaysBetween } from '@/features/employers/payday';
 import { monthsLater } from '@/features/employers/salarySchedule';
 import { useDailyLiving } from '@/features/settings/hooks';
 import { paymentDateOf } from '@/features/accounts/cardStatements';
@@ -97,7 +97,7 @@ export default function HomeScreen() {
   const { data, isLoading, error, refetch, isRefetching } = useAccountBalances();
   const today = toTokyoDateString();
   // 押したカードの内訳を出す
-  const [breakdown, setBreakdown] = useState<'available' | 'net' | 'spendable' | 'forecast' | null>(null);
+  const [breakdown, setBreakdown] = useState<'available' | 'net' | 'spendable' | null>(null);
   const employers = useEmployers();
   const future = useMovementsAfter(today);
   const unconfirmed = useUnconfirmed(today);
@@ -174,29 +174,15 @@ export default function HomeScreen() {
   const spendableThrough = spendablePaydays.length > 0 ? addDays(spendablePaydays[0], -1) : today;
   const daysLeft = Math.max(1, Math.round((Date.parse(spendableThrough) - Date.parse(today)) / 86_400_000) + 1);
   const perDay = spendable && spendable.amount > 0 ? Math.floor(spendable.amount / daysLeft) : null;
-  // 4枚目: メインの働き先（給料の目安がいちばん大きい）の給料日で区切る。働き先がなければ月末まで
-  const main = mainEmployer(activeEmployers);
-  const forecastPaydays = main ? paydaysOf([main]) : spendablePaydays;
-  const forecastBudget = budgetFor(forecastPaydays);
-  const forecastThrough = forecastPaydays.length > 0 ? addDays(forecastPaydays[0], -1) : today;
-  const forecastTitle = main ? '給料日前の見込み' : '月末の見込み';
 
   const spendableTitle = next ? '給料日までに使える額' : '月末までに使える額';
   /** マイナスになったときの言い換え（「給料日までに使える額」→「給料日までに足りない額」など） */
   const SHORTFALL_TITLES: Record<string, string> = {
     給料日までに使える額: '給料日までに足りない額',
     月末までに使える額: '月末までに足りない額',
-    給料日前の見込み: '給料日前に足りない額',
-    月末の見込み: '月末に足りない額',
   };
   // 使える額・見込みのカード。マイナスなら「足りない額」に言い換えて正の数を赤で出し、元の見出しを取り消し線で残す
-  const budgetPage = (
-    budget: Budget,
-    title: string,
-    showPerDay: boolean,
-    sheet: 'spendable' | 'forecast',
-    detail?: string,
-  ) => {
+  const budgetPage = (budget: Budget, title: string, showPerDay: boolean, sheet: 'spendable', detail?: string) => {
     const short = budget.amount < 0;
     return {
       title: short ? SHORTFALL_TITLES[title] : title,
@@ -287,7 +273,7 @@ export default function HomeScreen() {
   const assets = data.filter((a) => a.balance > 0).sort((a, b) => b.balance - a.balance);
   const debts = data.filter((a) => a.balance < 0).sort((a, b) => a.balance - b.balance);
   type Sheet = { title: string; total: number; sections: BreakdownSection[]; note?: string };
-  const sheets: Record<'available' | 'net' | 'spendable' | 'forecast', Sheet | null | false> = {
+  const sheets: Record<'available' | 'net' | 'spendable', Sheet | null | false> = {
     available: {
       title: '実質残高',
       total: availableAmount,
@@ -312,12 +298,6 @@ export default function HomeScreen() {
         .filter(Boolean)
         .join('・'),
       sections: budgetSections(spendable, spendableThrough),
-    },
-    forecast: forecastBudget && {
-      title: forecastTitle,
-      total: forecastBudget.amount,
-      note: livingNote,
-      sections: budgetSections(forecastBudget, forecastThrough),
     },
   };
   const openSheet = breakdown ? sheets[breakdown] || null : null;
@@ -446,9 +426,6 @@ export default function HomeScreen() {
             },
             { title: '純資産', amount: summary.netWorth, onPress: () => setBreakdown('net') },
             ...(spendable ? [budgetPage(spendable, spendableTitle, true, 'spendable')] : []),
-            ...(forecastBudget
-              ? [budgetPage(forecastBudget, forecastTitle, false, 'forecast', `${formatDay(forecastThrough)}の終わり`)]
-              : []),
           ]}
         />
 
