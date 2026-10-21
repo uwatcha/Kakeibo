@@ -10,10 +10,20 @@ import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO, ASSET_KINDS } from '@/features/accounts/accountKinds';
-import { AvailableBreakdownSheet } from '@/features/accounts/components/AvailableBreakdownSheet';
+import {
+  type BreakdownRow,
+  type BreakdownSection,
+  BreakdownSheet,
+} from '@/features/accounts/components/BreakdownSheet';
 import { BalanceCarousel } from '@/features/accounts/components/BalanceCarousel';
 import { useAccountBalances } from '@/features/accounts/hooks';
-import { type AccountBalance, isAvailableAccount, summarizeBalances, transferOrder } from '@/features/accounts/summary';
+import {
+  type AccountBalance,
+  availableBreakdown,
+  isAvailableAccount,
+  summarizeBalances,
+  transferOrder,
+} from '@/features/accounts/summary';
 import { useEmployers } from '@/features/employers/hooks';
 import { nextPayday } from '@/features/employers/payday';
 import type { Movement } from '@/features/reports/api';
@@ -81,7 +91,8 @@ export default function HomeScreen() {
   const theme = useTheme();
   const { data, isLoading, error, refetch, isRefetching } = useAccountBalances();
   const today = toTokyoDateString();
-  const [showBreakdown, setShowBreakdown] = useState(false);
+  // 押したカードの内訳を出す
+  const [breakdown, setBreakdown] = useState<'available' | 'net' | 'spendable' | 'monthEnd' | null>(null);
   const employers = useEmployers();
   const future = useMovementsAfter(today);
 
@@ -102,7 +113,7 @@ export default function HomeScreen() {
   const spendable = future.data
     ? spendableUntil(summary.availableNetWorth, future.data, (id) => targets.has(id), today, next?.date ?? null)
     : null;
-  // 汎用資産: 含めるクレカのいちばん後の引き落としの予定日までの、ほかの予定（支出・収入）も含める
+  // 実質残高: 含めるクレカのいちばん後の引き落としの予定日までの、ほかの予定（支出・収入）も含める
   // （クレカの未払いは引き落としで消える前提なので、それまでの予定も合わせて見る）
   const includedCards = new Set(data.filter((a) => a.kind === 'credit_card' && isAvailableAccount(a)).map((a) => a.id));
   const cardHorizon = future.data ? lastCardPayment(future.data, (id) => includedCards.has(id), today) : null;
@@ -110,10 +121,89 @@ export default function HomeScreen() {
     future.data && cardHorizon ? plannedEffect(future.data, (id) => targets.has(id), today, cardHorizon) : 0;
   const availableAmount = summary.availableNetWorth + availablePlanned;
 
-  // 月末の見込み（REQ-20）: 汎用資産に月末までの予定（給料日の入金も含む）を反映した額
+  // 月末の見込み（REQ-20）: 実質残高に月末までの予定（給料日の入金も含む）を反映した額
   const monthEndForecast = future.data
     ? summary.availableNetWorth + plannedEffect(future.data, (id) => targets.has(id), today, monthEnd(today))
     : null;
+
+  // ===== カードの内訳 =====
+  const accountRows = (list: readonly AccountBalance[]): BreakdownRow[] =>
+    list.map((a) => ({
+      key: a.id,
+      icon: ACCOUNT_KIND_INFO[a.kind].icon,
+      title: a.name,
+      amount: a.balance,
+      kind: 'balance',
+    }));
+  // 今日より後、through までの予定のうち、実質残高に含める口座の残高を動かすもの（含める口座どうしの振替は入れない）
+  const plannedRows = (through: string): BreakdownRow[] =>
+    (future.data ?? [])
+      .filter((m) => m.date > today && m.date <= through)
+      .map((m) => ({
+        m,
+        effect:
+          (m.to_account_id && targets.has(m.to_account_id) ? m.amount : 0) -
+          (m.from_account_id && targets.has(m.from_account_id) ? m.amount : 0),
+      }))
+      .filter(({ effect }) => effect !== 0)
+      .sort((a, b) => a.m.date.localeCompare(b.m.date))
+      .map(({ m, effect }) => ({
+        key: m.id,
+        icon: TRANSACTION_RULES[m.type].icon,
+        title: m.payee || TRANSACTION_RULES[m.type].label,
+        subtitle: formatDay(m.date),
+        amount: effect,
+        kind: 'delta',
+      }));
+  const included = data.filter((a) => isAvailableAccount(a) && a.balance !== 0).sort((a, b) => b.balance - a.balance);
+  const nowSection: BreakdownSection = {
+    title: '実質残高に含める口座の今の残高',
+    total: summary.availableNetWorth,
+    rows: accountRows(included),
+  };
+  const plannedSection = (through: string, total: number): BreakdownSection => ({
+    title: `予定（${formatDay(through)}まで）`,
+    total,
+    rows: plannedRows(through),
+  });
+  const available = availableBreakdown(data);
+  const assets = data.filter((a) => a.balance > 0).sort((a, b) => b.balance - a.balance);
+  const debts = data.filter((a) => a.balance < 0).sort((a, b) => a.balance - b.balance);
+  type Sheet = { title: string; total: number; sections: BreakdownSection[]; note?: string };
+  const sheets: Record<'available' | 'net' | 'spendable' | 'monthEnd', Sheet | null | false> = {
+    available: {
+      title: '実質残高',
+      total: availableAmount,
+      sections: [
+        { title: 'プラスの口座', total: available.plusTotal, rows: accountRows(available.plus) },
+        { title: 'マイナスの口座', total: available.minusTotal, rows: accountRows(available.minus) },
+        ...(cardHorizon ? [plannedSection(cardHorizon, availablePlanned)] : []),
+      ],
+    },
+    net: {
+      title: '純資産',
+      total: summary.netWorth,
+      sections: [
+        { title: '資産', total: assets.reduce((t, a) => t + a.balance, 0), rows: accountRows(assets) },
+        { title: '負債', total: debts.reduce((t, a) => t + a.balance, 0), rows: accountRows(debts) },
+      ],
+    },
+    spendable: spendable && {
+      title: next ? '給料日までに使える額' : '月末までに使える額',
+      total: spendable.amount,
+      note:
+        spendable.perDay !== null
+          ? `1日あたり ${formatYen(spendable.perDay)}（あと${spendable.daysLeft}日）`
+          : undefined,
+      sections: [nowSection, plannedSection(spendable.through, spendable.amount - summary.availableNetWorth)],
+    },
+    monthEnd: monthEndForecast !== null && {
+      title: '月末の見込み',
+      total: monthEndForecast,
+      sections: [nowSection, plannedSection(monthEnd(today), monthEndForecast - summary.availableNetWorth)],
+    },
+  };
+  const openSheet = breakdown ? sheets[breakdown] || null : null;
 
   const openTransaction = (id: string) => router.push({ pathname: '/transaction/[id]', params: { id } });
   const accountName = (id: string | null) => data.find((a) => a.id === id)?.name ?? '';
@@ -219,12 +309,12 @@ export default function HomeScreen() {
         <BalanceCarousel
           pages={[
             {
-              title: '汎用資産',
+              title: '実質残高',
               amount: availableAmount,
               detail: cardHorizon ? `${formatDay(cardHorizon)}までの予定を含む` : undefined,
-              onPress: () => setShowBreakdown(true),
+              onPress: () => setBreakdown('available'),
             },
-            { title: '純資産', amount: summary.netWorth },
+            { title: '純資産', amount: summary.netWorth, onPress: () => setBreakdown('net') },
             ...(spendable
               ? [
                   {
@@ -236,10 +326,13 @@ export default function HomeScreen() {
                     ]
                       .filter(Boolean)
                       .join('・'),
+                    onPress: () => setBreakdown('spendable'),
                   },
                 ]
               : []),
-            ...(monthEndForecast !== null ? [{ title: '月末の見込み', amount: monthEndForecast }] : []),
+            ...(monthEndForecast !== null
+              ? [{ title: '月末の見込み', amount: monthEndForecast, onPress: () => setBreakdown('monthEnd') }]
+              : []),
           ]}
         />
 
@@ -278,12 +371,16 @@ export default function HomeScreen() {
           onPress={() => router.push({ pathname: '/transaction/[id]', params: { id: 'new' } })}
         />
       )}
-      <AvailableBreakdownSheet
-        visible={showBreakdown}
-        onDismiss={() => setShowBreakdown(false)}
-        accounts={data}
-        planned={cardHorizon ? { through: cardHorizon, amount: availablePlanned } : null}
-      />
+      {openSheet && (
+        <BreakdownSheet
+          visible
+          onDismiss={() => setBreakdown(null)}
+          title={openSheet.title}
+          total={openSheet.total}
+          sections={openSheet.sections}
+          note={openSheet.note}
+        />
+      )}
     </View>
   );
 }

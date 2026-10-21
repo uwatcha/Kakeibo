@@ -47,7 +47,7 @@ export default function TabsLayout() {
                 accessibilityLabel="用語の説明"
                 onPress={() => router.push('/info')}
               />
-              {/* 記録・集計と同じく、汎用資産のボタンはいちばん右 */}
+              {/* 記録・集計と同じく、実質残高のボタンはいちばん右 */}
               <AvailableAccountsButton />
             </View>
           ),

@@ -150,7 +150,7 @@ export function buildContext(source: AiSource, aliases: Aliases): string {
 
   lines.push('## 口座（残高は今日までの記録で計算。クレジットカードと借りている相手はマイナス）');
   for (const a of source.accounts) {
-    const flags = [ACCOUNT_KIND_INFO[a.kind].label, a.includeInAvailable ? '汎用資産に含む' : '汎用資産に含まない'];
+    const flags = [ACCOUNT_KIND_INFO[a.kind].label, a.includeInAvailable ? '実質残高に含む' : '実質残高に含まない'];
     lines.push(`- ${aliases.account(a.id)}（${flags.join('・')}）: ${formatYen(a.balance)}`);
   }
 

@@ -26,7 +26,7 @@ const TITLE = '給料日からの推移';
 const SHOW_PACE_PROJECTION = false;
 
 /**
- * 選んだ月の給料日の期間（前の給料日〜その月の給料日）の汎用資産の推移。
+ * 選んだ月の給料日の期間（前の給料日〜その月の給料日）の実質残高の推移。
  * 今日より後の予定も入れ、今日までは実線・それより後は点線。押すと横向きで全期間のグラフを開く
  */
 export function SincePaydayChart({
@@ -119,7 +119,7 @@ export function SincePaydayChart({
       <Card.Title
         title={TITLE}
         titleStyle={styles.title}
-        subtitle={`${formatDay(start.date)}〜${formatDay(end.date)}（${end.employer.name}）・汎用資産`}
+        subtitle={`${formatDay(start.date)}〜${formatDay(end.date)}（${end.employer.name}）・実質残高の口座`}
       />
       <Card.Content style={styles.gap}>
         <View style={styles.summary}>

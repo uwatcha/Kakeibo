@@ -30,6 +30,9 @@
 - 2026-10-20 小分類が出てきたことに気づきにくい
   - 決まり: 後から出てくる選択肢の列は、上から少し滑り込ませ、背景を primaryContainer で2回光らせる（CategoryPicker の AppearHighlight）
 
+- 2026-10-21 押すと何かが出るカードは、押せることが分かるようにする
+  - 決まり: カードの右上に primary の色で「内訳 ›」（文字＋chevron-right）を出す（BalanceCarousel の onPress）
+
 ## 色（src/theme.ts）
 | 役割 | ライト | ダーク |
 |---|---|---|

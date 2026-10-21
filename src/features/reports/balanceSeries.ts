@@ -5,7 +5,7 @@ type Movement = { date: string; amount: number; from_account_id: string | null; 
 export type BalancePoint = { date: string; balance: number };
 
 /**
- * start〜end の各日の終わり時点の残高（汎用資産など、対象の口座の合計）。
+ * start〜end の各日の終わり時点の残高（実質残高など、対象の口座の合計）。
  * currentBalance は movements をすべて反映した残高。そこから、その日より後の記録の動きを差し戻して求める。
  * movements には start より後で currentBalance に含まれている記録をすべて渡す。
  */

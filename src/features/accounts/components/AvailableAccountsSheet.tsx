@@ -16,7 +16,7 @@ type Props = {
   accounts: readonly AccountBalance[];
 };
 
-/** 汎用資産に含める口座をスイッチで選ぶ小さな画面。切り替えるとすぐ保存し、合計もすぐ変わる */
+/** 実質残高に含める口座をスイッチで選ぶ小さな画面。切り替えるとすぐ保存し、合計もすぐ変わる */
 export function AvailableAccountsSheet({ visible, onDismiss, accounts }: Props) {
   const theme = useTheme();
   const update = useUpdateAccount();
@@ -55,7 +55,7 @@ export function AvailableAccountsSheet({ visible, onDismiss, accounts }: Props) 
         contentContainerStyle={[styles.sheet, { backgroundColor: theme.colors.surface }]}
       >
         <Text variant="titleMedium" style={styles.title}>
-          汎用資産に含める口座
+          実質残高に含める口座
         </Text>
         <Amount value={total} variant="headlineMedium" style={[styles.total, styles.title]} />
         <ScrollView style={styles.list}>

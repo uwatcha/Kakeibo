@@ -7,7 +7,7 @@ export type Spendable = {
   through: string;
   /** 今日を含めた残り日数 */
   daysLeft: number;
-  /** 今の汎用資産に、through までの予定（未来の日付の記録）を反映した額 */
+  /** 今の実質残高に、through までの予定（未来の日付の記録）を反映した額 */
   amount: number;
   /** 1日あたり。使える額がマイナスなら null */
   perDay: number | null;
@@ -40,7 +40,7 @@ export function monthEnd(date: string): string {
 
 /**
  * 次の給料日の前日（給料日がなければ月末）までに使える額。
- * available は今日までの記録で計算した汎用資産、movements は今日より後の記録。
+ * available は今日までの記録で計算した実質残高、movements は今日より後の記録。
  */
 export function spendableUntil(
   available: number,
@@ -57,7 +57,7 @@ export function spendableUntil(
 }
 
 /**
- * 汎用資産に予定を含める期限: 汎用資産に含めるクレカへの、いちばん後の引き落とし（振替）の予定日。
+ * 実質残高に予定を含める期限: 実質残高に含めるクレカへの、いちばん後の引き落とし（振替）の予定日。
  * クレカの未払いは引き落としで消える前提なので、それまでの他の予定（支出・収入）も合わせて見る。予定がなければ null
  */
 export function lastCardPayment(

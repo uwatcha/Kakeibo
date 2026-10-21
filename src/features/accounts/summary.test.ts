@@ -37,7 +37,7 @@ describe('summarizeBalances', () => {
     expect(summary.netWorth).toBe(8000 + 120000 + 300000 - 15000 - 20000 + 800 + 500);
   });
 
-  it('汎用資産は含めると選んだ口座だけ（負債は差し引き、含めない NISA は除く）', () => {
+  it('実質残高は含めると選んだ口座だけ（負債は差し引き、含めない NISA は除く）', () => {
     expect(summary.availableNetWorth).toBe(8000 + 120000 - 15000 - 20000 + 800 + 500);
   });
 
@@ -59,7 +59,7 @@ describe('summarizeBalances', () => {
     expect(names).not.toContain('旧口座');
   });
 
-  it('普段使わない口座でも、含めると選べば汎用資産に入る', () => {
+  it('普段使わない口座でも、含めると選べば実質残高に入る', () => {
     const reserved = account({ kind: 'bank', balance: 1000, isReserved: true, includeInAvailable: true });
     const excludedCard = account({ kind: 'credit_card', balance: -500, includeInAvailable: false });
     expect(summarizeBalances([reserved, excludedCard]).availableNetWorth).toBe(1000);

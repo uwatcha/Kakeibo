@@ -10,14 +10,14 @@ export type AccountBalance = {
   isArchived: boolean;
   /** 負債はマイナス */
   balance: number;
-  /** 汎用資産に含めるか（ホームの ⚙ から切り替える） */
+  /** 実質残高に含めるか（右上のつまみのアイコンから切り替える） */
   includeInAvailable: boolean;
 };
 
 export type BalanceSummary = {
   /** 全口座（非表示も含む）の残高合計 */
   netWorth: number;
-  /** 汎用資産: 汎用資産に含めると選んだ口座の残高の合計。ホームでいちばん大きく出す */
+  /** 実質残高: 実質残高に含めると選んだ口座の残高の合計。ホームでいちばん大きく出す */
   availableNetWorth: number;
   /** 普段使う口座（現金・銀行・電子マネー・投資） */
   everyday: AccountBalance[];
@@ -36,7 +36,7 @@ export type BalanceSummary = {
   payableTotal: number;
 };
 
-/** 汎用資産に数える口座か（口座ごとに選ぶ） */
+/** 実質残高に数える口座か（口座ごとに選ぶ） */
 export function isAvailableAccount(account: Pick<AccountBalance, 'includeInAvailable'>): boolean {
   return account.includeInAvailable;
 }
@@ -73,7 +73,7 @@ export function summarizeBalances(accounts: AccountBalance[]): BalanceSummary {
   };
 }
 
-/** 汎用資産の内訳: 含める口座のうち、プラスの口座（多い順）とマイナスの口座（マイナスが大きい順）。0 円は出さない */
+/** 実質残高の内訳: 含める口座のうち、プラスの口座（多い順）とマイナスの口座（マイナスが大きい順）。0 円は出さない */
 export function availableBreakdown(accounts: readonly AccountBalance[]): {
   plus: AccountBalance[];
   minus: AccountBalance[];

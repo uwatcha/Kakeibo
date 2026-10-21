@@ -4,7 +4,7 @@ import type { CategoryExpenseRow } from '@/features/reports/breakdown';
 type Movement = { from_account_id: string | null; to_account_id: string | null };
 
 /**
- * 汎用資産に含める口座（ホーム・集計の右上のパネルで選ぶ）が関わる記録か。
+ * 実質残高に含める口座（ホーム・集計の右上のパネルで選ぶ）が関わる記録か。
  * 支払いは払った口座、収入は入った口座で決まる。振替などはどちらかが含まれていれば対象。
  */
 export function touchesAccounts(t: Movement, accountIds: ReadonlySet<string>): boolean {

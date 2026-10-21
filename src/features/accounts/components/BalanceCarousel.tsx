@@ -1,3 +1,4 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { IconButton, Text, useTheme } from 'react-native-paper';
 
@@ -11,7 +12,7 @@ type Page = {
   detail?: string;
   /** カード右上の小さなボタン */
   action?: { icon: string; label: string; onPress: () => void };
-  /** カードを押したとき（汎用資産の内訳を開くなど） */
+  /** カードを押したとき（内訳を開く）。あれば右上に「内訳 ›」を出す */
   onPress?: () => void;
 };
 
@@ -35,6 +36,15 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
                 <Text variant="titleMedium" style={styles.title}>
                   {page.title}
                 </Text>
+                {/* 押すと内訳が出ることが分かるように */}
+                {page.onPress && !page.action && (
+                  <View style={styles.more}>
+                    <Text variant="labelMedium" style={{ color: theme.colors.primary }}>
+                      内訳
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-right" size={18} color={theme.colors.primary} />
+                  </View>
+                )}
                 {page.action && (
                   <IconButton
                     icon={page.action.icon}
@@ -72,4 +82,5 @@ const styles = StyleSheet.create({
   title: { fontWeight: '700' },
   amount: { fontWeight: '800', marginTop: 4 },
   action: { margin: -8 },
+  more: { flexDirection: 'row', alignItems: 'center' },
 });

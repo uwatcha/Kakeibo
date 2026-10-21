@@ -106,7 +106,7 @@ export default function AccountEditScreen() {
           ...common,
           opening_balance: toOpeningBalance(valuesKind, input),
           kind: valuesKind,
-          // 作るときだけ、普段使わない口座は汎用資産に含めない状態から始める（あとはホームの ⚙ で切り替える）
+          // 作るときだけ、普段使わない口座は実質残高に含めない状態から始める（あとは右上のつまみのアイコンで切り替える）
           include_in_available: !common.is_reserved,
           // 振替の優先度の最後に足す（投資はすぐ引き出せないので使わない。資産でない口座も使わない）
           transfer_priority:

@@ -57,7 +57,7 @@ describe('anonymize', () => {
   });
 
   it('置き換え後の名前で材料を作る（同じ内容は同じ名前）', () => {
-    expect(context).toContain('銀行A（銀行・汎用資産に含む）: 31,000円');
+    expect(context).toContain('銀行A（銀行・実質残高に含む）: 31,000円');
     expect(context).toContain('相手A');
     expect(context).toContain('相手B');
     expect(context).toContain('勤務先A');

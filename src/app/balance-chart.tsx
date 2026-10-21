@@ -21,7 +21,7 @@ const DAY_SPACING = 16;
 const LABEL_EVERY_DAYS = 7;
 
 /**
- * 汎用資産の全期間の推移を横向きで出す。端末の向きは変えず、画面全体を90度回して横長に見せる
+ * 実質残高の全期間の推移を横向きで出す。端末の向きは変えず、画面全体を90度回して横長に見せる
  * （向きを変える部品は APK の作り直しが要るため）
  */
 export default function BalanceChartScreen() {
@@ -112,7 +112,7 @@ export default function BalanceChartScreen() {
       >
         <View style={styles.header}>
           <Text variant="titleMedium" style={styles.bold}>
-            汎用資産の推移（全期間）
+            実質残高の推移（全期間）
           </Text>
           <IconButton icon="close" accessibilityLabel="閉じる" onPress={() => router.back()} />
         </View>

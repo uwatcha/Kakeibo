@@ -78,7 +78,7 @@ export default function TransactionsScreen() {
     setQuery('');
   };
 
-  // 汎用資産に含める口座（右上のパネルで選ぶ）が関わる記録だけを出し、月の収入・支出もそれで計算する
+  // 実質残高に含める口座（右上のパネルで選ぶ）が関わる記録だけを出し、月の収入・支出もそれで計算する
   const availableIds = useAvailableAccountIds();
   const listSource = (searching ? (searchResults.data ?? []) : (transactions.data ?? [])).filter(
     (t) => !availableIds || touchesAccounts(t, availableIds),

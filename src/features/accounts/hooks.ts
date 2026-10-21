@@ -36,7 +36,7 @@ export function useBalanceMap(): ReadonlyMap<string, number> | undefined {
   return useMemo(() => (data ? new Map(data.map((a) => [a.id, a.balance])) : undefined), [data]);
 }
 
-/** 汎用資産に含める口座の id（読み込み中は undefined）。記録・集計の対象を絞るのに使う */
+/** 実質残高に含める口座の id（読み込み中は undefined）。記録・集計の対象を絞るのに使う */
 export function useAvailableAccountIds(): ReadonlySet<string> | undefined {
   const { data } = useAccountBalances();
   return useMemo(() => (data ? new Set(data.filter((a) => a.includeInAvailable).map((a) => a.id)) : undefined), [data]);

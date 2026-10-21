@@ -62,7 +62,7 @@ export default function ReportsScreen() {
   const theme = useTheme();
   const [month, setMonth] = useState(() => monthStart(toTokyoDateString()));
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // 汎用資産に含める口座（右上のパネルで選ぶ）が関わる記録だけで集計する
+  // 実質残高に含める口座（右上のパネルで選ぶ）が関わる記録だけで集計する
   const current = useMonthTransactions(month);
   const previousMonth = useMonthTransactions(addMonths(month, -1));
   const availableIds = useAvailableAccountIds();
