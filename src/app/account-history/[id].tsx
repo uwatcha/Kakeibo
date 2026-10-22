@@ -6,7 +6,7 @@ import { IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper
 import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO, isLiability } from '@/features/accounts/accountKinds';
 import { cardStatements } from '@/features/accounts/cardStatements';
@@ -40,20 +40,10 @@ export default function AccountHistoryScreen() {
   );
 
   if (!account || !categories.data || balance.data === undefined || !transactions.data) {
-    const error = accounts.error ?? categories.error ?? balance.error ?? transactions.error;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title: '口座', headerRight }} />
-        <QueryState
-          isLoading={!error}
-          error={error}
-          onRetry={() => {
-            accounts.refetch();
-            categories.refetch();
-            balance.refetch();
-            transactions.refetch();
-          }}
-        />
+        <QueriesState queries={[accounts, categories, balance, transactions]} />
       </View>
     );
   }

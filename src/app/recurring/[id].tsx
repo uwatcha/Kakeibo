@@ -15,7 +15,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { GeneratedRecords } from '@/features/recurring/components/GeneratedRecords';
@@ -100,19 +100,10 @@ export default function RecurringRuleScreen() {
 
   const title = isNew ? '定期支払いを追加' : '定期支払いを編集';
   if (!rules.data || !accounts.data || !categories.data || (!isNew && !rule)) {
-    const error = rules.error ?? accounts.error ?? categories.error;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title }} />
-        <QueryState
-          isLoading={!error}
-          error={error}
-          onRetry={() => {
-            rules.refetch();
-            accounts.refetch();
-            categories.refetch();
-          }}
-        />
+        <QueriesState queries={[rules, accounts, categories]} />
       </View>
     );
   }

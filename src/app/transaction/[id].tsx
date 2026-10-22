@@ -17,7 +17,7 @@ import {
 } from 'react-native-paper';
 
 import { ChipGroup } from '@/components/ChipGroup';
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
@@ -184,19 +184,10 @@ export default function TransactionEditScreen() {
   const title = isNew ? '記録する' : '記録を編集';
   const loading = !accounts.data || !categories.data || (!isNew && !transaction.data);
   if (loading) {
-    const failed = accounts.error ?? categories.error ?? transaction.error;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title }} />
-        <QueryState
-          isLoading={!failed}
-          error={failed}
-          onRetry={() => {
-            accounts.refetch();
-            categories.refetch();
-            if (!isNew) transaction.refetch();
-          }}
-        />
+        <QueriesState queries={[accounts, categories, ...(isNew ? [] : [transaction])]} />
       </View>
     );
   }

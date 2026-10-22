@@ -5,7 +5,7 @@ import { Chip, IconButton, Searchbar, Text, useTheme } from 'react-native-paper'
 
 import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { useAccounts, useAvailableAccountIds } from '@/features/accounts/hooks';
 import type { Category } from '@/features/categories/api';
@@ -165,16 +165,7 @@ export default function TransactionsScreen() {
       )}
 
       {!ready ? (
-        <QueryState
-          isLoading={!(transactions.error ?? searchResults.error ?? accounts.error ?? categories.error)}
-          error={transactions.error ?? searchResults.error ?? accounts.error ?? categories.error}
-          onRetry={() => {
-            if (searching) searchResults.refetch();
-            transactions.refetch();
-            accounts.refetch();
-            categories.refetch();
-          }}
-        />
+        <QueriesState queries={[transactions, accounts, categories, ...(searching ? [searchResults] : [])]} />
       ) : (
         <TransactionDayList
           transactions={filtered}

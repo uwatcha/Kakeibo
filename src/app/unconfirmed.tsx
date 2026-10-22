@@ -5,7 +5,7 @@ import { Button, Dialog, IconButton, Portal, SegmentedButtons, Snackbar, Text, u
 
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { useAccounts } from '@/features/accounts/hooks';
 import {
@@ -59,11 +59,10 @@ export default function ReviewScreen() {
 
   const queries = [unconfirmed, autoAdded, open, needsPayee, accounts];
   if (queries.some((q) => !q.data)) {
-    const error = queries.find((q) => q.error)?.error ?? null;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title: '記録の確認' }} />
-        <QueryState isLoading={!error} error={error} onRetry={() => queries.forEach((q) => q.refetch())} />
+        <QueriesState queries={queries} />
       </View>
     );
   }

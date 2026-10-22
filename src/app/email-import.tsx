@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Dialog, Portal, Snackbar, Switch, Text, useTheme } from 'react-native-paper';
 
 import { ListRow } from '@/components/ListRow';
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { type AccountKind, ASSET_KINDS } from '@/features/accounts/accountKinds';
 import { useAccounts } from '@/features/accounts/hooks';
@@ -67,11 +67,10 @@ export default function EmailImportScreen() {
 
   const queries = [settings, sources, rules, accounts, categories];
   if (queries.some((q) => q.data === undefined)) {
-    const error = queries.find((q) => q.error)?.error ?? null;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title: 'メールからの記録' }} />
-        <QueryState isLoading={!error} error={error} onRetry={() => queries.forEach((q) => q.refetch())} />
+        <QueriesState queries={queries} />
       </View>
     );
   }

@@ -7,7 +7,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Button, HelperText, List, SegmentedButtons, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 import { z } from 'zod';
 
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { ASSET_KINDS } from '@/features/accounts/accountKinds';
 import { nextCardCycle } from '@/features/accounts/cardSchedule';
 import { useAccount, useAccounts, useCardSettings, useSaveCardSettings } from '@/features/accounts/hooks';
@@ -79,19 +79,10 @@ export default function CardSettingsScreen() {
 
   const title = account.data ? `${account.data.name}の設定` : 'カードの設定';
   if (!account.data || !accounts.data || settings.data === undefined) {
-    const error = account.error ?? accounts.error ?? settings.error;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title }} />
-        <QueryState
-          isLoading={!error}
-          error={error}
-          onRetry={() => {
-            account.refetch();
-            accounts.refetch();
-            settings.refetch();
-          }}
-        />
+        <QueriesState queries={[account, accounts, settings]} />
       </View>
     );
   }

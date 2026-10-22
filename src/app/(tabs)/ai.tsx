@@ -6,7 +6,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { useAccountBalances, useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { buildAliases, maskText } from '@/features/ai/anonymize';
 import { buildChatSystem } from '@/features/ai/chatContext';
@@ -118,12 +118,11 @@ export default function AiChatScreen() {
     transactions,
     ...(conversationId ? [conversation] : []),
   ];
-  const loadError = sources.find((q) => q.error)?.error ?? null;
   if (sources.some((q) => !q.data)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Tabs.Screen options={{ headerRight }} />
-        <QueryState isLoading={!loadError} error={loadError} onRetry={() => sources.forEach((q) => q.refetch())} />
+        <QueriesState queries={sources} />
       </View>
     );
   }

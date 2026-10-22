@@ -5,7 +5,7 @@ import { Text, useTheme } from 'react-native-paper';
 import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { useAccounts } from '@/features/accounts/hooks';
 import type { RecurringRule } from '@/features/recurring/api';
@@ -51,14 +51,7 @@ export default function RecurringRulesScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ title: '定期支払い' }} />
       {!rules.data || !accounts.data ? (
-        <QueryState
-          isLoading={!(rules.error ?? accounts.error)}
-          error={rules.error ?? accounts.error}
-          onRetry={() => {
-            rules.refetch();
-            accounts.refetch();
-          }}
-        />
+        <QueriesState queries={[rules, accounts]} />
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {rules.data.length === 0 && (

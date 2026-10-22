@@ -7,7 +7,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Button, HelperText, List, RadioButton, Snackbar, Switch, TextInput, useTheme } from 'react-native-paper';
 import { z } from 'zod';
 
-import { QueryState } from '@/components/QueryState';
+import { QueriesState } from '@/components/QueryState';
 import {
   ACCOUNT_KIND_INFO,
   ACCOUNT_KINDS,
@@ -147,19 +147,10 @@ export default function AccountEditScreen() {
   const title = isNew ? '口座を追加' : '口座を編集';
 
   if ((!isNew && (!account.data || balance.data === undefined)) || !categories.data) {
-    const error = account.error ?? balance.error ?? categories.error;
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title }} />
-        <QueryState
-          isLoading={!error}
-          error={error}
-          onRetry={() => {
-            account.refetch();
-            balance.refetch();
-            categories.refetch();
-          }}
-        />
+        <QueriesState queries={[categories, ...(isNew ? [] : [account, balance])]} />
       </View>
     );
   }
