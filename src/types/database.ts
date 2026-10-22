@@ -294,6 +294,138 @@ export type Database = {
           },
         ]
       }
+      email_import_settings: {
+        Row: {
+          last_seen_at: string | null
+          started_at: string | null
+          summary_rules: string | null
+          token_hash: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          last_seen_at?: string | null
+          started_at?: string | null
+          summary_rules?: string | null
+          token_hash?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          last_seen_at?: string | null
+          started_at?: string | null
+          summary_rules?: string | null
+          token_hash?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_import_sources: {
+        Row: {
+          account_id: string | null
+          enabled: boolean
+          source: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          enabled?: boolean
+          source: string
+          user_id?: string
+        }
+        Update: {
+          account_id?: string | null
+          enabled?: boolean
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_import_sources_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_import_sources_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_imports: {
+        Row: {
+          amount: number | null
+          created_at: string
+          date: string | null
+          duplicate_of: string | null
+          id: string
+          item_index: number
+          kind: string | null
+          message_id: string
+          notified: boolean
+          raw_payee: string | null
+          received_at: string | null
+          status: string
+          subject: string | null
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          date?: string | null
+          duplicate_of?: string | null
+          id?: string
+          item_index?: number
+          kind?: string | null
+          message_id: string
+          notified?: boolean
+          raw_payee?: string | null
+          received_at?: string | null
+          status: string
+          subject?: string | null
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          date?: string | null
+          duplicate_of?: string | null
+          id?: string
+          item_index?: number
+          kind?: string | null
+          message_id?: string
+          notified?: boolean
+          raw_payee?: string | null
+          received_at?: string | null
+          status?: string
+          subject?: string | null
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_imports_duplicate_of_fkey"
+            columns: ["duplicate_of"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_imports_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employers: {
         Row: {
           created_at: string
@@ -341,6 +473,44 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
+      payee_rules: {
+        Row: {
+          category_id: string | null
+          kind: Database["public"]["Enums"]["category_kind"]
+          learned_from: string
+          payee: string | null
+          raw_payee: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category_id?: string | null
+          kind?: Database["public"]["Enums"]["category_kind"]
+          learned_from?: string
+          payee?: string | null
+          raw_payee: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          category_id?: string | null
+          kind?: Database["public"]["Enums"]["category_kind"]
+          learned_from?: string
+          payee?: string | null
+          raw_payee?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payee_rules_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -426,7 +596,9 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          auto_reviewed: boolean
           auto_salary: boolean
+          auto_source: string | null
           category_id: string | null
           created_at: string
           date: string
@@ -436,8 +608,10 @@ export type Database = {
           is_confirmed: boolean
           list_price: number | null
           memo: string | null
+          needs_payee: boolean
           payee: string | null
           points_used: number | null
+          raw_payee: string | null
           recurring_rule_id: string | null
           related_transaction_id: string | null
           to_account_id: string | null
@@ -447,7 +621,9 @@ export type Database = {
         }
         Insert: {
           amount: number
+          auto_reviewed?: boolean
           auto_salary?: boolean
+          auto_source?: string | null
           category_id?: string | null
           created_at?: string
           date?: string
@@ -457,8 +633,10 @@ export type Database = {
           is_confirmed?: boolean
           list_price?: number | null
           memo?: string | null
+          needs_payee?: boolean
           payee?: string | null
           points_used?: number | null
+          raw_payee?: string | null
           recurring_rule_id?: string | null
           related_transaction_id?: string | null
           to_account_id?: string | null
@@ -468,7 +646,9 @@ export type Database = {
         }
         Update: {
           amount?: number
+          auto_reviewed?: boolean
           auto_salary?: boolean
+          auto_source?: string | null
           category_id?: string | null
           created_at?: string
           date?: string
@@ -478,8 +658,10 @@ export type Database = {
           is_confirmed?: boolean
           list_price?: number | null
           memo?: string | null
+          needs_payee?: boolean
           payee?: string | null
           points_used?: number | null
+          raw_payee?: string | null
           recurring_rule_id?: string | null
           related_transaction_id?: string | null
           to_account_id?: string | null
@@ -567,7 +749,7 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      rotate_email_import_token: { Args: never; Returns: string }
     }
     Enums: {
       account_kind:
