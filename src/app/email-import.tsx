@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Share, StyleSheet, View } from 'react-native';
-import { Button, Dialog, Portal, Snackbar, Switch, Text, TextInput, useTheme } from 'react-native-paper';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Button, Dialog, Portal, Snackbar, Switch, Text, useTheme } from 'react-native-paper';
 
 import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
@@ -11,8 +11,10 @@ import { useAccounts } from '@/features/accounts/hooks';
 import { startBackgroundTask } from '@/features/background/backgroundTask';
 import { useCategories } from '@/features/categories/hooks';
 import { categoryLabel } from '@/features/categories/tree';
-import { EMAIL_IMPORT_ENDPOINT, type PayeeRule } from '@/features/emailImport/api';
-import { buildAppsScript } from '@/features/emailImport/appsScript';
+import type { PayeeRule } from '@/features/emailImport/api';
+import { PayeeRuleDialog } from '@/features/emailImport/components/PayeeRuleDialog';
+import { SummaryRulesDialog } from '@/features/emailImport/components/SummaryRulesDialog';
+import { TokenDialog } from '@/features/emailImport/components/TokenDialog';
 import {
   useDeletePayeeRule,
   useEmailImportSettings,
@@ -24,7 +26,6 @@ import {
   useUpdatePayeeRule,
 } from '@/features/emailImport/hooks';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
-import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import { SPACING } from '@/theme';
 
 import type { EmailSource } from '../../supabase/functions/_shared/emailParse';
@@ -61,8 +62,8 @@ export default function EmailImportScreen() {
 
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const [rulesDraft, setRulesDraft] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ rule: PayeeRule; payee: string; categoryId: string | null } | null>(null);
+  const [editingRules, setEditingRules] = useState(false);
+  const [editing, setEditing] = useState<PayeeRule | null>(null);
 
   const queries = [settings, sources, rules, accounts, categories];
   if (queries.some((q) => q.data === undefined)) {
@@ -146,7 +147,7 @@ export default function EmailImportScreen() {
             title={settings.data?.summary_rules ? '自分で書いたルール' : '初期のルール'}
             subtitle={currentRules.split('\n')[0]}
             icon="text-box-edit-outline"
-            onPress={() => setRulesDraft(currentRules)}
+            onPress={() => setEditingRules(true)}
           />
         </SectionCard>
 
@@ -163,7 +164,7 @@ export default function EmailImportScreen() {
                 subtitle={[rule.raw_payee, categoryLabel(rule.category_id, categories.data!) ?? '未分類'].join('・')}
                 icon={rule.learned_from === 'user' ? 'account-edit-outline' : 'robot-outline'}
                 wrap
-                onPress={() => setEditing({ rule, payee: rule.payee ?? '', categoryId: rule.category_id })}
+                onPress={() => setEditing(rule)}
               />
             ))
           )}
@@ -182,97 +183,33 @@ export default function EmailImportScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog visible={token !== null} onDismiss={() => setToken(null)}>
-          <Dialog.Title>合言葉</Dialog.Title>
-          <Dialog.Content style={styles.dialog}>
-            <Text variant="bodyMedium" selectable style={styles.token}>
-              {token}
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setToken(null)}>閉じる</Button>
-            <Button
-              icon="share-variant"
-              onPress={() => token && Share.share({ message: buildAppsScript(EMAIL_IMPORT_ENDPOINT, token) })}
-            >
-              Apps Script のコードを共有
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-
-        <Dialog visible={rulesDraft !== null} onDismiss={() => setRulesDraft(null)}>
-          <Dialog.Title>内容の要約ルール</Dialog.Title>
-          <Dialog.ScrollArea style={styles.scrollArea}>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <TextInput mode="outlined" multiline value={rulesDraft ?? ''} onChangeText={setRulesDraft} />
-            </ScrollView>
-          </Dialog.ScrollArea>
-          <Dialog.Actions>
-            <Button
-              onPress={() => {
-                saveRules.mutate(null);
-                setRulesDraft(null);
-              }}
-            >
-              初期に戻す
-            </Button>
-            <Button
-              disabled={!rulesDraft?.trim()}
-              onPress={() => {
-                saveRules.mutate(rulesDraft!.trim() === DEFAULT_SUMMARY_RULES ? null : rulesDraft!.trim());
-                setRulesDraft(null);
-              }}
-            >
-              保存
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-
-        <Dialog visible={editing !== null} onDismiss={() => setEditing(null)}>
-          <Dialog.Title>{editing?.rule.raw_payee}</Dialog.Title>
-          <Dialog.ScrollArea style={styles.scrollArea}>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.dialog}>
-              <TextInput
-                mode="outlined"
-                label="内容"
-                value={editing?.payee ?? ''}
-                onChangeText={(payee) => editing && setEditing({ ...editing, payee })}
-              />
-              {editing && (
-                <CategoryPicker
-                  kind={editing.rule.kind}
-                  categories={categories.data!}
-                  value={editing.categoryId}
-                  onChange={(categoryId) => setEditing({ ...editing, categoryId })}
-                />
-              )}
-            </ScrollView>
-          </Dialog.ScrollArea>
-          <Dialog.Actions>
-            <Button
-              textColor={theme.colors.error}
-              onPress={() => {
-                if (editing) deleteRule.mutate(editing.rule.raw_payee);
-                setEditing(null);
-              }}
-            >
-              削除
-            </Button>
-            <Button
-              onPress={() => {
-                if (editing)
-                  updateRule.mutate({
-                    rawPayee: editing.rule.raw_payee,
-                    payee: editing.payee.trim() || null,
-                    categoryId: editing.categoryId,
-                  });
-                setEditing(null);
-              }}
-            >
-              保存
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
+        <TokenDialog token={token} onClose={() => setToken(null)} />
+        {editingRules && (
+          <SummaryRulesDialog
+            initial={currentRules}
+            onDismiss={() => setEditingRules(false)}
+            onSave={(next) => {
+              saveRules.mutate(next);
+              setEditingRules(false);
+            }}
+          />
+        )}
+        {editing && (
+          <PayeeRuleDialog
+            key={editing.raw_payee}
+            rule={editing}
+            categories={categories.data!}
+            onDismiss={() => setEditing(null)}
+            onSave={(values) => {
+              updateRule.mutate({ rawPayee: editing.raw_payee, ...values });
+              setEditing(null);
+            }}
+            onDelete={() => {
+              deleteRule.mutate(editing.raw_payee);
+              setEditing(null);
+            }}
+          />
+        )}
       </Portal>
 
       <Snackbar
@@ -290,7 +227,4 @@ const styles = StyleSheet.create({
   content: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 48 },
   picker: { paddingHorizontal: SPACING.row, paddingBottom: 8 },
   empty: { padding: 16, textAlign: 'center' },
-  dialog: { gap: 8 },
-  token: { fontFamily: 'monospace' },
-  scrollArea: { maxHeight: 420, paddingHorizontal: 24 },
 });
