@@ -1,0 +1,506 @@
+// メールからの記録（設計書: デビットカードの利用メールから自動で記録）。
+// - Gmail の Apps Script（scripts/gmail-import.gs）が10分ごとに、連携の合言葉と通知メールの本文を送ってくる
+//   → 読み取って email_imports に入れ、記録を足す。本文は保存しない。返した accepted のメールを Apps Script が既読にする
+// - アプリからは（ログインの JWT で）「重複の可能性」を追加する・待ちを処理する
+// 届くたびに、AI の混み合いで待ちになっていたものも処理し直す（Apps Script の10分ごとの呼び出しが、そのまま再試行になる）
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+
+import { type EmailKind, isDebitCardName, parseMail, SOURCE_OF } from '../_shared/emailParse.ts';
+import { DEFAULT_SUMMARY_RULES } from '../_shared/emailRules.ts';
+import {
+  FALLBACK_MODEL,
+  GeminiError,
+  generateWithRetry,
+  isTemporary,
+  LIGHT_FALLBACK_MODEL,
+  serviceKey,
+} from '../_shared/gemini.ts';
+
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+
+type Mail = { id: string; from: string; subject: string; date: string; body: string };
+
+type ImportRow = {
+  id: string;
+  message_id: string;
+  item_index: number;
+  kind: EmailKind | null;
+  date: string | null;
+  amount: number | null;
+  raw_payee: string | null;
+  status: string;
+  transaction_id: string | null;
+};
+
+type Rule = { raw_payee: string; kind: 'expense' | 'income'; payee: string | null; category_id: string | null };
+type Category = { id: string; name: string; kind: 'expense' | 'income'; parent_id: string | null; is_archived: boolean };
+
+/** 同じ利用とみなす日付の差（デビットカード と 連携サービス、予定との照らし合わせ） */
+const MATCH_DAYS = 3;
+/** 手入力との重複とみなす日付の差 */
+const DUPLICATE_DAYS = 1;
+/** 通知しない状態（ほかの記録と同じ利用・オフの種類・重複で「追加しない」） */
+const SILENT = new Set(['merged', 'ignored', 'dismissed']);
+
+const addDays = (date: string, days: number) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const tokyoToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** 1人分の処理。db は service role（RLS を通らない）なので、すべての問い合わせで user_id を絞る */
+class Importer {
+  private rules = new Map<string, Rule>();
+  private categories: Category[] = [];
+  private accounts = new Map<string, string | null>();
+  private enabled = new Map<string, boolean>();
+
+  constructor(
+    private db: SupabaseClient,
+    private userId: string,
+  ) {}
+
+  async load() {
+    const [rules, categories, sources] = await Promise.all([
+      this.db.from('payee_rules').select('raw_payee, kind, payee, category_id').eq('user_id', this.userId),
+      this.db.from('categories').select('id, name, kind, parent_id, is_archived').eq('user_id', this.userId),
+      this.db.from('email_import_sources').select('source, enabled, account_id').eq('user_id', this.userId),
+    ]);
+    for (const r of (rules.data ?? []) as Rule[]) this.rules.set(r.raw_payee, r);
+    this.categories = (categories.data ?? []) as Category[];
+    for (const s of sources.data ?? []) {
+      this.accounts.set(s.source, s.account_id);
+      this.enabled.set(s.source, s.enabled && !!s.account_id);
+    }
+  }
+
+  /** 届いたメールを読み取って email_imports に入れる。既読にしてよいメールの id を返す */
+  async ingest(mails: Mail[], startedAt: string | null): Promise<string[]> {
+    const accepted: string[] = [];
+    const ids = mails.map((m) => m.id);
+    const { data: known } = await this.db
+      .from('email_imports')
+      .select('message_id')
+      .eq('user_id', this.userId)
+      .in('message_id', ids.length > 0 ? ids : ['-']);
+    const seen = new Set((known ?? []).map((k) => k.message_id));
+    for (const mail of mails) {
+      if (seen.has(mail.id)) {
+        accepted.push(mail.id);
+        continue;
+      }
+      // 合言葉を作る前に届いたメールは読まない（過去のメールはさかのぼらない）。既読にもしない
+      if (startedAt && new Date(mail.date) < new Date(startedAt)) continue;
+      const parsed = parseMail(mail);
+      const base = { user_id: this.userId, message_id: mail.id, received_at: mail.date };
+      let rows: Record<string, unknown>[] = [];
+      if (parsed.type === 'items') {
+        rows = parsed.items.map((item, i) => ({
+          ...base,
+          item_index: i,
+          kind: item.kind,
+          date: item.date,
+          amount: item.amount,
+          raw_payee: item.rawPayee,
+          status: this.enabled.get(SOURCE_OF[item.kind]) ? 'new' : 'ignored',
+          notified: !this.enabled.get(SOURCE_OF[item.kind]),
+        }));
+      } else if (parsed.type === 'notice') {
+        rows = [{ ...base, status: 'notice', subject: mail.subject.slice(0, 200) }];
+      } else if (parsed.type === 'unreadable') {
+        rows = [{ ...base, status: 'unreadable', subject: mail.subject.slice(0, 200) }];
+      }
+      if (rows.length > 0) {
+        const { error } = await this.db.from('email_imports').insert(rows);
+        if (error && !/duplicate key/.test(error.message)) throw error;
+      }
+      accepted.push(mail.id);
+    }
+    return accepted;
+  }
+
+  /** 待ち（new・AI 待ち）を処理する。force は「重複の可能性」から追加するときの id */
+  async process(force?: string) {
+    const { data } = await this.db
+      .from('email_imports')
+      .select('id, message_id, item_index, kind, date, amount, raw_payee, status, transaction_id')
+      .eq('user_id', this.userId)
+      .in('status', force ? ['duplicate'] : ['new', 'pending_ai'])
+      .order('date')
+      .order('created_at');
+    const rows = ((data ?? []) as ImportRow[]).filter((r) => !force || r.id === force);
+    if (rows.length === 0) return;
+
+    // 対応表にない利用先は、まとめて AI に決めてもらう。混み合いならその行は待ちにする
+    const unknown = rows
+      .filter((r) => r.raw_payee && !(r.kind === 'bank_out' && isDebitCardName(r.raw_payee)) && r.kind !== 'card_quick')
+      .map((r) => ({ raw: r.raw_payee!, kind: r.kind === 'bank_in' ? ('income' as const) : ('expense' as const) }))
+      .filter((u, i, all) => !this.rules.has(u.raw) && all.findIndex((x) => x.raw === u.raw) === i);
+    let aiBusy = false;
+    if (unknown.length > 0) aiBusy = !(await this.askAi(unknown));
+
+    for (const row of rows) {
+      const needsAi = row.raw_payee && !this.rules.has(row.raw_payee) && !this.unknownToAi.has(row.raw_payee);
+      if (aiBusy && needsAi && unknown.some((u) => u.raw === row.raw_payee)) {
+        if (row.status !== 'pending_ai') await this.setStatus(row.id, 'pending_ai');
+        continue;
+      }
+      await this.handle(row, !!force);
+    }
+  }
+
+  /** AI が「分からない」とした利用先（内容は読みやすくしたカタカナのまま、自分で入れてもらう） */
+  private unknownToAi = new Map<string, { payee: string; categoryId: string | null }>();
+
+  /** AI に内容とカテゴリを決めてもらい、分かったものは対応表に入れる。混み合いで決められなければ false */
+  private async askAi(items: { raw: string; kind: 'expense' | 'income' }[]): Promise<boolean> {
+    const { data: ai } = await this.db.from('ai_settings').select('gemini_api_key, model').eq('user_id', this.userId).maybeSingle();
+    const { data: settings } = await this.db
+      .from('email_import_settings')
+      .select('summary_rules')
+      .eq('user_id', this.userId)
+      .maybeSingle();
+    if (!ai?.gemini_api_key) {
+      // AI を使えないときは、分からないものとして自分で入れてもらう
+      for (const i of items) this.unknownToAi.set(i.raw, { payee: i.raw, categoryId: null });
+      return true;
+    }
+    const label = (c: Category) => {
+      const parent = this.categories.find((p) => p.id === c.parent_id);
+      return parent ? `${parent.name} / ${c.name}` : c.name;
+    };
+    const usable = this.categories.filter((c) => !c.is_archived);
+    const names = (kind: 'expense' | 'income') =>
+      usable
+        .filter((c) => c.kind === kind)
+        .map(label)
+        .join('、');
+    // 自分で直した対応表を例として渡す（覚えた書き方に合わせてもらう）
+    const examples = [...this.rules.values()]
+      .filter((r) => r.payee)
+      .slice(0, 40)
+      .map((r) => {
+        const c = this.categories.find((x) => x.id === r.category_id);
+        return `- 「${r.raw_payee}」→ 内容「${r.payee}」${c ? `・カテゴリ「${label(c)}」` : ''}`;
+      });
+    const system = [
+      'あなたは家計簿の入力係です。カードの利用通知・銀行の入出金のメールに書かれた「利用先」から、家計簿の「内容」（短い店名など）と「カテゴリ」を決めてください。',
+      '# 内容の書き方のルール',
+      settings?.summary_rules?.trim() || DEFAULT_SUMMARY_RULES,
+      '# 支出のカテゴリ（kind が expense のとき、この中から1つ。合わなければ null）',
+      names('expense'),
+      '# 収入のカテゴリ（kind が income のとき、この中から1つ。合わなければ null）',
+      names('income'),
+      ...(examples.length > 0 ? ['# これまでの例（この書き方に合わせる）', ...examples] : []),
+      '# 返し方',
+      '次の形の JSON の配列だけを返す。入力と同じ順・同じ件数で、raw は入力のまま。',
+      '[{"raw":"入力の利用先","payee":"内容","category":"カテゴリの名前かnull","known":true}]',
+      'どの店・どの相手か分からないときは known を false にする',
+    ].join('\n');
+    const text = JSON.stringify(items);
+    const candidates = [...new Set([ai.model ?? FALLBACK_MODEL, LIGHT_FALLBACK_MODEL, FALLBACK_MODEL])];
+    let out;
+    for (const model of candidates) {
+      try {
+        out = await generateWithRetry(ai.gemini_api_key, model, system, [{ role: 'user', text }], true);
+        await this.db.from('ai_usage').insert({
+          user_id: this.userId,
+          model,
+          prompt_tokens: out.usageMetadata?.promptTokenCount ?? 0,
+          output_tokens: out.usageMetadata?.candidatesTokenCount ?? 0,
+        });
+        break;
+      } catch (e) {
+        if (!(e instanceof GeminiError)) throw e;
+        if (e.status === 429 || isTemporary(e.status) || e.status === 404) continue;
+        // キーが使えないなど: 分からないものとして自分で入れてもらう
+        for (const i of items) this.unknownToAi.set(i.raw, { payee: i.raw, categoryId: null });
+        return true;
+      }
+    }
+    if (!out) return false;
+    let results: { raw?: string; payee?: string; category?: string | null; known?: boolean }[] = [];
+    try {
+      const parsed = JSON.parse((out.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join(''));
+      results = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      results = [];
+    }
+    for (const [index, item] of items.entries()) {
+      const r = results.find((x) => x.raw === item.raw) ?? results[index];
+      const category = usable.find((c) => c.kind === item.kind && label(c) === r?.category) ?? null;
+      const payee = (r?.payee ?? '').normalize('NFKC').trim().slice(0, 60) || item.raw;
+      if (r?.known) {
+        const rule: Rule = { raw_payee: item.raw, kind: item.kind, payee, category_id: category?.id ?? null };
+        this.rules.set(item.raw, rule);
+        await this.db
+          .from('payee_rules')
+          .upsert({ user_id: this.userId, ...rule, learned_from: 'ai', updated_at: new Date().toISOString() });
+      } else {
+        this.unknownToAi.set(item.raw, { payee, categoryId: category?.id ?? null });
+      }
+    }
+    return true;
+  }
+
+  /** 利用先から内容・カテゴリを決める（対応表 → AI の結果）。分からなければ needsPayee */
+  private resolve(raw: string | null): { payee: string | null; categoryId: string | null; needsPayee: boolean } {
+    if (!raw) return { payee: null, categoryId: null, needsPayee: false };
+    const rule = this.rules.get(raw);
+    if (rule) return { payee: rule.payee ?? raw, categoryId: rule.category_id, needsPayee: false };
+    const unknown = this.unknownToAi.get(raw);
+    return { payee: unknown?.payee ?? raw, categoryId: unknown?.categoryId ?? null, needsPayee: true };
+  }
+
+  private async setStatus(id: string, status: string, extra: Record<string, unknown> = {}) {
+    await this.db
+      .from('email_imports')
+      .update({ status, notified: SILENT.has(status), ...extra })
+      .eq('id', id)
+      .eq('user_id', this.userId);
+  }
+
+  /** 手入力の記録で、同じ口座・同じ金額・日付が前後1日以内のもの */
+  private async manualDuplicate(side: 'from_account_id' | 'to_account_id', account: string, row: ImportRow) {
+    const { data } = await this.db
+      .from('transactions')
+      .select('id')
+      .eq('user_id', this.userId)
+      .eq(side, account)
+      .eq('amount', row.amount!)
+      .is('auto_source', null)
+      .gte('date', addDays(row.date!, -DUPLICATE_DAYS))
+      .lte('date', addDays(row.date!, DUPLICATE_DAYS))
+      .limit(1);
+    return data?.[0]?.id as string | undefined;
+  }
+
+  /** ほかのメールで記録済みの同じ利用（kinds のメールで、まだほかの行と結び付いていない記録） */
+  private async sameUse(kinds: EmailKind[], row: ImportRow, days: number, filter?: (r: ImportRow) => boolean) {
+    const { data } = await this.db
+      .from('email_imports')
+      .select('id, message_id, item_index, kind, date, amount, raw_payee, status, transaction_id')
+      .eq('user_id', this.userId)
+      .in('kind', kinds)
+      .eq('status', 'recorded')
+      .eq('amount', row.amount!)
+      .gte('date', addDays(row.date!, -days))
+      .lte('date', addDays(row.date!, days))
+      .not('transaction_id', 'is', null);
+    for (const candidate of ((data ?? []) as ImportRow[]).filter((r) => !filter || filter(r))) {
+      const { count } = await this.db
+        .from('email_imports')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', this.userId)
+        .eq('status', 'merged')
+        .eq('transaction_id', candidate.transaction_id!);
+      if (!count) return candidate;
+    }
+    return undefined;
+  }
+
+  private async insert(row: ImportRow, values: Record<string, unknown>) {
+    const { data, error } = await this.db
+      .from('transactions')
+      .insert({
+        user_id: this.userId,
+        date: row.date,
+        amount: row.amount,
+        auto_source: 'email',
+        auto_reviewed: false,
+        is_confirmed: row.date! <= tokyoToday(),
+        ...values,
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    await this.setStatus(row.id, 'recorded', { transaction_id: data.id });
+  }
+
+  private async fill(transactionId: string, raw: string | null) {
+    const r = this.resolve(raw);
+    await this.db
+      .from('transactions')
+      .update({ payee: r.payee, category_id: r.categoryId, raw_payee: raw, needs_payee: r.needsPayee })
+      .eq('id', transactionId)
+      .eq('user_id', this.userId);
+  }
+
+  private async handle(row: ImportRow, force: boolean) {
+    if (!row.kind || !row.date || !row.amount) return;
+    const account = this.accounts.get(SOURCE_OF[row.kind]);
+    if (!account || !this.enabled.get(SOURCE_OF[row.kind])) {
+      await this.setStatus(row.id, 'ignored');
+      return;
+    }
+    const duplicate = async (side: 'from_account_id' | 'to_account_id') => {
+      if (force) return false;
+      const id = await this.manualDuplicate(side, account, row);
+      if (id) await this.setStatus(row.id, 'duplicate', { duplicate_of: id });
+      return !!id;
+    };
+    const expense = (r: { payee: string | null; categoryId: string | null; needsPayee: boolean }) =>
+      this.insert(row, {
+        type: 'expense',
+        from_account_id: account,
+        payee: r.payee,
+        category_id: r.categoryId,
+        raw_payee: row.raw_payee,
+        needs_payee: r.needsPayee,
+      });
+
+    switch (row.kind) {
+      case 'debit_mail': {
+        // 連携サービス の「サンプルデビット」で先に入れた記録があれば、そこに店名を入れる
+        const bankMail = await this.sameUse(['bank_out'], row, MATCH_DAYS, (r) => isDebitCardName(r.raw_payee));
+        if (bankMail) {
+          await this.fill(bankMail.transaction_id!, row.raw_payee);
+          await this.setStatus(row.id, 'merged', { transaction_id: bankMail.transaction_id });
+          return;
+        }
+        if (await duplicate('from_account_id')) return;
+        await expense(this.resolve(row.raw_payee));
+        return;
+      }
+      case 'bank_out': {
+        if (isDebitCardName(row.raw_payee)) {
+          const debitMail = await this.sameUse(['debit_mail'], row, MATCH_DAYS);
+          if (debitMail) {
+            await this.setStatus(row.id, 'merged', { transaction_id: debitMail.transaction_id });
+            return;
+          }
+          if (await duplicate('from_account_id')) return;
+          await this.insert(row, { type: 'expense', from_account_id: account, payee: 'サンプルデビット' });
+          return;
+        }
+        // 未確認の予定（定期支払い・クレカの引き落としなど）があれば、それを確認済みにする
+        const { data: plans } = await this.db
+          .from('transactions')
+          .select('id')
+          .eq('user_id', this.userId)
+          .eq('from_account_id', account)
+          .eq('amount', row.amount)
+          .eq('is_confirmed', false)
+          .gte('date', addDays(row.date, -MATCH_DAYS))
+          .lte('date', addDays(row.date, MATCH_DAYS))
+          .order('date')
+          .limit(1);
+        if (plans?.[0]) {
+          await this.db.from('transactions').update({ is_confirmed: true }).eq('id', plans[0].id).eq('user_id', this.userId);
+          await this.setStatus(row.id, 'confirmed_plan', { transaction_id: plans[0].id });
+          return;
+        }
+        if (await duplicate('from_account_id')) return;
+        await expense(this.resolve(row.raw_payee));
+        return;
+      }
+      case 'bank_in': {
+        // 給料の予定があれば、実際の額に直して確認済みにする
+        const { data: salary } = await this.db
+          .from('transactions')
+          .select('id')
+          .eq('user_id', this.userId)
+          .eq('to_account_id', account)
+          .eq('auto_salary', true)
+          .eq('is_confirmed', false)
+          .gte('date', addDays(row.date, -MATCH_DAYS))
+          .lte('date', addDays(row.date, MATCH_DAYS))
+          .order('date')
+          .limit(1);
+        if (salary?.[0]) {
+          await this.db
+            .from('transactions')
+            .update({ amount: row.amount, is_confirmed: true })
+            .eq('id', salary[0].id)
+            .eq('user_id', this.userId);
+          await this.setStatus(row.id, 'confirmed_plan', { transaction_id: salary[0].id });
+          return;
+        }
+        if (await duplicate('to_account_id')) return;
+        const r = this.resolve(row.raw_payee);
+        await this.insert(row, {
+          type: 'income',
+          to_account_id: account,
+          payee: r.payee,
+          category_id: r.categoryId,
+          raw_payee: row.raw_payee,
+          needs_payee: r.needsPayee,
+        });
+        return;
+      }
+      case 'card_quick': {
+        if (await duplicate('from_account_id')) return;
+        // 店名は後から届く詳細のメールで入れる
+        await this.insert(row, { type: 'expense', from_account_id: account });
+        return;
+      }
+      case 'card_detail': {
+        const quick = await this.sameUse(['card_quick'], row, 0);
+        if (quick) {
+          await this.fill(quick.transaction_id!, row.raw_payee);
+          await this.setStatus(row.id, 'merged', { transaction_id: quick.transaction_id });
+          return;
+        }
+        if (await duplicate('from_account_id')) return;
+        await expense(this.resolve(row.raw_payee));
+        return;
+      }
+    }
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey(), { auth: { persistSession: false } });
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+
+  try {
+    // Apps Script から: 連携の合言葉で、誰のメールかを決める
+    if (typeof body.token === 'string') {
+      const { data: settings } = await db
+        .from('email_import_settings')
+        .select('user_id, started_at')
+        .eq('token_hash', await sha256Hex(body.token))
+        .maybeSingle();
+      if (!settings) return json({ error: '連携の合言葉が違います' }, 401);
+      await db.from('email_import_settings').update({ last_seen_at: new Date().toISOString() }).eq('user_id', settings.user_id);
+      const importer = new Importer(db, settings.user_id);
+      await importer.load();
+      const mails = ((body.messages ?? []) as Mail[]).filter((m) => m && typeof m.id === 'string').slice(0, 100);
+      const accepted = await importer.ingest(mails, settings.started_at);
+      await importer.process();
+      return json({ accepted });
+    }
+
+    // アプリから: ログインしている人
+    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const { data: auth } = await db.auth.getUser(token);
+    if (!auth.user) return json({ error: 'ログインし直してください' }, 401);
+    const importer = new Importer(db, auth.user.id);
+    await importer.load();
+    switch (body.action) {
+      case 'add_duplicate':
+        await importer.process(String(body.importId));
+        return json({ ok: true });
+      case 'process':
+        await importer.process();
+        return json({ ok: true });
+      default:
+        return json({ error: 'unknown action' }, 400);
+    }
+  } catch (e) {
+    console.error(e);
+    return json({ error: '処理できませんでした' }, 500);
+  }
+});

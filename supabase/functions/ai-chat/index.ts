@@ -2,7 +2,16 @@
 // アプリは名前を置き換えた材料（src/features/ai/anonymize.ts）と会話だけを送ってくる
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+import {
+  FALLBACK_MODEL,
+  GEMINI,
+  GeminiError,
+  generateWithRetry,
+  isTemporary,
+  LIGHT_FALLBACK_MODEL,
+  serviceKey,
+} from '../_shared/gemini.ts';
+
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -11,16 +20,6 @@ const cors = {
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-
-/** 新しい API キー（sb_secret_...）と従来の service_role のどちらでも動くようにする */
-function serviceKey(): string {
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (legacy) return legacy;
-  const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, string>;
-  const first = Object.values(keys)[0];
-  if (!first) throw new Error('service key not found');
-  return first;
-}
 
 type Model = { id: string; label: string; inputTokenLimit: number };
 
@@ -40,32 +39,6 @@ async function listModels(apiKey: string): Promise<Model[]> {
     .map((m) => ({ id: m.name.replace(/^models\//, ''), label: m.displayName ?? m.name, inputTokenLimit: m.inputTokenLimit ?? 0 }));
 }
 
-/** 送る1通。files は写真・PDF などのファイル（base64） */
-type Message = { role: string; text: string; files?: { mimeType: string; data: string }[] };
-
-async function generate(apiKey: string, model: string, system: string, messages: Message[], asJson = false) {
-  const res = await fetch(`${GEMINI}/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: messages.map((m) => ({
-        role: m.role,
-        parts: [
-          ...(m.files ?? []).map((f) => ({ inline_data: { mime_type: f.mimeType, data: f.data } })),
-          { text: m.text },
-        ],
-      })),
-      ...(asJson ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
-    }),
-  });
-  if (!res.ok) throw new GeminiError(res.status, await res.text());
-  return (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
-  };
-}
-
 /** gemini-3.5-flash → [3, 5]。版の数字がないもの（-latest など）は空 */
 const version = (id: string) => (id.match(/gemini-(\d+(?:\.\d+)*)/)?.[1] ?? '').split('.').filter(Boolean).map(Number);
 
@@ -82,44 +55,10 @@ function sortModels(models: Model[]): Model[] {
   });
 }
 
-/**
- * 最初に選ぶモデル・使えなくなったときの切り替え先: 常に最新の Flash を指す gemini-flash-latest を優先。
- * 古い版は一覧に出ていても新しい利用者には使えない（404）ことがあるため
- */
-const FALLBACK_MODEL = 'gemini-flash-latest';
-/** Flash も混み合っているときに試す、軽いモデル */
-const LIGHT_FALLBACK_MODEL = 'gemini-flash-lite-latest';
-
-/** 混み合い・一時的な障害（少し待てば通ることがある） */
-const isTemporary = (status: number) => status === 500 || status === 502 || status === 503 || status === 504;
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** 一時的なエラーなら 1秒・3秒待って、最大2回送り直す */
-async function generateWithRetry(apiKey: string, model: string, system: string, messages: Message[], asJson = false) {
-  for (const wait of [1000, 3000, 0]) {
-    try {
-      return await generate(apiKey, model, system, messages, asJson);
-    } catch (e) {
-      if (!(e instanceof GeminiError) || !isTemporary(e.status) || wait === 0) throw e;
-      await sleep(wait);
-    }
-  }
-  throw new Error('unreachable');
-}
 function defaultModel(models: Model[]): string | null {
   if (models.some((m) => m.id === FALLBACK_MODEL)) return FALLBACK_MODEL;
   const flash = models.filter((m) => /flash/.test(m.id) && !/lite|preview|exp/.test(m.id));
   return (flash[0] ?? models[0])?.id ?? null;
-}
-
-class GeminiError extends Error {
-  constructor(
-    public status: number,
-    public detail: string,
-  ) {
-    super(`Gemini ${status}`);
-  }
 }
 
 Deno.serve(async (req) => {
