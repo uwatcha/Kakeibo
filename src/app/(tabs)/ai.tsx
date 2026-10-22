@@ -1,29 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Tabs, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { ActivityIndicator, Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QueryState } from '@/components/QueryState';
 import { useAccountBalances, useAccounts, useBalanceMap } from '@/features/accounts/hooks';
-import { buildAliases, buildContext, maskText, restoreText, SYSTEM_PROMPT } from '@/features/ai/anonymize';
-import { homeContext } from '@/features/ai/homeContext';
-import {
-  AiError,
-  type AiMessage,
-  appendExchange,
-  createConversation,
-  fetchConversation,
-  sendAiChat,
-} from '@/features/ai/api';
+import { buildAliases, maskText } from '@/features/ai/anonymize';
+import { buildChatSystem } from '@/features/ai/chatContext';
 import { AiImport } from '@/features/ai/components/AiImport';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
-import { MarkdownText } from '@/features/ai/components/MarkdownText';
+import { ChatMessages } from '@/features/ai/components/ChatMessages';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
-import { loadLastConversation, saveLastConversation } from '@/features/ai/lastConversation';
-import { startBackgroundTask } from '@/features/background/backgroundTask';
 import {
   aiKeys,
   useAiStatus,
@@ -32,39 +22,29 @@ import {
   useConversations,
   usePendingSends,
 } from '@/features/ai/hooks';
-import { addPending, takePending } from '@/features/ai/pendingSend';
-import { daysUntilDeletion, RETENTION_DAYS, titleFrom } from '@/features/ai/retention';
+import { takePending } from '@/features/ai/pendingSend';
+import { daysUntilDeletion, RETENTION_DAYS } from '@/features/ai/retention';
+import { type ChatItem, useChatSender } from '@/features/ai/useChatSender';
+import { forgetLastConversation, useRestoreConversation } from '@/features/ai/useRestoreConversation';
 import { useCategories } from '@/features/categories/hooks';
-import { useHomeFigures } from '@/features/home/hooks';
-import { appGuideText } from '@/features/info/terms';
 import { useEmployers } from '@/features/employers/hooks';
+import { useHomeFigures } from '@/features/home/hooks';
 import { useRules } from '@/features/recurring/hooks';
 import { fetchTransactionsSince } from '@/features/transactions/api';
 import { addDays, toTokyoDateString } from '@/lib/date';
-import { RADIUS, SPACING } from '@/theme';
-
-/** 混み合いで送れなかったときに送り直す間隔と回数（30秒ごと・最大20回 = 10分） */
-const RETRY_INTERVAL_MS = 30_000;
-const MAX_RETRIES = 20;
-
-/** アプリを起動してから、最後に開いていた会話を開き直したか（起動し直すまで1回だけ） */
-let restoredLastConversation = false;
+import { SPACING } from '@/theme';
 
 /** AI に渡す記録の期間（日） */
 const CONTEXT_DAYS = 90;
-
-type ChatItem = {
-  id: number | string;
-  role: 'user' | 'model';
-  /** 画面に出す文（元の名前） */
-  shown: string;
-  /** AI に送る・AI から来た文（置き換え後の名前） */
-  sent: string;
-};
+/** 相談・入力の切り替え（ボタンの高さ＋上の余白） */
+const MODE_BAR_HEIGHT = 48;
+/** トップバーの下の、会話のタイトルの帯の高さ */
+const TITLE_BAR_HEIGHT = 36;
 
 /**
- * 出納の記録をもとに、家計の相談に乗る AI（Gemini）とのチャット。
- * 会話は保存し、URL の c に開いている会話の id を持つ（なければ新しいチャット）
+ * AI のタブ。上の切り替えで「相談」（家計の相談に乗る AI（Gemini）とのチャット）と「入力」（AI入力）。
+ * 会話は保存し、URL の c に開いている会話の id を持つ（なければ新しいチャット）。
+ * 送信・送り直しは useChatSender、AI に渡す指示は chatContext.ts
  */
 export default function AiChatScreen() {
   const { c: conversationId } = useLocalSearchParams<{ c?: string }>();
@@ -79,7 +59,7 @@ export default function AiChatScreen() {
   const usage = useAiUsageToday(today);
   const balances = useAccountBalances();
   // AI入力で口座を選ぶため（記録の入力画面と同じ口座の一覧と残高）
-  const accountsQuery = useAccounts();
+  const accounts = useAccounts();
   const balanceMap = useBalanceMap();
   // ホームに出ている額も渡す（「ホームの〜」のような質問に、画面と同じ数字で答えられるように）
   const home = useHomeFigures(today);
@@ -91,72 +71,38 @@ export default function AiChatScreen() {
     queryKey: [...aiKeys.all, 'transactions', since],
     queryFn: () => fetchTransactionsSince(since),
   });
+  const pendingSends = usePendingSends();
 
-  // 返事を待っている間の質問（保存は返事と一緒にする）
-  const [pending, setPending] = useState<ChatItem | null>(null);
   const [input, setInput] = useState('');
   // 相談（チャット）か、入力（写真・ファイルから記録を読み取る）か
   const [mode, setMode] = useState<'chat' | 'import'>('chat');
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const listRef = useRef<FlatList<ChatItem>>(null);
-
-  // 起動し直して会話が開いていないときは、最後に開いていた会話（なければいちばん新しい会話）を開く
-  useEffect(() => {
-    if (restoredLastConversation || conversationId || !conversations.data) return;
-    restoredLastConversation = true;
-    loadLastConversation().then((last) => {
-      const target = conversations.data.find((c) => c.id === last) ?? conversations.data[0];
-      if (target) router.setParams({ c: target.id });
-    });
-  }, [conversationId, conversations.data]);
-  // 開いている会話を覚えておく（新しいチャットにしたら忘れる）
-  useEffect(() => {
-    if (!conversationId) return;
-    restoredLastConversation = true;
-    saveLastConversation(conversationId);
-  }, [conversationId]);
-  // 混み合いで送れなかったとき、画面を開いている間は自動で送り直し続ける
-  const [retry, setRetry] = useState<{ count: number; text: string } | null>(null);
-  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 送り直し待ちとして端末に置いた質問の id（アプリを閉じてもバックグラウンドで送り直す）
-  const pendingId = useRef<string | null>(null);
-  const pendingSends = usePendingSends();
-  useEffect(
-    () => () => {
-      if (retryTimer.current) clearTimeout(retryTimer.current);
-    },
-    [],
-  );
+  useRestoreConversation(conversationId, conversations.data);
+  const sender = useChatSender({ conversationId, restoreInput: setInput, onSent: () => usage.refetch() });
 
   const stored: ChatItem[] = conversationId ? (conversation.data?.messages ?? []) : [];
-  const items = pending ? [...stored, pending] : stored;
-  const lastTotal = conversationId ? (conversation.data?.conversation.last_total_tokens ?? 0) : 0;
+  const items = sender.pending ? [...stored, sender.pending] : stored;
 
   // 右上の小さな円のゲージ（この会話で使ったトークン）。連携していて、モデルが分かるときだけ
   const currentModel = status.data?.models.find((m) => m.id === status.data?.model);
-  const gauge =
-    status.data?.hasKey && currentModel ? (
-      <TokenGauge
-        modelLabel={currentModel.label}
-        used={lastTotal}
-        limit={currentModel.inputTokenLimit}
-        todayCount={usage.data?.count ?? 0}
-        todayTokens={usage.data?.tokens ?? 0}
-      />
-    ) : null;
-
   const headerRight = () => (
     <View style={styles.headerRight}>
-      {gauge}
+      {status.data?.hasKey && currentModel && (
+        <TokenGauge
+          modelLabel={currentModel.label}
+          used={conversationId ? (conversation.data?.conversation.last_total_tokens ?? 0) : 0}
+          limit={currentModel.inputTokenLimit}
+          todayCount={usage.data?.count ?? 0}
+          todayTokens={usage.data?.tokens ?? 0}
+        />
+      )}
       <IconButton icon="history" accessibilityLabel="会話の履歴" onPress={() => router.push('/ai-history')} />
       <IconButton
         icon="square-edit-outline"
         accessibilityLabel="新しいチャット"
-        disabled={!conversationId || sending}
+        disabled={!conversationId || sender.sending}
         onPress={() => {
-          setError(null);
-          saveLastConversation(null);
+          sender.clearError();
+          forgetLastConversation();
           router.setParams({ c: undefined });
         }}
       />
@@ -203,112 +149,32 @@ export default function AiChatScreen() {
     rules: rules.data!,
   };
   const aliases = buildAliases(source);
-
-  const finish = () => {
-    setRetry(null);
-    setPending(null);
-    setSending(false);
-    pendingId.current = null;
-    queryClient.invalidateQueries({ queryKey: aiKeys.pending() });
-  };
-
-  // 送るたびに今の記録から作り直す（名前は置き換え済み）
-  const buildSystem = () =>
-    `${SYSTEM_PROMPT}\n\n# アプリの画面と用語\n${appGuideText()}\n\n# 家計の材料\n${buildContext(source, aliases)}${home.figures ? `\n\n${homeContext(home.figures, aliases)}` : ''}`;
-
-  /** 送る。混み合いなどで失敗したら、30秒ごとに送り直す（最大 MAX_RETRIES 回） */
-  const attempt = async (
-    text: string,
-    question: { shown: string; sent: string },
-    history: ChatItem[],
-    tries: number,
-  ) => {
-    try {
-      const system = buildSystem();
-      const messages: AiMessage[] = history.map((m) => ({ role: m.role, text: m.sent }));
-      const reply = await sendAiChat(system, messages);
-      // 送り直し待ちにしていた質問を、バックグラウンドですでに送っていたら保存しない（その会話を開き直す）
-      if (pendingId.current && !(await takePending(pendingId.current))) {
-        queryClient.invalidateQueries({ queryKey: aiKeys.all });
-        finish();
-        return;
-      }
-      // 質問と返事を保存する。初めての質問なら会話を作る
-      const id = conversationId ?? (await createConversation(titleFrom(text)));
-      await appendExchange(
-        id,
-        question,
-        { shown: restoreText(reply.text, aliases), sent: reply.text },
-        reply.usage.total,
-      );
-      // 読み直してから開く（新しい会話でも読み込み中の画面を挟まない）
-      await queryClient.fetchQuery({ queryKey: aiKeys.conversation(id), queryFn: () => fetchConversation(id) });
-      queryClient.invalidateQueries({ queryKey: aiKeys.conversations() });
-      if (!conversationId) router.setParams({ c: id });
-      usage.refetch();
-      // 使えなくなったモデルからサーバーが自動で切り替えたときは、表示のモデルも読み直す
-      if (reply.model !== status.data?.model) queryClient.invalidateQueries({ queryKey: aiKeys.status() });
-      finish();
-    } catch (e) {
-      if (e instanceof AiError && e.temporary && !pendingId.current) {
-        // 初めて混み合いで失敗したら、アプリを閉じても送り直せるよう端末に置く
-        pendingId.current = await addPending({
-          conversationId: conversationId ?? null,
-          question,
-          system: buildSystem(),
-          messages: history.map((m) => ({ role: m.role, text: m.sent })),
-          toReal: [...aliases.toReal],
-        });
-        startBackgroundTask();
-      }
-      if (e instanceof AiError && e.temporary && tries >= MAX_RETRIES) {
-        // 画面での送り直しはやめ、バックグラウンドに任せる（返事が来たら通知）
-        setRetry(null);
-        setPending(null);
-        setSending(false);
-        pendingId.current = null;
-        queryClient.invalidateQueries({ queryKey: aiKeys.pending() });
-        return;
-      }
-      if (e instanceof AiError && e.temporary && tries < MAX_RETRIES) {
-        setRetry({ count: tries + 1, text });
-        retryTimer.current = setTimeout(() => attempt(text, question, history, tries + 1), RETRY_INTERVAL_MS);
-        return;
-      }
-      setError(e instanceof Error ? e.message : '送れませんでした');
-      // 送れなかった質問は入力欄に戻す
-      setInput(text);
-      finish();
-    }
-  };
+  const context = () => ({
+    aliases,
+    system: buildChatSystem(source, aliases, home.figures),
+    model: status.data?.model,
+  });
 
   const send = () => {
     const text = input.trim();
-    if (text === '' || sending) return;
-    const question = { shown: text, sent: maskText(text, aliases) };
-    const history = [...stored, { id: 'pending', role: 'user' as const, ...question }];
-    setPending(history[history.length - 1]);
+    if (text === '' || sender.sending) return;
     setInput('');
-    setError(null);
-    setSending(true);
-    attempt(text, question, history, 0);
-  };
-
-  const cancelRetry = () => {
-    if (retryTimer.current) clearTimeout(retryTimer.current);
-    if (retry) setInput(retry.text);
-    if (pendingId.current) takePending(pendingId.current);
-    finish();
+    sender.send(text, stored, context, maskText(text, aliases));
   };
 
   // 画面を閉じたあとも送り直しを待っている、この会話の質問（バックグラウンドで送り直している）
-  // （この画面で送っている間は、その質問は上の送り直しの表示に出ている）
-  const waiting = sending ? [] : (pendingSends.data ?? []).filter((p) => p.conversationId === (conversationId ?? null));
-  const cancelWaiting = async (id: string, text: string) => {
-    await takePending(id);
-    setInput(text);
-    queryClient.invalidateQueries({ queryKey: aiKeys.pending() });
-  };
+  // （この画面で送っている間は、その質問は送り直しの表示に出ている）
+  const waiting = sender.sending
+    ? []
+    : (pendingSends.data ?? []).filter((p) => p.conversationId === (conversationId ?? null));
+
+  // ピン留めしていない会話は消えることを、開いている会話でも分かるようにする
+  const header =
+    conversation.data?.conversation.pinned && conversationId
+      ? 'ピン留め中の会話'
+      : conversationId && conversation.data
+        ? `この会話はあと${daysUntilDeletion(conversation.data.conversation.updated_at, new Date())}日で消えます（履歴でピン留めすると残ります）`
+        : `会話は保存され、ピン留めしなければ${RETENTION_DAYS}日で消えます`;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -327,7 +193,7 @@ export default function AiChatScreen() {
       {mode === 'import' ? (
         <AiImport
           today={today}
-          accounts={accountsQuery.data ?? []}
+          accounts={accounts.data ?? []}
           categories={categories.data!}
           aliases={aliases}
           balances={balanceMap}
@@ -339,86 +205,24 @@ export default function AiChatScreen() {
               {(conversationId && conversation.data?.conversation.title) || '新しいチャット'}
             </Text>
           </View>
-
           <KeyboardAvoidingView
             behavior="padding"
             style={styles.container}
             keyboardVerticalOffset={insets.top + 64 + TITLE_BAR_HEIGHT + MODE_BAR_HEIGHT}
           >
-            <FlatList
-              ref={listRef}
-              data={items}
-              keyExtractor={(item) => String(item.id)}
-              contentContainerStyle={styles.messages}
-              ListHeaderComponent={
-                // ピン留めしていない会話は消えることを、開いている会話でも分かるようにする
-                <Text variant="labelSmall" style={[styles.retention, { color: theme.colors.onSurfaceVariant }]}>
-                  {conversation.data?.conversation.pinned && conversationId
-                    ? 'ピン留め中の会話'
-                    : conversationId && conversation.data
-                      ? `この会話はあと${daysUntilDeletion(conversation.data.conversation.updated_at, new Date())}日で消えます（履歴でピン留めすると残ります）`
-                      : `会話は保存され、ピン留めしなければ${RETENTION_DAYS}日で消えます`}
-                </Text>
-              }
-              onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-              renderItem={({ item }) => (
-                <View
-                  style={[
-                    styles.bubble,
-                    item.role === 'user'
-                      ? [styles.userBubble, { backgroundColor: theme.colors.primaryContainer }]
-                      : [styles.modelBubble, { backgroundColor: theme.colors.surface }],
-                  ]}
-                >
-                  {item.role === 'model' ? (
-                    // AI の返事は Markdown（見出し・太字・箇条書き・表）として表示する
-                    <MarkdownText>{item.shown}</MarkdownText>
-                  ) : (
-                    <Text variant="bodyMedium" selectable>
-                      {item.shown}
-                    </Text>
-                  )}
-                </View>
-              )}
-              ListFooterComponent={
-                <>
-                  {sending && !retry && <ActivityIndicator style={styles.thinking} />}
-                  {retry && (
-                    <View style={styles.retry}>
-                      <ActivityIndicator size="small" />
-                      <Text variant="bodySmall" style={[styles.retryText, { color: theme.colors.onSurfaceVariant }]}>
-                        混み合っているので送り直しています（{retry.count}回目）
-                      </Text>
-                      <Button compact onPress={cancelRetry}>
-                        やめる
-                      </Button>
-                    </View>
-                  )}
-                  {waiting.map((p) => (
-                    <View key={p.id} style={styles.waiting}>
-                      <View
-                        style={[styles.bubble, styles.userBubble, { backgroundColor: theme.colors.primaryContainer }]}
-                      >
-                        <Text variant="bodyMedium">{p.question.shown}</Text>
-                      </View>
-                      <View style={styles.retry}>
-                        <ActivityIndicator size="small" />
-                        <Text variant="bodySmall" style={[styles.retryText, { color: theme.colors.onSurfaceVariant }]}>
-                          送り直し待ち（返事が来たら通知）
-                        </Text>
-                        <Button compact onPress={() => cancelWaiting(p.id, p.question.shown)}>
-                          やめる
-                        </Button>
-                      </View>
-                    </View>
-                  ))}
-                  {error && (
-                    <Text variant="bodySmall" style={[styles.error, { color: theme.colors.error }]}>
-                      {error}
-                    </Text>
-                  )}
-                </>
-              }
+            <ChatMessages
+              items={items}
+              header={header}
+              thinking={sender.sending && !sender.retry}
+              retry={sender.retry}
+              onCancelRetry={sender.cancelRetry}
+              waiting={waiting}
+              onCancelWaiting={async (p) => {
+                await takePending(p.id);
+                setInput(p.question.shown);
+                queryClient.invalidateQueries({ queryKey: aiKeys.pending() });
+              }}
+              error={sender.error}
             />
             <View style={[styles.inputBar, { backgroundColor: theme.colors.surface }]}>
               <TextInput
@@ -434,7 +238,7 @@ export default function AiChatScreen() {
                 icon="send"
                 mode="contained"
                 accessibilityLabel="送る"
-                disabled={input.trim() === '' || sending}
+                disabled={input.trim() === '' || sender.sending}
                 onPress={send}
               />
             </View>
@@ -444,12 +248,6 @@ export default function AiChatScreen() {
     </View>
   );
 }
-
-/** 相談・入力の切り替え（ボタンの高さ＋上の余白） */
-const MODE_BAR_HEIGHT = 48;
-
-/** トップバーの下の、会話のタイトルの帯の高さ */
-const TITLE_BAR_HEIGHT = 36;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -463,16 +261,6 @@ const styles = StyleSheet.create({
   title: { fontWeight: '700' },
   center: { alignItems: 'center', justifyContent: 'center' },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
-  messages: { padding: SPACING.screen, gap: 10 },
-  bubble: { maxWidth: '88%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.tile },
-  userBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-  modelBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
-  thinking: { alignSelf: 'flex-start', marginLeft: 8 },
-  error: { textAlign: 'center' },
-  retry: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
-  retryText: { flex: 1 },
-  retention: { textAlign: 'center' },
-  waiting: { gap: 6 },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 8, gap: 4 },
   input: { flex: 1, maxHeight: 120 },
 });
