@@ -1,6 +1,7 @@
 import type { AccountKind } from '@/features/accounts/accountKinds';
 import type { Category } from '@/features/categories/api';
 import { categoryLabel } from '@/features/categories/tree';
+import { isConfirmedOnSave } from '@/features/transactions/confirmation';
 
 import type { Aliases } from './anonymize';
 
@@ -110,4 +111,36 @@ export function markDuplicates(
     seen.add(`${key}|${d.payee ?? ''}`);
     return { ...d, duplicate };
   });
+}
+
+/** AI が口座を選べなかった行に使う口座（確認の一覧の上で選ぶ） */
+export type FallbackAccounts = { payFrom: string | null; payTo: string | null };
+
+/** 行の口座を決める: AI が選んだ口座 → なければ上で選んだ口座（支払いは出金元、収入は入金先） */
+export function draftAccounts(d: ImportDraft, fallback: FallbackAccounts) {
+  return {
+    fromAccountId: d.type === 'income' ? null : (d.fromAccountId ?? (d.type === 'expense' ? fallback.payFrom : null)),
+    toAccountId: d.type === 'expense' ? null : (d.toAccountId ?? (d.type === 'income' ? fallback.payTo : null)),
+  };
+}
+
+/** 保存できる行か（その種類に要る口座が決まっている） */
+export function isDraftReady(d: ImportDraft, fallback: FallbackAccounts): boolean {
+  const { fromAccountId, toAccountId } = draftAccounts(d, fallback);
+  return (d.type === 'income' || !!fromAccountId) && (d.type === 'expense' || !!toAccountId);
+}
+
+/** 保存する行にする（今日より後の日付なら未確認。記録の入力画面と同じ） */
+export function draftToRow(d: ImportDraft, fallback: FallbackAccounts, today: string) {
+  const { fromAccountId, toAccountId } = draftAccounts(d, fallback);
+  return {
+    type: d.type,
+    amount: d.amount,
+    date: d.date,
+    payee: d.payee,
+    category_id: d.categoryId,
+    from_account_id: fromAccountId,
+    to_account_id: toAccountId,
+    is_confirmed: isConfirmedOnSave(d.date, today),
+  };
 }

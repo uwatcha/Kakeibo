@@ -1,6 +1,6 @@
 import type { Category } from '@/features/categories/api';
 
-import { markDuplicates, toDrafts } from './extract';
+import { draftAccounts, draftToRow, isDraftReady, markDuplicates, toDrafts } from './extract';
 
 const base = { user_id: 'u', sort_order: 0, is_archived: false, created_at: '' } as const;
 const categories = [
@@ -64,5 +64,37 @@ describe('markDuplicates', () => {
       [{ date: '2026-10-20', amount: 100 }],
     );
     expect(marked.map((m) => m.duplicate)).toEqual([true, false, true, false]);
+  });
+});
+
+describe('draftAccounts / isDraftReady / draftToRow', () => {
+  const draft = (type: 'expense' | 'income' | 'transfer', from: string | null, to: string | null) => ({
+    key: '1',
+    date: '2026-10-25',
+    type,
+    amount: 500,
+    payee: 'A',
+    categoryId: null,
+    fromAccountId: from,
+    toAccountId: to,
+    duplicate: false,
+  });
+  const fallback = { payFrom: 'wallet', payTo: 'bank' };
+
+  it('AI が選べなかった口座は、上で選んだ口座を使う。振替は両方 AI が選んだときだけ', () => {
+    expect(draftAccounts(draft('expense', null, null), fallback)).toEqual({
+      fromAccountId: 'wallet',
+      toAccountId: null,
+    });
+    expect(draftAccounts(draft('income', null, null), fallback)).toEqual({ fromAccountId: null, toAccountId: 'bank' });
+    expect(isDraftReady(draft('transfer', 'card', null), fallback)).toBe(false);
+    expect(isDraftReady(draft('expense', null, null), { payFrom: null, payTo: null })).toBe(false);
+  });
+
+  it('今日より後の日付は未確認で保存する', () => {
+    expect(draftToRow(draft('expense', 'card', null), fallback, '2026-10-22')).toMatchObject({
+      from_account_id: 'card',
+      is_confirmed: false,
+    });
   });
 });
