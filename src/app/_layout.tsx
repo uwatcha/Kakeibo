@@ -8,9 +8,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PaperProvider, useTheme } from 'react-native-paper';
 
-// バックグラウンドで AI 相談を送り直すタスクは、起動したらすぐ（画面より先に）定義しておく
-import '@/features/ai/backgroundSend';
-import { PendingSendRunner } from '@/features/ai/components/PendingSendRunner';
+// バックグラウンドのタスク（AI 相談の送り直し・メールからの記録の通知）は、起動したらすぐ（画面より先に）定義しておく
+import '@/features/background/backgroundTask';
+import { BackgroundRunner } from '@/features/background/BackgroundRunner';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { RecurringRunner } from '@/features/recurring/RecurringRunner';
 import { UpdateButton } from '@/features/updates/UpdateButton';
@@ -62,8 +62,9 @@ function RootNavigator() {
         <Stack.Screen name="ai-history" options={{ headerShown: true, title: '会話の履歴' }} />
         <Stack.Screen name="ai-settings" options={{ headerShown: true, title: 'AI 相談の設定' }} />
         <Stack.Screen name="transfer-order" options={{ headerShown: true, title: '振替の優先度' }} />
-        <Stack.Screen name="unconfirmed" options={{ headerShown: true, title: '未確認の記録' }} />
+        <Stack.Screen name="unconfirmed" options={{ headerShown: true, title: '記録の確認' }} />
         <Stack.Screen name="info" options={{ headerShown: true, title: '用語の説明' }} />
+        <Stack.Screen name="email-import" options={{ headerShown: true, title: 'メールからの記録' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="(auth)" />
@@ -85,7 +86,7 @@ export default function RootLayout() {
             <AuthProvider>
               <StatusBar style="auto" />
               <RecurringRunner />
-              <PendingSendRunner />
+              <BackgroundRunner />
               <RootNavigator />
               <UpdateButton />
             </AuthProvider>

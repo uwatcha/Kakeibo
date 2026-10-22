@@ -96,6 +96,7 @@ export default function SettingsScreen() {
           {navItem('カテゴリの管理', 'shape', '/categories')}
           {navItem('働き先と給料日', 'briefcase', '/employers')}
           {navItem('定期支払い', 'autorenew', '/recurring')}
+          {navItem('メールからの記録', 'email-sync-outline', '/email-import')}
         </SectionCard>
         <SectionCard title="データ">
           {exportItem('csv', '記録を CSV で書き出す', 'file-delimited')}

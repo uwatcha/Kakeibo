@@ -66,6 +66,15 @@ function TransactionRow({
               accessibilityLabel="定期"
             />
           )}
+          {/* メールから自動で入った記録（目立たせない） */}
+          {t.auto_source && (
+            <MaterialCommunityIcons
+              name="email-outline"
+              size={14}
+              color={theme.colors.onSurfaceVariant}
+              accessibilityLabel="自動"
+            />
+          )}
           <Text
             variant="bodySmall"
             numberOfLines={1}

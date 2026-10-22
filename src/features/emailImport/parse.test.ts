@@ -19,7 +19,9 @@ describe('parseMail', () => {
   it('サンプルデビット', () => {
     expect(parseMail(debitMail)).toEqual({
       type: 'items',
-      items: [{ kind: 'debit_mail', date: '2026-10-19', amount: 1000, rawPayee: 'ジエイアールヒガシニホンモバイルスイカ' }],
+      items: [
+        { kind: 'debit_mail', date: '2026-10-19', amount: 1000, rawPayee: 'ジエイアールヒガシニホンモバイルスイカ' },
+      ],
     });
   });
 
@@ -34,13 +36,21 @@ describe('parseMail', () => {
       date,
       body,
     });
-    expect(parseMail(bankMail('サンプル銀行にて出金がありました（サンプルデビット）', '連携サービス\n新着の出金\n10 月 16 日（金）\n￥ 350\nサンプル銀行'))).toEqual({
+    expect(
+      parseMail(
+        bankMail('サンプル銀行にて出金がありました（サンプルデビット）', '連携サービス\n新着の出金\n10 月 16 日（金）\n￥ 350\nサンプル銀行'),
+      ),
+    ).toEqual({
       type: 'items',
       items: [{ kind: 'bank_out', date: '2026-10-16', amount: 350, rawPayee: 'サンプルデビット' }],
     });
     // 年をまたぐ: 1月に届いた 12/30 の入金は前の年
     const income = parseMail(
-      bankMail('サンプル銀行にて入金がありました（ヤマダ タロウ）', '新着の入金 12 月 30 日（水） ￥ 200,000', '2027-01-02T00:00:00Z'),
+      bankMail(
+        'サンプル銀行にて入金がありました（ヤマダ タロウ）',
+        '新着の入金 12 月 30 日（水） ￥ 200,000',
+        '2027-01-02T00:00:00Z',
+      ),
     );
     expect(income).toEqual({
       type: 'items',
@@ -82,7 +92,12 @@ describe('parseMail', () => {
 
   it('家族の利用分・ほかの送信元は対象外、形が違えば読み取れない', () => {
     expect(
-      parseMail({ from: 'card@example.com', subject: 'カード利用のお知らせ(家族ご利用分)', date: '', body: '' }).type,
+      parseMail({
+        from: 'card@example.com',
+        subject: 'カード利用のお知らせ(家族ご利用分)',
+        date: '',
+        body: '',
+      }).type,
     ).toBe('ignored');
     expect(parseMail({ from: 'news@example.com', subject: 'x', date: '', body: '' }).type).toBe('ignored');
     expect(parseMail({ ...debitMail, body: '本文が変わった' }).type).toBe('unreadable');

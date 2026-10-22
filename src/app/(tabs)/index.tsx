@@ -1,24 +1,22 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text, useTheme } from 'react-native-paper';
 
 import { AddFab } from '@/components/AddFab';
-import { ListRow } from '@/components/ListRow';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { BalanceCarousel } from '@/features/home/components/BalanceCarousel';
 import { BreakdownSheet } from '@/features/home/components/BreakdownSheet';
 import { homeSheet, type HomeSheetKey } from '@/features/home/breakdown';
 import { AccountSections } from '@/features/home/components/AccountSections';
+import { ReviewCard } from '@/features/home/components/ReviewCard';
 import { ShortageCard } from '@/features/home/components/ShortageCard';
 import { type HomeBudget, shortfallTitle, untilPaydayLabel } from '@/features/home/figures';
 import { useHomeFigures } from '@/features/home/hooks';
-import { useUnconfirmed } from '@/features/transactions/hooks';
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
-import { SPACING, warningColors } from '@/theme';
+import { SPACING } from '@/theme';
 
 /**
  * 給料日までに使える額のカード。マイナスなら「足りない額」に言い換えて正の数を赤で出し、元の見出しを取り消し線で残す。
@@ -44,7 +42,8 @@ export default function HomeScreen() {
   const theme = useTheme();
   const today = toTokyoDateString();
   const { balances, future, figures } = useHomeFigures(today);
-  const unconfirmed = useUnconfirmed(today);
+  // 「メールの読み取りが止まっています」の判定に使う（開いた時点の時刻）
+  const [now] = useState(() => Date.now());
   // 押したカードの内訳を出す
   const [breakdown, setBreakdown] = useState<HomeSheetKey | null>(null);
 
@@ -68,18 +67,8 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={balances.isRefetching} onRefresh={balances.refetch} />}
       >
-        {/* 日付が過ぎたのに未確認の記録（確認するまで残高に入らない） */}
-        {(unconfirmed.data?.length ?? 0) > 0 && (
-          <SectionCard>
-            <ListRow
-              title={`未確認の記録 ${unconfirmed.data!.length}件`}
-              icon="alert-circle-outline"
-              iconColor={warningColors(theme.dark).color}
-              right={<MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.onSurfaceVariant} />}
-              onPress={() => router.push('/unconfirmed')}
-            />
-          </SectionCard>
-        )}
+        {/* 未確認の記録・メールから自動で入った記録など、確かめるもの */}
+        <ReviewCard today={today} now={now} />
 
         <ShortageCard shortages={figures.shortages} covers={figures.covers} accountName={accountName} />
 

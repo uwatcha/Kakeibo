@@ -23,7 +23,7 @@ import { AutoTitler } from '@/features/ai/components/AutoTitler';
 import { MarkdownText } from '@/features/ai/components/MarkdownText';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
 import { loadLastConversation, saveLastConversation } from '@/features/ai/lastConversation';
-import { startBackgroundSend } from '@/features/ai/backgroundSend';
+import { startBackgroundTask } from '@/features/background/backgroundTask';
 import {
   aiKeys,
   useAiStatus,
@@ -259,7 +259,7 @@ export default function AiChatScreen() {
           messages: history.map((m) => ({ role: m.role, text: m.sent })),
           toReal: [...aliases.toReal],
         });
-        startBackgroundSend();
+        startBackgroundTask();
       }
       if (e instanceof AiError && e.temporary && tries >= MAX_RETRIES) {
         // 画面での送り直しはやめ、バックグラウンドに任せる（返事が来たら通知）
