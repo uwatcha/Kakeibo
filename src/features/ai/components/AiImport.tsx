@@ -6,11 +6,13 @@ import type { Account } from '@/features/accounts/api';
 import type { Category } from '@/features/categories/api';
 import { fetchDateAmountsBetween } from '@/features/transactions/api';
 import { useCreateTransactions } from '@/features/transactions/hooks';
+import { addDays } from '@/lib/date';
 import { SPACING } from '@/theme';
 
 import type { Aliases } from '../anonymize';
 import { AiError, extractRecords } from '../api';
 import {
+  assignPaymentAccounts,
   draftToRow,
   extractPrompt,
   type FallbackAccounts,
@@ -19,6 +21,7 @@ import {
   markDuplicates,
   toDrafts,
 } from '../extract';
+import { matchPaymentAccount } from '../payment';
 import { useAttachments } from '../useAttachments';
 import { ImportReview } from './ImportReview';
 
@@ -66,8 +69,16 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
         files.setError('記録を読み取れませんでした');
         return;
       }
+      // 重複は前後1日まで見るので、その分だけ広く読む
       const dates = found.map((d) => d.date).sort();
-      const marked = markDuplicates(found, await fetchDateAmountsBetween(dates[0], dates[dates.length - 1]));
+      const existing = await fetchDateAmountsBetween(addDays(dates[0], -1), addDays(dates[dates.length - 1], 1));
+      // 支払いの口座: 書かれた支払い方法から決め、分からないセルフレジの画面・自販機は現金とみなす
+      const cash = accounts.find((a) => a.kind === 'cash' && !a.is_archived)?.id ?? null;
+      const marked = assignPaymentAccounts(
+        markDuplicates(found, existing),
+        (payment) => matchPaymentAccount(payment, accounts),
+        cash,
+      );
       setDrafts(marked);
       setSelected(new Set(marked.filter((d) => !d.duplicate).map((d) => d.key)));
     } catch (e) {

@@ -1,6 +1,14 @@
 import type { Category } from '@/features/categories/api';
 
-import { draftAccounts, draftToRow, isDraftReady, markDuplicates, toDrafts } from './extract';
+import {
+  assignPaymentAccounts,
+  draftAccounts,
+  draftToRow,
+  isDraftReady,
+  markDuplicates,
+  type PhotoSource,
+  toDrafts,
+} from './extract';
 
 const base = { user_id: 'u', sort_order: 0, is_archived: false, created_at: '' } as const;
 const categories = [
@@ -41,34 +49,85 @@ describe('toDrafts', () => {
   });
 });
 
+const blank = { duplicate: false, source: 'other' as const, payment: null, note: null };
+
 describe('markDuplicates', () => {
-  it('すでにある記録と同じ日・金額、読み取りの中の2回目に印を付ける', () => {
-    const d = (key: string, date: string, amount: number, payee: string | null = null) => ({
-      key,
-      date,
-      type: 'expense' as const,
-      amount,
-      payee,
-      categoryId: null,
-      fromAccountId: null,
-      toAccountId: null,
-      duplicate: false,
-    });
+  const d = (
+    key: string,
+    date: string,
+    amount: number,
+    payee: string | null = null,
+    source: PhotoSource = 'other',
+  ) => ({
+    ...blank,
+    key,
+    date,
+    type: 'expense' as const,
+    amount,
+    payee,
+    categoryId: null,
+    fromAccountId: null,
+    toAccountId: null,
+    source,
+  });
+
+  it('すでにある記録と同じ金額で前後1日以内、読み取りの中の2回目に印を付ける', () => {
     const marked = markDuplicates(
       [
-        d('1', '2026-10-20', 100),
-        d('2', '2026-10-21', 200, 'A'),
+        d('1', '2026-10-21', 100),
+        d('2', '2026-10-23', 100),
         d('3', '2026-10-21', 200, 'A'),
-        d('4', '2026-10-21', 200, 'B'),
+        d('4', '2026-10-21', 200, 'A'),
+        d('5', '2026-10-21', 200, 'B'),
       ],
-      [{ date: '2026-10-20', amount: 100 }],
+      [{ date: '2026-10-20', amount: 100, auto_source: null }],
     );
-    expect(marked.map((m) => m.duplicate)).toEqual([true, false, true, false]);
+    expect(marked.map((m) => m.duplicate)).toEqual([true, false, false, true, false]);
+  });
+
+  it('セルフレジの画面・自販機は、メールから入った記録と重なれば「メールで記録済み」', () => {
+    const [screen, receipt] = markDuplicates(
+      [d('1', '2026-10-21', 300, null, 'screen'), d('2', '2026-10-21', 300, null, 'receipt')],
+      [{ date: '2026-10-21', amount: 300, auto_source: 'email' }],
+    );
+    expect(screen).toMatchObject({ duplicate: true, note: 'メールで記録済み' });
+    expect(receipt).toMatchObject({ duplicate: true, note: null });
+  });
+});
+
+describe('assignPaymentAccounts', () => {
+  const d = (source: PhotoSource, payment: string | null, note: string | null = null) => ({
+    ...blank,
+    key: '1',
+    date: '2026-10-21',
+    type: 'expense' as const,
+    amount: 150,
+    payee: '自販機（お茶）',
+    categoryId: null,
+    fromAccountId: null,
+    toAccountId: null,
+    source,
+    payment,
+    note,
+  });
+  const match = (payment: string | null) => (payment === 'サンプルカード' ? 'card' : null);
+
+  it('支払い方法が分かればその口座、分からないセルフレジ・自販機は現金', () => {
+    const [byPayment, vending, receipt, emailed] = assignPaymentAccounts(
+      [d('receipt', 'サンプルカード'), d('price', null), d('receipt', null), d('screen', null, 'メールで記録済み')],
+      match,
+      'wallet',
+    );
+    expect(byPayment).toMatchObject({ fromAccountId: 'card', note: '支払い方法: サンプルカード' });
+    expect(vending).toMatchObject({ fromAccountId: 'wallet', note: '現金と判断' });
+    expect(receipt.fromAccountId).toBeNull();
+    expect(emailed.fromAccountId).toBeNull();
   });
 });
 
 describe('draftAccounts / isDraftReady / draftToRow', () => {
   const draft = (type: 'expense' | 'income' | 'transfer', from: string | null, to: string | null) => ({
+    ...blank,
     key: '1',
     date: '2026-10-25',
     type,
@@ -77,7 +136,6 @@ describe('draftAccounts / isDraftReady / draftToRow', () => {
     categoryId: null,
     fromAccountId: from,
     toAccountId: to,
-    duplicate: false,
   });
   const fallback = { payFrom: 'wallet', payTo: 'bank' };
 

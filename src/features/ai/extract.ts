@@ -19,9 +19,17 @@ export type ImportDraft = {
   /** AI が選んだ口座（置き換え後の名前から戻したもの）。分からなければ null */
   fromAccountId: string | null;
   toAccountId: string | null;
-  /** 同じ日・同じ金額の記録がすでにある（または同じ読み取りの中で重なっている） */
+  /** 同じ金額で日付が前後1日以内の記録がすでにある（または同じ読み取りの中で重なっている） */
   duplicate: boolean;
+  /** 何から読み取ったか。receipt = レシート、screen = セルフレジなどの決済完了の画面、price = 自販機などの値段の表示 */
+  source: PhotoSource;
+  /** 書かれていた支払い方法（例: 「現金」「サンプルカード」「Suica」）。なければ null */
+  payment: string | null;
+  /** 口座をどう決めたか（確認の一覧に出す） */
+  note: string | null;
 };
+
+export type PhotoSource = 'receipt' | 'screen' | 'price' | 'other';
 
 type AccountLike = { id: string; kind: AccountKind; isArchived: boolean };
 
@@ -43,11 +51,14 @@ export function extractPrompt(
     'あなたは家計簿の入力係です。添付の写真（レシート・明細・値段の表示など）やファイル（CSV・JSON・テキスト）から、お金の記録を読み取ってください。',
     `今日は ${today} です。年が書かれていない日付は、今日より後にならない一番近い年にしてください。`,
     '次の形の JSON の配列だけを返してください。読み取れる記録がなければ空の配列 [] を返す。',
-    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull"}]',
+    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull"}]',
     '- expense は支払い（from が払った口座）、income は収入（to が入った口座）、transfer は自分の口座どうしの移動（from と to）',
     '- レシート1枚は合計額で1件にする（品目ごとに分けない）。明細やCSVは1行1件',
     '- 返金・キャンセルなど符号がマイナスの行は、記録にしない',
     '- 口座が分からなければ null',
+    '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
+    '- payment: レシートや画面に書かれている支払い方法をそのまま（例: 「現金」「クレジット」「サンプルカード」「交通系IC Suica」「PayPay」）。現金のレシートでお預り・お釣りが書かれていれば「現金」。書かれていなければ null',
+    '- 自販機などの値段の表示は、買った商品の値段を金額にし、内容は「自販機（商品名）」のようにする。日付は写真から分からなければ今日',
     `口座: ${accounts
       .filter((a) => !a.isArchived)
       .map((a) => aliases.account(a.id))
@@ -93,23 +104,57 @@ export function toDrafts(
       fromAccountId: type === 'income' ? null : account(r.from),
       toAccountId: type === 'expense' ? null : account(r.to),
       duplicate: false,
+      source: r.source === 'receipt' || r.source === 'screen' || r.source === 'price' ? r.source : 'other',
+      payment: typeof r.payment === 'string' && r.payment.trim() !== '' ? r.payment.trim().slice(0, 50) : null,
+      note: null,
     });
   });
   return drafts;
 }
 
-/** すでにある記録と同じ日・同じ金額の行と、読み取りの中で2回目以降に出てきた同じ行に、重複の印を付ける */
-export function markDuplicates(
-  drafts: readonly ImportDraft[],
-  existing: readonly { date: string; amount: number }[],
-): ImportDraft[] {
-  const known = new Set(existing.map((t) => `${t.date}|${t.amount}`));
+const dayDiff = (a: string, b: string) =>
+  Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
+
+/** すでにある記録（日付・金額・メールから自動で入ったか） */
+export type ExistingRecord = { date: string; amount: number; auto_source: string | null };
+
+/**
+ * 重複の印を付ける: すでにある記録と同じ金額で日付が前後1日以内の行と、読み取りの中で2回目以降に出てきた同じ行。
+ * セルフレジの画面・自販機の値段の表示は、メールから入った記録と重なれば「メールで記録済み」とする（重複として最初は外す）
+ */
+export function markDuplicates(drafts: readonly ImportDraft[], existing: readonly ExistingRecord[]): ImportDraft[] {
   const seen = new Set<string>();
   return drafts.map((d) => {
-    const key = `${d.date}|${d.amount}`;
-    const duplicate = known.has(key) || seen.has(`${key}|${d.payee ?? ''}`);
-    seen.add(`${key}|${d.payee ?? ''}`);
-    return { ...d, duplicate };
+    const near = existing.filter((t) => t.amount === d.amount && dayDiff(t.date, d.date) <= 1);
+    const key = `${d.date}|${d.amount}|${d.payee ?? ''}`;
+    const repeated = seen.has(key);
+    seen.add(key);
+    const fromEmail = (d.source === 'screen' || d.source === 'price') && near.some((t) => t.auto_source === 'email');
+    return {
+      ...d,
+      duplicate: near.length > 0 || repeated,
+      note: fromEmail ? 'メールで記録済み' : d.note,
+    };
+  });
+}
+
+/**
+ * 支払いの口座を決める（AI が選べなかった行）: 書かれた支払い方法から口座を照らし合わせ（matchPaymentAccount）、
+ * 分からないセルフレジの画面・自販機の値段の表示は現金で払ったとみなす（メールで記録済みのものは除く）
+ */
+export function assignPaymentAccounts(
+  drafts: readonly ImportDraft[],
+  match: (payment: string | null) => string | null,
+  cashAccountId: string | null,
+): ImportDraft[] {
+  return drafts.map((d) => {
+    if (d.type !== 'expense' || d.fromAccountId) return d;
+    const matched = match(d.payment);
+    if (matched) return { ...d, fromAccountId: matched, note: d.note ?? `支払い方法: ${d.payment}` };
+    if ((d.source === 'screen' || d.source === 'price') && d.note !== 'メールで記録済み' && cashAccountId) {
+      return { ...d, fromAccountId: cashAccountId, note: '現金と判断' };
+    }
+    return d;
   });
 }
 

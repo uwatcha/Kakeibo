@@ -84,7 +84,7 @@ export function ImportReview({
               title={d.payee ?? TRANSACTION_RULES[d.type].label}
               subtitle={
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {[formatDay(d.date), categoryLabel(d.categoryId, categories), where || '口座なし']
+                  {[formatDay(d.date), categoryLabel(d.categoryId, categories), where || '口座なし', d.note]
                     .filter(Boolean)
                     .join('・')}
                   {d.duplicate && <Text style={{ color: theme.colors.error }}>・重複の可能性</Text>}

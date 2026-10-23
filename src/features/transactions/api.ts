@@ -45,9 +45,16 @@ export async function fetchTransactionsSince(date: string): Promise<Transaction[
   return data;
 }
 
-/** from〜to（両端を含む）の記録の日付と金額（AI入力で重複を確かめる） */
-export async function fetchDateAmountsBetween(from: string, to: string): Promise<{ date: string; amount: number }[]> {
-  const { data, error } = await supabase.from('transactions').select('date, amount').gte('date', from).lte('date', to);
+/** from〜to（両端を含む）の記録の日付・金額・メールから自動で入ったか（AI入力で重複を確かめる） */
+export async function fetchDateAmountsBetween(
+  from: string,
+  to: string,
+): Promise<{ date: string; amount: number; auto_source: string | null }[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('date, amount, auto_source')
+    .gte('date', from)
+    .lte('date', to);
   if (error) throw error;
   return data;
 }
