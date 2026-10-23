@@ -13,7 +13,9 @@ import {
   saveTransferOrder,
   type CardSettingsInsert,
   saveCardSettings,
+  deleteUnusedAccount,
   fetchAccounts,
+  fetchAccountUsage,
   updateAccount,
 } from './api';
 
@@ -104,4 +106,18 @@ export function useSaveTransferOrder() {
 
 export function useAllCardSettings() {
   return useQuery({ queryKey: [...accountKeys.all, 'cardSettings'], queryFn: fetchAllCardSettings });
+}
+
+/** 口座が使われている数（記録を変えたら読み直すので、記録のキーの下に置く） */
+export function useAccountUsage(id: string | undefined) {
+  return useQuery({
+    queryKey: ['transactions', 'accountUsage', id],
+    queryFn: () => fetchAccountUsage(id!),
+    enabled: !!id,
+  });
+}
+
+export function useDeleteUnusedAccount() {
+  const invalidate = useInvalidateAccounts();
+  return useMutation({ mutationFn: deleteUnusedAccount, onSuccess: invalidate });
 }

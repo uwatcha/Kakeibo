@@ -1,10 +1,22 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Button, HelperText, List, RadioButton, Snackbar, Switch, TextInput, useTheme } from 'react-native-paper';
+import {
+  Button,
+  Dialog,
+  HelperText,
+  List,
+  Portal,
+  RadioButton,
+  Snackbar,
+  Switch,
+  Text,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
 import { z } from 'zod';
 
 import { QueriesState } from '@/components/QueryState';
@@ -22,6 +34,8 @@ import {
   useAccountBalance,
   useAccounts,
   useCreateAccount,
+  useAccountUsage,
+  useDeleteUnusedAccount,
   useUpdateAccount,
 } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
@@ -58,6 +72,16 @@ export default function AccountEditScreen() {
   const createTransaction = useCreateTransaction();
   const create = useCreateAccount();
   const update = useUpdateAccount();
+  const usage = useAccountUsage(isNew ? undefined : id);
+  const remove = useDeleteUnusedAccount();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // 記録・定期支払い・給料の入金先・ほかのカードの引き落とし口座のどれにも使われていなければ消せる
+  const unused =
+    !!usage.data &&
+    usage.data.transactions === 0 &&
+    usage.data.rules === 0 &&
+    usage.data.employers === 0 &&
+    usage.data.cards === 0;
 
   const {
     control,
@@ -141,6 +165,17 @@ export default function AccountEditScreen() {
       router.back();
     } catch {
       // 同上
+    }
+  };
+
+  const deleteAccount = async () => {
+    setConfirmDelete(false);
+    try {
+      await remove.mutateAsync(id);
+      // 利用履歴から開いていたときは、消した口座の履歴に戻らないよう口座の管理まで戻る
+      router.dismissTo('/accounts');
+    } catch {
+      // Snackbar で知らせる（ほかの画面で使われたなど）
     }
   };
 
@@ -298,11 +333,38 @@ export default function AccountEditScreen() {
             {account.data.is_archived ? '表示に戻す' : '非表示にする'}
           </Button>
         )}
+        {!isNew && unused && (
+          <Button
+            mode="text"
+            icon="delete"
+            textColor={theme.colors.error}
+            style={styles.button}
+            onPress={() => setConfirmDelete(true)}
+            disabled={saving || remove.isPending}
+          >
+            この口座を削除
+          </Button>
+        )}
       </KeyboardAwareScrollView>
 
+      <Portal>
+        <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
+          <Dialog.Title>この口座を削除しますか？</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">削除すると元に戻せません。</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDelete(false)}>キャンセル</Button>
+            <Button onPress={deleteAccount} textColor={theme.colors.error}>
+              削除
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       <Snackbar
-        visible={create.isError || update.isError || createTransaction.isError}
-        onDismiss={() => (create.reset(), update.reset(), createTransaction.reset())}
+        visible={create.isError || update.isError || createTransaction.isError || remove.isError}
+        onDismiss={() => (create.reset(), update.reset(), createTransaction.reset(), remove.reset())}
       >
         保存できませんでした。通信状態を確認してください
       </Snackbar>

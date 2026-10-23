@@ -4,7 +4,10 @@ import {
   type CategoryInsert,
   type CategoryUpdate,
   createCategory,
+  deleteUnusedCategory,
   fetchCategories,
+  fetchCategoryUsage,
+  moveCategoryRecords,
   reorderCategories,
   updateCategory,
 } from './api';
@@ -44,4 +47,41 @@ export function useUpdateCategory() {
 export function useReorderCategories() {
   const invalidate = useInvalidateCategories();
   return useMutation({ mutationFn: (orderedIds: string[]) => reorderCategories(orderedIds), onSettled: invalidate });
+}
+
+/** カテゴリが使われている数（記録を変えたら読み直すので、記録のキーの下に置く） */
+export function useCategoryUsage(id: string | undefined) {
+  return useQuery({
+    queryKey: ['transactions', 'categoryUsage', id],
+    queryFn: () => fetchCategoryUsage(id!),
+    enabled: !!id,
+  });
+}
+
+// 記録のカテゴリが変わるので、記録・集計・定期支払いも読み直す
+function useInvalidateAfterMove() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: categoryKeys.all }),
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['reports'] }),
+      queryClient.invalidateQueries({ queryKey: ['recurring'] }),
+      queryClient.invalidateQueries({ queryKey: ['accounts'] }),
+      queryClient.invalidateQueries({ queryKey: ['emailImport'] }),
+    ]);
+}
+
+export function useMoveCategoryRecords() {
+  const invalidate = useInvalidateAfterMove();
+  return useMutation({
+    mutationFn: ({ source, destination }: { source: string; destination: string }) =>
+      moveCategoryRecords(source, destination),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteUnusedCategory() {
+  const invalidate = useInvalidateAfterMove();
+  return useMutation({ mutationFn: deleteUnusedCategory, onSuccess: invalidate });
 }

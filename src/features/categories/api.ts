@@ -35,3 +35,25 @@ export async function reorderCategories(orderedIds: string[]): Promise<void> {
   const failed = results.find((r) => r.error);
   if (failed?.error) throw failed.error;
 }
+
+/** カテゴリが使われている数（記録・定期支払い・小分類）。どれも 0 なら消せる */
+export type CategoryUsage = { transactions: number; rules: number; children: number };
+
+export async function fetchCategoryUsage(id: string): Promise<CategoryUsage> {
+  const { data, error } = await supabase.rpc('category_usage', { target: id });
+  if (error) throw error;
+  return data as CategoryUsage;
+}
+
+/** 記録・定期支払い・利用先の対応表・口座の既定のカテゴリを、まとめてほかのカテゴリへ移す。移した記録の件数を返す */
+export async function moveCategoryRecords(source: string, destination: string): Promise<number> {
+  const { data, error } = await supabase.rpc('move_category_records', { source, destination });
+  if (error) throw error;
+  return data;
+}
+
+/** 使われていないカテゴリを消す（使われていればサーバーが断る） */
+export async function deleteUnusedCategory(id: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_unused_category', { target: id });
+  if (error) throw error;
+}

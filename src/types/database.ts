@@ -749,6 +749,14 @@ export type Database = {
       }
     }
     Functions: {
+      account_usage: { Args: { target: string }; Returns: Json }
+      category_usage: { Args: { target: string }; Returns: Json }
+      delete_unused_account: { Args: { target: string }; Returns: undefined }
+      delete_unused_category: { Args: { target: string }; Returns: undefined }
+      move_category_records: {
+        Args: { destination: string; source: string }
+        Returns: number
+      }
       rotate_email_import_token: { Args: never; Returns: string }
     }
     Enums: {

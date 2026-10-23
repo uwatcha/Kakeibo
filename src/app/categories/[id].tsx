@@ -2,15 +2,25 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { StyleSheet, View } from 'react-native';
-import { Button, HelperText, List, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Button, Dialog, HelperText, List, Portal, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 import ReorderableList, { reorderItems } from 'react-native-reorderable-list';
 import { z } from 'zod';
 
 import { DragHandle } from '@/components/DragHandle';
 import { QueryState } from '@/components/QueryState';
 import type { Category } from '@/features/categories/api';
-import { useCategories, useCreateCategory, useReorderCategories, useUpdateCategory } from '@/features/categories/hooks';
+import {
+  useCategories,
+  useCategoryUsage,
+  useCreateCategory,
+  useDeleteUnusedCategory,
+  useMoveCategoryRecords,
+  useReorderCategories,
+  useUpdateCategory,
+} from '@/features/categories/hooks';
+import { categoryLabel } from '@/features/categories/tree';
+import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 import type { CategoryKind } from '@/features/transactions/transactionRules';
 
 const schema = z.object({
@@ -29,6 +39,13 @@ export default function CategoryEditScreen() {
   const create = useCreateCategory();
   const update = useUpdateCategory();
   const reorder = useReorderCategories();
+  const usage = useCategoryUsage(isNew ? undefined : params.id);
+  const move = useMoveCategoryRecords();
+  const remove = useDeleteUnusedCategory();
+  // ほかのカテゴリへ移すときの移し先（null は選ぶダイアログを閉じている）
+  const [moveTo, setMoveTo] = useState<string | null | undefined>(undefined);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [moved, setMoved] = useState<string | null>(null);
   // 小分類をドロップした直後は保存を待たずに並べ替え後の順で見せる
   const [pendingOrder, setPendingOrder] = useState<Category[] | null>(null);
 
@@ -70,6 +87,27 @@ export default function CategoryEditScreen() {
       router.back();
     } catch {
       // 同上
+    }
+  };
+
+  const moveRecords = async () => {
+    if (!moveTo || !category) return;
+    try {
+      const count = await move.mutateAsync({ source: category.id, destination: moveTo });
+      setMoved(`${count}件を「${categoryLabel(moveTo, categories.data ?? [])}」に移しました`);
+      setMoveTo(undefined);
+    } catch {
+      // Snackbar で知らせる
+    }
+  };
+
+  const deleteCategory = async () => {
+    setConfirmDelete(false);
+    try {
+      await remove.mutateAsync(params.id);
+      router.back();
+    } catch {
+      // Snackbar で知らせる（ほかの画面で使われたなど）
     }
   };
 
@@ -138,6 +176,34 @@ export default function CategoryEditScreen() {
           >
             {category.is_archived ? '表示に戻す' : '非表示にする'}
           </Button>
+          {usage.data && (usage.data.transactions > 0 || usage.data.rules > 0) && (
+            <>
+              <Text variant="bodySmall" style={[styles.usage, { color: theme.colors.onSurfaceVariant }]}>
+                {[
+                  usage.data.transactions > 0 ? `記録 ${usage.data.transactions}件` : null,
+                  usage.data.rules > 0 ? `定期支払い ${usage.data.rules}件` : null,
+                ]
+                  .filter(Boolean)
+                  .join('・')}
+                で使われています
+              </Text>
+              <Button mode="outlined" icon="folder-move-outline" onPress={() => setMoveTo(null)} disabled={saving}>
+                ほかのカテゴリに移す
+              </Button>
+            </>
+          )}
+          {usage.data && usage.data.transactions === 0 && usage.data.rules === 0 && usage.data.children === 0 && (
+            <Button
+              mode="text"
+              icon="delete"
+              textColor={theme.colors.error}
+              style={styles.button}
+              onPress={() => setConfirmDelete(true)}
+              disabled={saving || remove.isPending}
+            >
+              このカテゴリを削除
+            </Button>
+          )}
         </>
       )}
 
@@ -161,11 +227,49 @@ export default function CategoryEditScreen() {
         </>
       )}
 
+      <Portal>
+        <Dialog visible={moveTo !== undefined} onDismiss={() => setMoveTo(undefined)}>
+          <Dialog.Title>移し先のカテゴリ</Dialog.Title>
+          <Dialog.ScrollArea style={styles.scrollArea}>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <CategoryPicker
+                kind={kind}
+                categories={(categories.data ?? []).filter((c) => c.id !== category?.id)}
+                value={moveTo ?? null}
+                onChange={setMoveTo}
+                label="移し先"
+              />
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setMoveTo(undefined)}>キャンセル</Button>
+            <Button onPress={moveRecords} disabled={!moveTo || move.isPending} loading={move.isPending}>
+              移す
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+        <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
+          <Dialog.Title>このカテゴリを削除しますか？</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">削除すると元に戻せません。</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDelete(false)}>キャンセル</Button>
+            <Button onPress={deleteCategory} textColor={theme.colors.error}>
+              削除
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       <Snackbar
-        visible={create.isError || update.isError || reorder.isError}
-        onDismiss={() => (create.reset(), update.reset(), reorder.reset())}
+        visible={create.isError || update.isError || reorder.isError || move.isError || remove.isError}
+        onDismiss={() => (create.reset(), update.reset(), reorder.reset(), move.reset(), remove.reset())}
       >
         保存できませんでした。通信状態を確認してください
+      </Snackbar>
+      <Snackbar visible={moved !== null} onDismiss={() => setMoved(null)}>
+        {moved}
       </Snackbar>
     </View>
   );
@@ -177,4 +281,6 @@ const styles = StyleSheet.create({
   button: { marginTop: 12 },
   subheader: { paddingHorizontal: 0, marginTop: 16 },
   subList: { flex: 1 },
+  usage: { marginTop: 12, marginBottom: 4 },
+  scrollArea: { maxHeight: 420, paddingHorizontal: 24 },
 });

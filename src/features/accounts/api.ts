@@ -97,3 +97,18 @@ export async function fetchAllCardSettings(): Promise<CardSettings[]> {
   if (error) throw error;
   return data;
 }
+
+/** 口座が使われている数（記録・定期支払い・給料の入金先・ほかのカードの引き落とし口座）。どれも 0 なら消せる */
+export type AccountUsage = { transactions: number; rules: number; employers: number; cards: number };
+
+export async function fetchAccountUsage(id: string): Promise<AccountUsage> {
+  const { data, error } = await supabase.rpc('account_usage', { target: id });
+  if (error) throw error;
+  return data as AccountUsage;
+}
+
+/** 使われていない口座を消す（使われていればサーバーが断る） */
+export async function deleteUnusedAccount(id: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_unused_account', { target: id });
+  if (error) throw error;
+}
