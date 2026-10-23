@@ -7,6 +7,7 @@ import { loadPending, trySend } from '@/features/ai/pendingSend';
 import { fetchEmailImportSettings, fetchUnnotified, markNotified } from '@/features/emailImport/api';
 import { importNotification } from '@/features/emailImport/notifications';
 import { scanNewPhotos } from '@/features/photoImport/scan';
+import { loadPhotoQueue, processPhotoQueue } from '@/features/photoImport/queue';
 import { loadPhotoImportState } from '@/features/photoImport/settings';
 
 /**
@@ -83,9 +84,14 @@ export async function runBackgroundJobs(): Promise<void> {
   await processPendingSends().catch(() => undefined);
   const photo = await usesPhotoImport();
   if (photo) await scanNewPhotos().catch(() => undefined);
+  // ウィジェットから撮って、混み合いで読み取れなかった写真
+  const queued = (await loadPhotoQueue()).length > 0;
+  if (queued) await processPhotoQueue().catch(() => undefined);
   const email = await usesEmailImport();
-  if (email || photo) await notifyEmailImports().catch(() => undefined);
-  if (!email && !photo && (await loadPending()).length === 0) await stopBackgroundTask();
+  if (email || photo || queued) await notifyEmailImports().catch(() => undefined);
+  if (!email && !photo && (await loadPhotoQueue()).length === 0 && (await loadPending()).length === 0) {
+    await stopBackgroundTask();
+  }
 }
 
 TaskManager.defineTask(TASK, async () => {
@@ -126,7 +132,12 @@ async function stopBackgroundTask(): Promise<void> {
 
 /** メール・写真からの記録を使っていれば、定期の実行を始めておく（アプリを開いたとき） */
 export async function ensureBackgroundTask(): Promise<void> {
-  if ((await usesEmailImport()) || (await usesPhotoImport()) || (await loadPending()).length > 0) {
+  if (
+    (await usesEmailImport()) ||
+    (await usesPhotoImport()) ||
+    (await loadPhotoQueue()).length > 0 ||
+    (await loadPending()).length > 0
+  ) {
     await startBackgroundTask();
   }
 }

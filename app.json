@@ -59,7 +59,37 @@
             "photo"
           ]
         }
-      ]
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "QuickAdd",
+              "label": "家計簿: 記録",
+              "minWidth": "40dp",
+              "minHeight": "40dp",
+              "targetCellWidth": 1,
+              "targetCellHeight": 1,
+              "description": "ホーム画面から記録する",
+              "previewImage": "./assets/widget-preview/quick-add.png",
+              "updatePeriodMillis": 0
+            },
+            {
+              "name": "QuickPhoto",
+              "label": "家計簿: 写真",
+              "minWidth": "40dp",
+              "minHeight": "40dp",
+              "targetCellWidth": 1,
+              "targetCellHeight": 1,
+              "description": "レシートなどを撮って記録する",
+              "previewImage": "./assets/widget-preview/quick-photo.png",
+              "updatePeriodMillis": 0
+            }
+          ]
+        }
+      ],
+      "./plugins/withQuickAddActivity"
     ],
     "experiments": {
       "typedRoutes": true,

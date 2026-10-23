@@ -129,7 +129,9 @@ export async function addDuplicateImport(id: string) {
     if (updated.error) throw updated.error;
     return;
   }
-  const { error } = await supabase.functions.invoke('email-import', { body: { action: 'add_duplicate', importId: id } });
+  const { error } = await supabase.functions.invoke('email-import', {
+    body: { action: 'add_duplicate', importId: id },
+  });
   if (error) {
     const detail = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
     throw new Error(detail?.error ?? '追加できませんでした');
