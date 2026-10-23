@@ -163,7 +163,8 @@ export default function ReviewScreen() {
           {duplicates.map((i) => (
             <View key={i.id}>
               <ListRow
-                title={i.raw_payee ?? 'メールの記録'}
+                title={i.raw_payee ?? (i.kind === 'photo' ? '写真の記録' : 'メールの記録')}
+                icon={i.kind === 'photo' ? 'image-outline' : 'content-duplicate'}
                 subtitle={[
                   i.date ? formatDay(i.date) : null,
                   i.duplicate
@@ -172,7 +173,6 @@ export default function ReviewScreen() {
                 ]
                   .filter(Boolean)
                   .join('・')}
-                icon="content-duplicate"
                 wrap
                 onPress={i.duplicate_of ? () => openTransaction(i.duplicate_of!) : undefined}
                 right={

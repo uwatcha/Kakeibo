@@ -13,7 +13,7 @@ export type UnnotifiedImport = {
 };
 
 /** サンプルカードの速報（店名なし）で入れた記録の、通知での呼び名 */
-const UNNAMED: Record<string, string> = { card_quick: 'サンプルカード' };
+const UNNAMED: Record<string, string> = { card_quick: 'サンプルカード', photo: '写真の記録' };
 
 /**
  * メールからの記録の通知の文と、押したときに開くもの。通知しないものは null。

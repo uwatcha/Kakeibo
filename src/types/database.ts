@@ -359,7 +359,9 @@ export type Database = {
       }
       email_imports: {
         Row: {
+          account_id: string | null
           amount: number | null
+          category_id: string | null
           created_at: string
           date: string | null
           duplicate_of: string | null
@@ -368,6 +370,7 @@ export type Database = {
           kind: string | null
           message_id: string
           notified: boolean
+          payee: string | null
           raw_payee: string | null
           received_at: string | null
           status: string
@@ -376,7 +379,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           amount?: number | null
+          category_id?: string | null
           created_at?: string
           date?: string | null
           duplicate_of?: string | null
@@ -385,6 +390,7 @@ export type Database = {
           kind?: string | null
           message_id: string
           notified?: boolean
+          payee?: string | null
           raw_payee?: string | null
           received_at?: string | null
           status: string
@@ -393,7 +399,9 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          account_id?: string | null
           amount?: number | null
+          category_id?: string | null
           created_at?: string
           date?: string | null
           duplicate_of?: string | null
@@ -402,6 +410,7 @@ export type Database = {
           kind?: string | null
           message_id?: string
           notified?: boolean
+          payee?: string | null
           raw_payee?: string | null
           received_at?: string | null
           status?: string
@@ -410,6 +419,27 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "email_imports_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_imports_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_imports_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "email_imports_duplicate_of_fkey"
             columns: ["duplicate_of"]

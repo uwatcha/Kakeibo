@@ -6,11 +6,14 @@ import { Platform } from 'react-native';
 import { loadPending, trySend } from '@/features/ai/pendingSend';
 import { fetchEmailImportSettings, fetchUnnotified, markNotified } from '@/features/emailImport/api';
 import { importNotification } from '@/features/emailImport/notifications';
+import { scanNewPhotos } from '@/features/photoImport/scan';
+import { loadPhotoImportState } from '@/features/photoImport/settings';
 
 /**
  * アプリを閉じている間に動く仕事（Android の WorkManager で 15分以上の間隔。端末の電池・通信の状態しだいで遅れる）:
  * - 混み合いで送れなかった AI 相談の質問を送り直し、返事が来たら通知する
- * - メールから自動で入った記録・重複の可能性・読み取れなかったメールを通知する（サーバーからは通知できないので、ここで確かめる）
+ * - 新しい写真（カメラ・スクリーンショット）を見て、レシートなどなら記録する（写真からの記録。features/photoImport）
+ * - メール・写真から自動で入った記録・重複の可能性・読み取れなかったメールを通知する（サーバーからは通知できないので、ここで確かめる）
  * 通知を押したときの動きは BackgroundRunner.tsx
  */
 // 名前は最初に作ったとき（AI の送り直しだけだったころ）のまま。変えると入れてある APK の登録とずれる
@@ -70,12 +73,19 @@ async function usesEmailImport(): Promise<boolean> {
   }
 }
 
-/** 今やることを全部やる（アプリを開いたときにも呼ぶ）。どちらの仕事もなければ定期の実行をやめる */
+/** 写真からの記録を使っているか（この端末でオンにしてある） */
+async function usesPhotoImport(): Promise<boolean> {
+  return (await loadPhotoImportState()).enabled;
+}
+
+/** 今やることを全部やる（アプリを開いたときにも呼ぶ）。どの仕事もなければ定期の実行をやめる */
 export async function runBackgroundJobs(): Promise<void> {
   await processPendingSends().catch(() => undefined);
+  const photo = await usesPhotoImport();
+  if (photo) await scanNewPhotos().catch(() => undefined);
   const email = await usesEmailImport();
-  if (email) await notifyEmailImports().catch(() => undefined);
-  if (!email && (await loadPending()).length === 0) await stopBackgroundTask();
+  if (email || photo) await notifyEmailImports().catch(() => undefined);
+  if (!email && !photo && (await loadPending()).length === 0) await stopBackgroundTask();
 }
 
 TaskManager.defineTask(TASK, async () => {
@@ -93,7 +103,7 @@ export async function startBackgroundTask(): Promise<void> {
     if (Platform.OS === 'android') {
       // Android 13 以降は、通知のチャンネルがあるときだけ許可を求められる
       await Notifications.setNotificationChannelAsync(CHANNEL, {
-        name: 'AI 相談の返事・メールからの記録',
+        name: 'AI 相談の返事・メールと写真からの記録',
         importance: Notifications.AndroidImportance.DEFAULT,
       });
     }
@@ -114,7 +124,9 @@ async function stopBackgroundTask(): Promise<void> {
   }
 }
 
-/** メールからの記録を使っていれば、定期の実行を始めておく（アプリを開いたとき） */
+/** メール・写真からの記録を使っていれば、定期の実行を始めておく（アプリを開いたとき） */
 export async function ensureBackgroundTask(): Promise<void> {
-  if ((await usesEmailImport()) || (await loadPending()).length > 0) await startBackgroundTask();
+  if ((await usesEmailImport()) || (await usesPhotoImport()) || (await loadPending()).length > 0) {
+    await startBackgroundTask();
+  }
 }

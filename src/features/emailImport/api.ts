@@ -1,5 +1,7 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
+import { isConfirmedOnSave } from '@/features/transactions/confirmation';
+import { toTokyoDateString } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import type { Transaction } from '@/features/transactions/api';
 import type { Database } from '@/types/database';
@@ -95,11 +97,39 @@ export async function dismissImport(id: string) {
   if (error) throw error;
 }
 
-/** 重複の可能性を、それでも記録として追加する（サーバーで内容・カテゴリを決めて足す） */
+/**
+ * 重複の可能性を、それでも記録として追加する。メールはサーバーで内容・カテゴリを決め直して足し、
+ * 写真は読み取ったときの内容・口座・カテゴリのまま足す
+ */
 export async function addDuplicateImport(id: string) {
-  const { error } = await supabase.functions.invoke('email-import', {
-    body: { action: 'add_duplicate', importId: id },
-  });
+  const { data: row, error: readError } = await supabase.from('email_imports').select('*').eq('id', id).single();
+  if (readError) throw readError;
+  if (row.kind === 'photo') {
+    if (!row.date || !row.amount || !row.account_id) throw new Error('追加できませんでした');
+    const { data: inserted, error } = await supabase
+      .from('transactions')
+      .insert({
+        type: 'expense',
+        amount: row.amount,
+        date: row.date,
+        payee: row.payee,
+        category_id: row.category_id,
+        from_account_id: row.account_id,
+        auto_source: 'photo',
+        auto_reviewed: false,
+        is_confirmed: isConfirmedOnSave(row.date, toTokyoDateString()),
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    const updated = await supabase
+      .from('email_imports')
+      .update({ status: 'recorded', transaction_id: inserted.id, notified: true })
+      .eq('id', id);
+    if (updated.error) throw updated.error;
+    return;
+  }
+  const { error } = await supabase.functions.invoke('email-import', { body: { action: 'add_duplicate', importId: id } });
   if (error) {
     const detail = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
     throw new Error(detail?.error ?? '追加できませんでした');

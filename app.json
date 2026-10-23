@@ -49,7 +49,17 @@
         }
       ],
       "expo-notifications",
-      "expo-document-picker"
+      "expo-document-picker",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "レシートなどの写真から記録するために、写真を読みます",
+          "savePhotosPermission": false,
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

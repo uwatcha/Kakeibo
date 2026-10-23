@@ -27,6 +27,8 @@ export type ImportDraft = {
   payment: string | null;
   /** 口座をどう決めたか（確認の一覧に出す） */
   note: string | null;
+  /** 重なっていそうな、すでにある記録（markDuplicates で入れる） */
+  duplicateOf?: string | null;
 };
 
 export type PhotoSource = 'receipt' | 'screen' | 'price' | 'other';
@@ -116,7 +118,7 @@ const dayDiff = (a: string, b: string) =>
   Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
 
 /** すでにある記録（日付・金額・メールから自動で入ったか） */
-export type ExistingRecord = { date: string; amount: number; auto_source: string | null };
+export type ExistingRecord = { id?: string; date: string; amount: number; auto_source: string | null };
 
 /**
  * 重複の印を付ける: すでにある記録と同じ金額で日付が前後1日以内の行と、読み取りの中で2回目以降に出てきた同じ行。
@@ -133,6 +135,7 @@ export function markDuplicates(drafts: readonly ImportDraft[], existing: readonl
     return {
       ...d,
       duplicate: near.length > 0 || repeated,
+      duplicateOf: near[0]?.id ?? null,
       note: fromEmail ? 'メールで記録済み' : d.note,
     };
   });

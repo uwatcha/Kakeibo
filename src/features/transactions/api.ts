@@ -49,10 +49,10 @@ export async function fetchTransactionsSince(date: string): Promise<Transaction[
 export async function fetchDateAmountsBetween(
   from: string,
   to: string,
-): Promise<{ date: string; amount: number; auto_source: string | null }[]> {
+): Promise<{ id: string; date: string; amount: number; auto_source: string | null }[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('date, amount, auto_source')
+    .select('id, date, amount, auto_source')
     .gte('date', from)
     .lte('date', to);
   if (error) throw error;
