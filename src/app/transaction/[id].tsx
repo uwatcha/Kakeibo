@@ -379,9 +379,11 @@ export default function TransactionEditScreen() {
           matches={duplicate?.matches ?? null}
           onCancel={() => setDuplicate(null)}
           onSave={() => {
-            const values = duplicate!.values;
+            // `duplicate!.values` と書くと、React Compiler が描画のたびに duplicate.values を読むようになり、
+            // duplicate が null の間（ふだん）に落ちる。null を確かめてから読む
+            if (!duplicate) return;
             setDuplicate(null);
-            onSubmit(values, true);
+            onSubmit(duplicate.values, true);
           }}
         />
         <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>

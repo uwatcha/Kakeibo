@@ -71,8 +71,5 @@
     "test": "jest",
     "update": "npx eas-cli@latest update --branch preview --environment preview --platform android"
   },
-  "private": true,
-  "jest": {
-    "preset": "jest-expo"
-  }
+  "private": true
 }
