@@ -1,4 +1,3 @@
-import { loadPending } from './pendingSend';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -12,6 +11,8 @@ import {
   setAiModel,
   setConversationPinned,
 } from './api';
+import { scheduleClaudeKeyReminder } from './claudeKeyReminder';
+import { loadPending } from './pendingSend';
 import { deletionCutoff } from './retention';
 
 export const aiKeys = {
@@ -29,7 +30,14 @@ export function usePendingSends() {
 }
 
 export function useAiStatus() {
-  return useQuery({ queryKey: aiKeys.status(), queryFn: fetchAiStatus });
+  return useQuery({
+    queryKey: aiKeys.status(),
+    queryFn: async () => {
+      const status = await fetchAiStatus();
+      scheduleClaudeKeyReminder(status.claudeExpiresAt);
+      return status;
+    },
+  });
 }
 
 export function useAiUsageToday(today: string) {
@@ -38,7 +46,10 @@ export function useAiUsageToday(today: string) {
 
 function useSetStatus() {
   const queryClient = useQueryClient();
-  return (status: Awaited<ReturnType<typeof fetchAiStatus>>) => queryClient.setQueryData(aiKeys.status(), status);
+  return (status: Awaited<ReturnType<typeof fetchAiStatus>>) => {
+    scheduleClaudeKeyReminder(status.claudeExpiresAt);
+    queryClient.setQueryData(aiKeys.status(), status);
+  };
 }
 
 export function useSaveAiKey() {

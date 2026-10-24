@@ -40,6 +40,8 @@ export function BackgroundRunner() {
       router.push({ pathname: '/transaction/[id]', params: { id: data.transactionId } });
     } else if (typeof data.tab === 'string') {
       router.push({ pathname: '/unconfirmed', params: { tab: data.tab } });
+    } else if (data.screen === 'ai-settings') {
+      router.push('/ai-settings');
     }
     Notifications.clearLastNotificationResponse();
   }, [session, response]);

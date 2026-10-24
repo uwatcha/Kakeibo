@@ -165,18 +165,24 @@ export type Database = {
       }
       ai_settings: {
         Row: {
+          anthropic_api_key: string | null
+          anthropic_key_saved_at: string | null
           gemini_api_key: string | null
           model: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          anthropic_api_key?: string | null
+          anthropic_key_saved_at?: string | null
           gemini_api_key?: string | null
           model?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          anthropic_api_key?: string | null
+          anthropic_key_saved_at?: string | null
           gemini_api_key?: string | null
           model?: string | null
           updated_at?: string

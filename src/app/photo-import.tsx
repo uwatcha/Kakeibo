@@ -92,7 +92,7 @@ export default function PhotoImportScreen() {
           />
           {ai.data && !ai.data.hasKey && (
             <ListRow
-              title="Gemini と連携する"
+              title="AI と連携する"
               icon="link"
               iconColor={theme.colors.error}
               right={chevron}

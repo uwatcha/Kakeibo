@@ -3,7 +3,17 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
 export type AiModel = { id: string; label: string; inputTokenLimit: number };
-export type AiStatus = { hasKey: boolean; model: string | null; models: AiModel[] };
+export type AiStatus = {
+  /** Gemini か Claude のどちらかのキーがある */
+  hasKey: boolean;
+  gemini: boolean;
+  claude: boolean;
+  /** Claude のキーの期限（保存してから30日）。キーがなければ null */
+  claudeExpiresAt: string | null;
+  model: string | null;
+  models: AiModel[];
+};
+export type AiProvider = 'gemini' | 'claude';
 export type AiMessage = { role: 'user' | 'model'; text: string };
 export type AiReply = { text: string; usage: { prompt: number; output: number; total: number }; model: string };
 
@@ -17,7 +27,7 @@ export class AiError extends Error {
   }
 }
 
-/** Gemini の混み合い・一時的な障害の状態コード（Edge Function が status に入れて返す） */
+/** 混み合い・一時的な障害の状態コード（Edge Function が status に入れて返す。Claude の 529 も 503 にして返す） */
 const TEMPORARY_STATUSES = [500, 502, 503, 504];
 
 /** Edge Function ai-chat を呼ぶ。失敗したら関数が返したメッセージで投げる */
@@ -38,8 +48,9 @@ async function callAi<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 export const fetchAiStatus = () => callAi<AiStatus>({ action: 'status' });
-export const saveAiKey = (key: string) => callAi<AiStatus>({ action: 'save_key', key });
-export const deleteAiKey = () => callAi<AiStatus>({ action: 'delete_key' });
+export const saveAiKey = ({ provider, key }: { provider: AiProvider; key: string }) =>
+  callAi<AiStatus>({ action: 'save_key', provider, key });
+export const deleteAiKey = (provider: AiProvider) => callAi<AiStatus>({ action: 'delete_key', provider });
 export const setAiModel = (model: string) => callAi<{ ok: true }>({ action: 'set_model', model });
 export const sendAiChat = (system: string, messages: AiMessage[]) =>
   callAi<AiReply>({ action: 'chat', system, messages });

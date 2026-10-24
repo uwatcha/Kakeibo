@@ -19,7 +19,8 @@ import { loadPhotoImportState } from '@/features/photoImport/settings';
  */
 // 名前は最初に作ったとき（AI の送り直しだけだったころ）のまま。変えると入れてある APK の登録とずれる
 const TASK = 'kakeibo-ai-retry';
-const CHANNEL = 'ai-replies';
+export const NOTIFICATION_CHANNEL = 'ai-replies';
+const CHANNEL = NOTIFICATION_CHANNEL;
 
 // 通知はアプリを開いているときも出す
 Notifications.setNotificationHandler({
@@ -103,17 +104,21 @@ TaskManager.defineTask(TASK, async () => {
   }
 });
 
+/** 通知のチャンネルを作り、許可を求める（Android 13 以降は、チャンネルがあるときだけ許可を求められる） */
+export async function prepareNotifications(): Promise<void> {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(CHANNEL, {
+      name: 'AI 相談の返事・メールと写真からの記録',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    });
+  }
+  await Notifications.requestPermissionsAsync();
+}
+
 /** 仕事ができたら呼ぶ（AI の送り直し待ち・メールからの記録を使うとき）。通知の許可を求め、定期の実行を始める */
 export async function startBackgroundTask(): Promise<void> {
   try {
-    if (Platform.OS === 'android') {
-      // Android 13 以降は、通知のチャンネルがあるときだけ許可を求められる
-      await Notifications.setNotificationChannelAsync(CHANNEL, {
-        name: 'AI 相談の返事・メールと写真からの記録',
-        importance: Notifications.AndroidImportance.DEFAULT,
-      });
-    }
-    await Notifications.requestPermissionsAsync();
+    await prepareNotifications();
     if (!(await TaskManager.isTaskRegisteredAsync(TASK))) {
       await BackgroundTask.registerTaskAsync(TASK, { minimumInterval: 15 });
     }

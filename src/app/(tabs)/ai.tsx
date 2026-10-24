@@ -43,7 +43,7 @@ const MODE_BAR_HEIGHT = 48;
 const TITLE_BAR_HEIGHT = 36;
 
 /**
- * AI のタブ。上の切り替えで「相談」（家計の相談に乗る AI（Gemini）とのチャット）と「入力」（AI入力）。
+ * AI のタブ。上の切り替えで「相談」（家計の相談に乗る AI（Gemini・Claude）とのチャット）と「入力」（AI入力）。
  * 会話は保存し、URL の c に開いている会話の id を持つ（なければ新しいチャット）。
  * 送信・送り直しは useChatSender、AI に渡す指示は chatContext.ts
  */
@@ -137,7 +137,7 @@ export default function AiChatScreen() {
       <View style={[styles.container, styles.center, { backgroundColor: theme.colors.background }]}>
         <Tabs.Screen options={{ headerRight }} />
         <Button mode="contained" icon="link" onPress={() => router.push('/ai-settings')}>
-          Gemini と連携する
+          AI と連携する
         </Button>
       </View>
     );

@@ -1,7 +1,16 @@
-// AI の家計相談（Gemini）の中継。API キーはここでだけ扱い、アプリには返さない。
+// AI の家計相談（Gemini・Claude）の中継。API キーはここでだけ扱い、アプリには返さない。
 // アプリは名前を置き換えた材料（src/features/ai/anonymize.ts）と会話だけを送ってくる
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+import {
+  checkClaudeKey,
+  CLAUDE_DEFAULT_MODEL,
+  CLAUDE_MODELS,
+  ClaudeError,
+  generateClaudeWithRetry,
+  isClaudeModel,
+  isClaudeTemporary,
+} from '../_shared/claude.ts';
 import {
   FALLBACK_MODEL,
   GEMINI,
@@ -9,8 +18,60 @@ import {
   generateWithRetry,
   isTemporary,
   LIGHT_FALLBACK_MODEL,
+  type Message,
   serviceKey,
 } from '../_shared/gemini.ts';
+
+/** Claude のキーの期限（作ってから30日。保存した日から数える） */
+const CLAUDE_KEY_DAYS = 30;
+
+type Settings = {
+  gemini_api_key: string | null;
+  anthropic_api_key: string | null;
+  anthropic_key_saved_at: string | null;
+  model: string | null;
+};
+
+/**
+ * 順に試すモデル: 選んだモデル → 同じ会社の軽いモデル → もう一方の会社（キーがあれば）。
+ * Gemini の混み合いが多いので、Claude のキーがあれば最後に Claude で答える（逆も同じ）
+ */
+function candidatesFor(settings: Settings, preferred: string | null): string[] {
+  const gemini = settings.gemini_api_key ? [FALLBACK_MODEL, LIGHT_FALLBACK_MODEL] : [];
+  const claude = settings.anthropic_api_key ? [CLAUDE_DEFAULT_MODEL] : [];
+  const order = isClaudeModel(preferred) ? [...claude, ...gemini] : [...gemini, ...claude];
+  return [...new Set([...(preferred ? [preferred] : []), ...order])].filter((m) =>
+    isClaudeModel(m) ? !!settings.anthropic_api_key : !!settings.gemini_api_key,
+  );
+}
+
+const canSkip = (e: unknown) =>
+  e instanceof ClaudeError
+    ? e.status === 404 || isClaudeTemporary(e.status)
+    : e instanceof GeminiError && (e.status === 404 || isTemporary(e.status));
+
+/** 候補を順に試し、最初に答えられたモデルの返事を返す。使えない（404）・混み合いのときだけ次へ */
+async function generateAny(settings: Settings, candidates: string[], system: string, messages: Message[], asJson = false) {
+  let lastError: unknown = new GeminiError(400, 'no model');
+  for (const model of candidates) {
+    try {
+      const out = isClaudeModel(model)
+        ? await generateClaudeWithRetry(settings.anthropic_api_key!, model, system, messages, asJson)
+        : await generateWithRetry(settings.gemini_api_key!, model, system, messages, asJson);
+      return { out, model };
+    } catch (e) {
+      lastError = e;
+      if (!canSkip(e)) throw e;
+    }
+  }
+  throw lastError;
+}
+
+/** Claude のキーの期限（ISO）。キーがなければ null */
+const claudeExpiresAt = (settings: Settings | null) =>
+  settings?.anthropic_api_key && settings.anthropic_key_saved_at
+    ? new Date(new Date(settings.anthropic_key_saved_at).getTime() + CLAUDE_KEY_DAYS * 86_400_000).toISOString()
+    : null;
 
 
 const cors = {
@@ -71,31 +132,75 @@ Deno.serve(async (req) => {
   if (!user) return json({ error: 'ログインし直してください' }, 401);
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const { data: settings } = await db.from('ai_settings').select('*').eq('user_id', user.id).maybeSingle();
+  const { data: settings } = (await db.from('ai_settings').select('*').eq('user_id', user.id).maybeSingle()) as {
+    data: Settings | null;
+  };
+
+  /** アプリに返す状態（キーそのものは返さない） */
+  const statusOf = async (s: Settings | null) => {
+    const geminiModels = s?.gemini_api_key ? sortModels(await listModels(s.gemini_api_key)) : [];
+    const claudeModels = s?.anthropic_api_key ? CLAUDE_MODELS : [];
+    return {
+      hasKey: !!(s?.gemini_api_key || s?.anthropic_api_key),
+      gemini: !!s?.gemini_api_key,
+      claude: !!s?.anthropic_api_key,
+      claudeExpiresAt: claudeExpiresAt(s),
+      model: s?.model ?? null,
+      models: [...geminiModels, ...claudeModels],
+    };
+  };
 
   try {
     switch (body.action) {
-      case 'status': {
-        if (!settings?.gemini_api_key) return json({ hasKey: false, model: null, models: [] });
-        const models = sortModels(await listModels(settings.gemini_api_key));
-        return json({ hasKey: true, model: settings.model, models });
-      }
+      case 'status':
+        return json(await statusOf(settings));
       case 'save_key': {
         const key = String(body.key ?? '').trim();
         if (!key) return json({ error: 'API キーを入れてください' }, 400);
-        // キーが使えるか、モデルの一覧が取れるかで確かめる
-        const models = sortModels(await listModels(key));
-        const model = settings?.model && models.some((m) => m.id === settings.model) ? settings.model : defaultModel(models);
-        const { error } = await db
-          .from('ai_settings')
-          .upsert({ user_id: user.id, gemini_api_key: key, model, updated_at: new Date().toISOString() });
+        const now = new Date().toISOString();
+        let next: Settings;
+        if (body.provider === 'claude') {
+          // キーが使えるか、ごく短い呼び出しで確かめる。保存したら Claude を使う
+          await checkClaudeKey(key);
+          next = {
+            gemini_api_key: settings?.gemini_api_key ?? null,
+            anthropic_api_key: key,
+            anthropic_key_saved_at: now,
+            model: isClaudeModel(settings?.model) ? settings!.model : CLAUDE_DEFAULT_MODEL,
+          };
+        } else {
+          // キーが使えるか、モデルの一覧が取れるかで確かめる
+          const models = sortModels(await listModels(key));
+          const keep = settings?.model && (isClaudeModel(settings.model) || models.some((m) => m.id === settings.model));
+          next = {
+            gemini_api_key: key,
+            anthropic_api_key: settings?.anthropic_api_key ?? null,
+            anthropic_key_saved_at: settings?.anthropic_key_saved_at ?? null,
+            model: keep ? settings!.model : defaultModel(models),
+          };
+        }
+        const { error } = await db.from('ai_settings').upsert({ user_id: user.id, ...next, updated_at: now });
         if (error) throw error;
-        return json({ hasKey: true, model, models });
+        return json(await statusOf(next));
       }
       case 'delete_key': {
-        const { error } = await db.from('ai_settings').delete().eq('user_id', user.id);
+        // provider のキーだけ外す。選んでいたモデルがその会社のものなら、もう一方に切り替える
+        const claude = body.provider === 'claude';
+        const next: Settings = {
+          gemini_api_key: claude ? (settings?.gemini_api_key ?? null) : null,
+          anthropic_api_key: claude ? null : (settings?.anthropic_api_key ?? null),
+          anthropic_key_saved_at: claude ? null : (settings?.anthropic_key_saved_at ?? null),
+          model: settings?.model ?? null,
+        };
+        if (isClaudeModel(next.model) === claude) {
+          next.model = claude ? (next.gemini_api_key ? FALLBACK_MODEL : null) : next.anthropic_api_key ? CLAUDE_DEFAULT_MODEL : null;
+        }
+        const { error } =
+          next.gemini_api_key || next.anthropic_api_key
+            ? await db.from('ai_settings').update({ ...next, updated_at: new Date().toISOString() }).eq('user_id', user.id)
+            : await db.from('ai_settings').delete().eq('user_id', user.id);
         if (error) throw error;
-        return json({ hasKey: false, model: null, models: [] });
+        return json(await statusOf(next.gemini_api_key || next.anthropic_api_key ? next : null));
       }
       case 'set_model': {
         const { error } = await db
@@ -106,29 +211,29 @@ Deno.serve(async (req) => {
         return json({ ok: true });
       }
       case 'chat': {
-        if (!settings?.gemini_api_key || !settings.model) return json({ error: 'API キーを登録してください' }, 400);
+        if (!settings?.model || !(settings.gemini_api_key || settings.anthropic_api_key)) {
+          return json({ error: 'API キーを登録してください' }, 400);
+        }
         const messages = (body.messages ?? []) as { role: 'user' | 'model'; text: string }[];
         const system = String(body.system ?? '');
-        // 選んだモデル → 最新の Flash → 最新の Flash-Lite の順に試す。
-        // 混み合い（503 など）は少し待って送り直し、使えないモデル（404）はすぐ次へ
-        const candidates = [...new Set([settings.model, FALLBACK_MODEL, LIGHT_FALLBACK_MODEL])];
-        let model = settings.model;
-        let out;
-        let lastError: unknown;
-        for (const candidate of candidates) {
-          try {
-            out = await generateWithRetry(settings.gemini_api_key, candidate, system, messages);
-            model = candidate;
-            break;
-          } catch (e) {
-            lastError = e;
-            if (!(e instanceof GeminiError) || !(e.status === 404 || isTemporary(e.status))) throw e;
+        // 選んだモデル → 同じ会社の軽いモデル → もう一方の会社の順に試す（candidatesFor）。
+        // 混み合い（503・529 など）は少し待って送り直し、使えないモデル（404）はすぐ次へ
+        const candidates = candidatesFor(settings, settings.model);
+        const { out, model } = await generateAny(settings, candidates, system, messages);
+        // 選んでいたモデルが使えなくなっていたら（404）、答えたモデルを設定にする（混み合いで切り替えただけなら変えない）
+        if (model !== settings.model) {
+          const first = candidates.indexOf(settings.model);
+          if (first === 0) {
+            try {
+              // 選んだモデルが 404 だったかは、もう一度は試さずに一覧で確かめる
+              const available = (await statusOf(settings)).models.some((m) => m.id === settings.model);
+              if (!available) {
+                await db.from('ai_settings').update({ model, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+              }
+            } catch {
+              // 確かめられなければ設定は変えない
+            }
           }
-        }
-        if (!out) throw lastError;
-        // 使えなくなっていたモデルは、切り替え先を設定にする（混み合いで切り替えただけなら設定は変えない）
-        if (model !== settings.model && lastError instanceof GeminiError && lastError.status === 404) {
-          await db.from('ai_settings').update({ model, updated_at: new Date().toISOString() }).eq('user_id', user.id);
         }
         const text = (out.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
         const usage = {
@@ -143,31 +248,19 @@ Deno.serve(async (req) => {
       }
       case 'extract': {
         // 明細の写真・CSV などから記録を読み取る（AI入力）。返事は JSON の配列
-        if (!settings?.gemini_api_key || !settings.model) return json({ error: 'API キーを登録してください' }, 400);
+        if (!settings?.model || !(settings.gemini_api_key || settings.anthropic_api_key)) {
+          return json({ error: 'API キーを登録してください' }, 400);
+        }
         const files = ((body.files ?? []) as { mimeType: string; data: string }[]).slice(0, 5);
         const text = String(body.text ?? '').slice(0, 200_000);
         const system = String(body.system ?? '');
-        const candidates = [...new Set([settings.model, FALLBACK_MODEL, LIGHT_FALLBACK_MODEL])];
-        let out;
-        let used = settings.model;
-        let lastError: unknown;
-        for (const candidate of candidates) {
-          try {
-            out = await generateWithRetry(
-              settings.gemini_api_key,
-              candidate,
-              system,
-              [{ role: 'user', text: text || '添付の内容から記録を読み取ってください。', files }],
-              true,
-            );
-            used = candidate;
-            break;
-          } catch (e) {
-            lastError = e;
-            if (!(e instanceof GeminiError) || !(e.status === 404 || isTemporary(e.status))) throw e;
-          }
-        }
-        if (!out) throw lastError;
+        const { out, model: used } = await generateAny(
+          settings,
+          candidatesFor(settings, settings.model),
+          system,
+          [{ role: 'user', text: text || '添付の内容から記録を読み取ってください。', files }],
+          true,
+        );
         const raw = (out.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
         await db.from('ai_usage').insert({
           user_id: user.id,
@@ -186,7 +279,9 @@ Deno.serve(async (req) => {
       }
       case 'title': {
         // 会話の中身から短いタイトルを作る。無料枠を節約するため軽いモデルで、混み合っていたら Flash に切り替える
-        if (!settings?.gemini_api_key) return json({ error: 'API キーを登録してください' }, 400);
+        if (!settings?.gemini_api_key && !settings?.anthropic_api_key) {
+          return json({ error: 'API キーを登録してください' }, 400);
+        }
         const messages = (body.messages ?? []) as { role: 'user' | 'model'; text: string }[];
         const transcript = messages.map((m) => `${m.role === 'user' ? '質問' : '答え'}: ${m.text}`).join('\n').slice(0, 4000);
         // 付け直しのときは今のタイトルを渡し、話題が大きく変わっていなければそのまま返してもらう
@@ -196,16 +291,13 @@ Deno.serve(async (req) => {
           (currentTitle
             ? `今のタイトルは「${currentTitle}」です。会話の話題が大きく変わっていなければ、今のタイトルを一字も変えずにそのまま返す。`
             : '');
-        let out;
-        for (const candidate of [LIGHT_FALLBACK_MODEL, FALLBACK_MODEL]) {
-          try {
-            out = await generateWithRetry(settings.gemini_api_key, candidate, system, [{ role: 'user', text: transcript }]);
-            break;
-          } catch (e) {
-            if (!(e instanceof GeminiError) || !(e.status === 404 || isTemporary(e.status))) throw e;
-          }
-        }
-        if (!out) return json({ error: 'Gemini が混み合っています' }, 502);
+        // 無料の Gemini の軽いモデルを先に。なければ・混み合っていれば Claude の Haiku
+        const { out } = await generateAny(
+          settings,
+          candidatesFor(settings, settings.gemini_api_key ? LIGHT_FALLBACK_MODEL : CLAUDE_DEFAULT_MODEL),
+          system,
+          [{ role: 'user', text: transcript }],
+        );
         const title = (out.candidates?.[0]?.content?.parts ?? [])
           .map((p) => p.text ?? '')
           .join('')
@@ -220,17 +312,22 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     if (e instanceof GeminiError) {
+      const name = e instanceof ClaudeError ? 'Claude' : 'Gemini';
+      const temporary = e instanceof ClaudeError ? isClaudeTemporary(e.status) : isTemporary(e.status);
       const message =
         e.status === 429
-          ? '無料枠の上限に達しました。しばらく待ってから送ってください'
-          : isTemporary(e.status)
-            ? 'Gemini が混み合っています。少し待ってから送ってください'
+          ? `${name} の利用の上限に達しました。しばらく待ってから送ってください`
+          : temporary
+            ? `${name} が混み合っています。少し待ってから送ってください`
             : e.status === 404
-            ? 'このモデルは使えなくなりました。設定でほかのモデルを選んでください'
-            : e.status === 400 || e.status === 401 || e.status === 403
-              ? 'Gemini に断られました。API キーやモデルを確かめてください'
-              : `Gemini につながりませんでした（${e.status}）`;
-      return json({ error: message, status: e.status }, 502);
+              ? 'このモデルは使えなくなりました。設定でほかのモデルを選んでください'
+              : e instanceof ClaudeError && (e.status === 401 || e.status === 403)
+                ? 'Claude に断られました。API キーの期限が切れていないか、設定で確かめてください'
+                : e.status === 400 || e.status === 401 || e.status === 403
+                  ? `${name} に断られました。API キーやモデルを確かめてください`
+                  : `${name} につながりませんでした（${e.status}）`;
+      // アプリは 500〜504 を「混み合い」として送り直すので、Claude の 529 は 503 として返す
+      return json({ error: message, status: temporary ? 503 : e.status }, 502);
     }
     return json({ error: '処理できませんでした' }, 500);
   }
