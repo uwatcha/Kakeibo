@@ -2,7 +2,7 @@
 // DB や AI を呼ばない部分は _shared/emailParse.ts（メールの読み取り）と _shared/emailPayee.ts（内容・カテゴリの決め方）
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
-import { type EmailKind, isDebitCardName, parseMail, SOURCE_OF } from '../_shared/emailParse.ts';
+import { type Bill, type EmailKind, isDebitCardName, parseMail, SOURCE_OF } from '../_shared/emailParse.ts';
 import {
   addDays,
   buildPayeePrompt,
@@ -35,7 +35,8 @@ const DUPLICATE_DAYS = 1;
 /** 通知しない状態（ほかの記録と同じ利用・オフの種類・重複で「追加しない」） */
 const SILENT = new Set(['merged', 'ignored', 'dismissed']);
 
-const tokyoToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+const tokyoDate = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+const tokyoToday = () => tokyoDate(new Date().toISOString());
 
 /** 1人分の処理。db は service role（RLS を通らない）なので、すべての問い合わせで user_id を絞る */
 export class Importer {
@@ -94,6 +95,19 @@ export class Importer {
           status: this.enabled.get(SOURCE_OF[item.kind]) ? 'new' : 'ignored',
           notified: !this.enabled.get(SOURCE_OF[item.kind]),
         }));
+      } else if (parsed.type === 'bill') {
+        const plan = await this.applyBill(parsed.bill, mail.date);
+        rows = [
+          {
+            ...base,
+            kind: parsed.bill.kind,
+            date: tokyoDate(mail.date),
+            amount: parsed.bill.amount,
+            status: 'bill',
+            subject: parsed.bill.month ? `${Number(parsed.bill.month.slice(5, 7))}月分` : null,
+            transaction_id: plan,
+          },
+        ];
       } else if (parsed.type === 'notice') {
         rows = [{ ...base, status: 'notice', subject: mail.subject.slice(0, 200) }];
       } else if (parsed.type === 'unreadable') {
@@ -106,6 +120,41 @@ export class Importer {
       accepted.push(mail.id);
     }
     return accepted;
+  }
+
+  /**
+   * 電気・ガスの請求: その定期支払い（名前に「電気」「ガス」を含むもの）の、まだ確認していない次の予定を探し、
+   * 請求額が分かれば予定の金額をそれに直す（確認はしない。支払いはクレカ・口座振替の記録で入る）。見つけた予定の id を返す
+   */
+  private async applyBill(bill: Bill, receivedIso: string): Promise<string | null> {
+    const word = bill.kind === 'electricity_bill' ? '電気' : 'ガス';
+    const { data: rules } = await this.db
+      .from('recurring_rules')
+      .select('id')
+      .eq('user_id', this.userId)
+      .ilike('name', `%${word}%`);
+    const ruleIds = (rules ?? []).map((r) => r.id as string);
+    if (ruleIds.length === 0) return null;
+    const { data: plans } = await this.db
+      .from('transactions')
+      .select('id, amount')
+      .eq('user_id', this.userId)
+      .in('recurring_rule_id', ruleIds)
+      .eq('is_confirmed', false)
+      .gte('date', addDays(tokyoDate(receivedIso), -7))
+      .order('date')
+      .limit(1);
+    const plan = plans?.[0];
+    if (!plan) return null;
+    if (bill.amount !== null && plan.amount !== bill.amount) {
+      const { error } = await this.db
+        .from('transactions')
+        .update({ amount: bill.amount })
+        .eq('id', plan.id)
+        .eq('user_id', this.userId);
+      if (error) throw error;
+    }
+    return plan.id as string;
   }
 
   /** 待ち（new・AI 待ち）を処理する。force は「重複の可能性」から追加するときの id */

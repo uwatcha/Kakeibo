@@ -5,6 +5,7 @@
 // 届くたびに、AI の混み合いで待ちになっていたものも処理し直す（Apps Script の10分ごとの呼び出しが、そのまま再試行になる）
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+import { MAIL_SENDERS } from '../_shared/emailParse.ts';
 import { serviceKey } from '../_shared/gemini.ts';
 import { Importer, type Mail } from './importer.ts';
 
@@ -40,7 +41,8 @@ Deno.serve(async (req) => {
       const mails = ((body.messages ?? []) as Mail[]).filter((m) => m && typeof m.id === 'string').slice(0, 100);
       const accepted = await importer.ingest(mails, settings.started_at);
       await importer.process();
-      return json({ accepted });
+      // 見る送信元の一覧も返す（Apps Script が覚えて、次から使う）
+      return json({ accepted, senders: MAIL_SENDERS });
     }
 
     // アプリから: ログインしている人

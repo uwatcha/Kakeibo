@@ -42,3 +42,29 @@ describe('importNotification', () => {
     expect(importNotification({ ...base, status: 'merged', transaction: null })).toBeNull();
   });
 });
+
+describe('電気・ガスの請求のお知らせ', () => {
+  const bill = { ...base, status: 'bill', raw_payee: null, transaction: null, subject: '10月分' };
+
+  it('電気: 予定を直したら、押すとその予定を開く', () => {
+    expect(importNotification({ ...bill, kind: 'electricity_bill', amount: 6120 })).toEqual({
+      title: '電気代の請求が届きました（10月分）',
+      body: '6,120円（予定の金額を直しました）',
+      data: { transactionId: 't' },
+    });
+  });
+
+  it('電気: 予定がなければ請求額だけ', () => {
+    expect(importNotification({ ...bill, kind: 'electricity_bill', amount: 6120, transaction_id: null })).toEqual({
+      title: '電気代の請求が届きました（10月分）',
+      body: '6,120円',
+      data: {},
+    });
+  });
+
+  it('ガス: 金額がないので、確かめて入れてもらう', () => {
+    expect(importNotification({ ...bill, kind: 'gas_bill', amount: null })?.title).toBe(
+      'ガス代の請求額が確定しました（10月分）',
+    );
+  });
+});

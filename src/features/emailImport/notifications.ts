@@ -15,6 +15,30 @@ export type UnnotifiedImport = {
 /** サンプルカードの速報（店名なし）で入れた記録の、通知での呼び名 */
 const UNNAMED: Record<string, string> = { card_quick: 'サンプルカード', photo: '写真の記録' };
 
+const BILL_NAMES: Record<string, string> = { electricity_bill: '電気代', gas_bill: 'ガス代' };
+
+/**
+ * 電気・ガスの請求のお知らせ: 請求額が分かって予定があれば予定を直したと知らせ、金額が分からなければ入れてもらう。
+ * 予定があれば押すとその予定を開く
+ */
+function billNotification(i: UnnotifiedImport): { title: string; body: string; data: Record<string, string> } {
+  const name = BILL_NAMES[i.kind ?? ''] ?? '請求';
+  const month = i.subject ? `（${i.subject}）` : '';
+  const data: Record<string, string> = i.transaction_id ? { transactionId: i.transaction_id } : {};
+  if (i.amount) {
+    return {
+      title: `${name}の請求が届きました${month}`,
+      body: i.transaction_id ? `${formatYen(i.amount)}（予定の金額を直しました）` : formatYen(i.amount),
+      data,
+    };
+  }
+  return {
+    title: `${name}の請求額が確定しました${month}`,
+    body: i.transaction_id ? 'メールのリンクから金額を確かめて、予定の金額を直してください' : 'メールのリンクから金額を確かめてください',
+    data,
+  };
+}
+
 /**
  * メールからの記録の通知の文と、押したときに開くもの。通知しないものは null。
  * サンプルカードの詳細で速報の記録に店名を入れたときなど（merged）は通知しない
@@ -45,6 +69,8 @@ export function importNotification(
       return { title: '重複の可能性があります', body: what, data: { tab: 'duplicate' } };
     case 'notice':
       return { title: '取り消しなどのお知らせ', body: i.subject ?? 'メールを確かめてください', data: {} };
+    case 'bill':
+      return billNotification(i);
     case 'unreadable':
       return { title: '読み取れなかったメールがあります', body: i.subject ?? '', data: {} };
     default:

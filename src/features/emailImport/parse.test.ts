@@ -1,5 +1,6 @@
 // 本文は実際のメールの形をまねたもの（名前などは置き換えてある）
-import { isDebitCardName, normalizeText, parseMail } from '../../../supabase/functions/_shared/emailParse';
+import { isDebitCardName, MAIL_SENDERS, normalizeText, parseMail } from '../../../supabase/functions/_shared/emailParse';
+import { EMAIL_SENDERS } from './appsScript';
 
 const debitMail = {
   from: 'Debit Mail <debit@example.com>',
@@ -109,5 +110,55 @@ describe('normalizeText / isDebitCardName', () => {
     expect(normalizeText('ｾﾌﾞﾝｲﾚﾌﾞﾝ　ＡＢＣ店')).toBe('セブンイレブン ABC店');
     expect(isDebitCardName('サンプルデビット')).toBe(true);
     expect(isDebitCardName('ｻﾝﾌﾟﾙｶｰﾄﾞ')).toBe(false);
+  });
+});
+
+describe('電気・ガスの請求のお知らせ', () => {
+  const electricity = {
+    from: '電力会社お客さま相談センター <electricity@example.com>',
+    subject: '【電力会社】電力会社のサイト≪電気料金等の請求のお知らせ≫',
+    date: '2026-10-23T04:05:29Z',
+    body: [
+      'ご使用量とご請求額のお知らせ',
+      '○ご請求月',
+      ' 2026年10月分',
+      '○ご利用場所',
+      ' ****',
+      '○ご請求金額',
+      ' 6,120円',
+      '○ご使用量',
+      ' 78kWh',
+      '○お支払方法',
+      ' クレジットカード',
+    ].join('\n'),
+  };
+  const gas = {
+    from: 'gas@example.com',
+    subject: 'ガス会社より請求金額確定のお知らせ',
+    date: '2026-10-23T09:05:58Z',
+    body: ' ガス会社からのお知らせ \n 今月のご利用金額が更新されました。 \n 2026年10月のご利用料金が更新されました。 確認される方はこちらをクリックもしくはタップしてください。 \n 金額を確認する ',
+  };
+
+  it('電力会社: 請求月と請求額', () => {
+    expect(parseMail(electricity)).toEqual({
+      type: 'bill',
+      bill: { kind: 'electricity_bill', month: '2026-10', amount: 6120 },
+    });
+  });
+
+  it('電力会社: 請求額がなければ読み取れない', () => {
+    expect(parseMail({ ...electricity, body: 'ご請求月 2026年10月分' }).type).toBe('unreadable');
+  });
+
+  it('電力会社: ほかのお知らせは見ない', () => {
+    expect(parseMail({ ...electricity, subject: '【電力会社】キャンペーンのお知らせ' }).type).toBe('ignored');
+  });
+
+  it('ガス会社: 金額は書かれていないので月だけ', () => {
+    expect(parseMail(gas)).toEqual({ type: 'bill', bill: { kind: 'gas_bill', month: '2026-10', amount: null } });
+  });
+
+  it('Apps Script の最初の送信元の一覧は、サーバーの一覧と同じ', () => {
+    expect([...EMAIL_SENDERS]).toEqual(MAIL_SENDERS);
   });
 });

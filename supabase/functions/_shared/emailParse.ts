@@ -44,10 +44,36 @@ export type ParseResult =
   | { type: 'items'; items: ParsedItem[] }
   /** 取り消し・返金などのお知らせ（記録は作らず、知らせるだけ） */
   | { type: 'notice'; text: string }
+  /**
+   * 電気・ガスの請求のお知らせ（2026-10-24 改善要望）。記録は作らず、定期支払いの予定の金額を直して知らせる。
+   * 支払いはクレカ・口座振替なので、実際の支払いはそちらの記録になる（ここで記録すると二重になる）
+   */
+  | { type: 'bill'; bill: Bill }
   /** 対象の送信元だが読み取れなかった */
   | { type: 'unreadable' }
   /** 対象外のメール */
   | { type: 'ignored' };
+
+export type BillKind = 'electricity_bill' | 'gas_bill';
+export type Bill = {
+  kind: BillKind;
+  /** 請求の月（YYYY-MM）。書かれていなければ null */
+  month: string | null;
+  /** 請求額。メールに書かれていなければ null（ガスはリンク先でしか見られない） */
+  amount: number | null;
+};
+
+/**
+ * 見るメールの送信元（Apps Script はこの一覧をサーバーの返事から受け取って使う。src/features/emailImport/appsScript.ts の
+ * EMAIL_SENDERS は、初めて貼るときの一覧で、これと同じにする。テストで確かめる）
+ */
+export const MAIL_SENDERS = [
+  'debit@example.com',
+  'bank@example.com',
+  'card@example.com',
+  'electricity@example.com',
+  'gas@example.com',
+];
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const ymd = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
@@ -150,9 +176,45 @@ export function parseMail(mail: MailInput): ParseResult {
       return parseBank(mail);
     case 'card@example.com':
       return parseCard(mail);
+    case 'electricity@example.com':
+      return parseElectricity(mail);
+    case 'gas@example.com':
+      return parseGas(mail);
     default:
       return { type: 'ignored' };
   }
+}
+
+/** 電力会社（電力会社のサイト）の「電気料金等の請求のお知らせ」 */
+function parseElectricity(mail: MailInput): ParseResult {
+  if (!/請求のお知らせ/.test(mail.subject)) return { type: 'ignored' };
+  const text = normalizeText(mail.body);
+  const month = text.match(/ご請求月\s*(\d{4})年(\d{1,2})月分/);
+  const amount = text.match(/ご請求金額\s*([\d,]+)\s*円/);
+  if (!amount) return { type: 'unreadable' };
+  return {
+    type: 'bill',
+    bill: {
+      kind: 'electricity_bill',
+      month: month ? `${month[1]}-${pad(Number(month[2]))}` : null,
+      amount: Number(amount[1].replace(/,/g, '')),
+    },
+  };
+}
+
+/** ガス会社の「請求金額確定のお知らせ」（金額は本文になく、リンク先でしか見られない） */
+function parseGas(mail: MailInput): ParseResult {
+  if (!/請求金額確定/.test(mail.subject)) return { type: 'ignored' };
+  const month = normalizeText(mail.body).match(/(\d{4})年(\d{1,2})月のご利用料金/);
+  const amount = normalizeText(mail.body).match(/ご請求金額\s*[:：]?\s*([\d,]+)\s*円/);
+  return {
+    type: 'bill',
+    bill: {
+      kind: 'gas_bill',
+      month: month ? `${month[1]}-${pad(Number(month[2]))}` : null,
+      amount: amount ? Number(amount[1].replace(/,/g, '')) : null,
+    },
+  };
 }
 
 /** 連携サービス の出金の名目が サンプルデビットの利用か（「サンプルデビット」） */
