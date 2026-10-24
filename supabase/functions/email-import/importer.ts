@@ -2,7 +2,7 @@
 // DB や AI を呼ばない部分は _shared/emailParse.ts（メールの読み取り）と _shared/emailPayee.ts（内容・カテゴリの決め方）
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
-import { type Bill, type EmailKind, isDebitCardName, parseMail, SOURCE_OF } from '../_shared/emailParse.ts';
+import { type Bill, type EmailKind, isAtm, isDebitCardName, parseMail, SOURCE_OF } from '../_shared/emailParse.ts';
 import {
   addDays,
   buildPayeePrompt,
@@ -30,6 +30,8 @@ type ImportRow = {
 
 /** 同じ利用とみなす日付の差（デビットカード と 連携サービス、予定との照らし合わせ） */
 const MATCH_DAYS = 3;
+/** 入金を給料の予定と照らし合わせる日付の差（手で入れた予定は休みの日の前倒しをしていないことがある） */
+const SALARY_DAYS = 7;
 /** 手入力との重複とみなす日付の差 */
 const DUPLICATE_DAYS = 1;
 /** 通知しない状態（ほかの記録と同じ利用・オフの種類・重複で「追加しない」） */
@@ -44,6 +46,8 @@ export class Importer {
   private categories: PayeeCategory[] = [];
   private accounts = new Map<string, string | null>();
   private enabled = new Map<string, boolean>();
+  /** ATM の引き出し・預け入れで振り替える現金の口座 */
+  private atmCash: string | null = null;
 
   constructor(
     private db: SupabaseClient,
@@ -51,11 +55,21 @@ export class Importer {
   ) {}
 
   async load() {
-    const [rules, categories, sources] = await Promise.all([
+    const [rules, categories, sources, settings, cash] = await Promise.all([
       this.db.from('payee_rules').select('raw_payee, kind, payee, category_id').eq('user_id', this.userId),
       this.db.from('categories').select('id, name, kind, parent_id, is_archived').eq('user_id', this.userId),
       this.db.from('email_import_sources').select('source, enabled, account_id').eq('user_id', this.userId),
+      this.db.from('email_import_settings').select('atm_cash_account_id').eq('user_id', this.userId).maybeSingle(),
+      this.db
+        .from('accounts')
+        .select('id')
+        .eq('user_id', this.userId)
+        .eq('kind', 'cash')
+        .eq('is_archived', false)
+        .order('created_at')
+        .limit(1),
     ]);
+    this.atmCash = settings.data?.atm_cash_account_id ?? cash.data?.[0]?.id ?? null;
     for (const r of (rules.data ?? []) as PayeeRule[]) this.rules.set(r.raw_payee, r);
     this.categories = (categories.data ?? []) as PayeeCategory[];
     for (const s of sources.data ?? []) {
@@ -170,7 +184,11 @@ export class Importer {
     if (rows.length === 0) return;
 
     // 対応表にない利用先は、まとめて AI に決めてもらう。混み合いならその行は待ちにする
-    const unknown = payeeQuestions(rows, new Set(this.rules.keys()));
+    // ATM は振替にするので、内容を AI に聞かない
+    const unknown = payeeQuestions(
+      rows.filter((r) => !isAtm(r.raw_payee)),
+      new Set(this.rules.keys()),
+    );
     let aiBusy = false;
     if (unknown.length > 0) aiBusy = !(await this.askAi(unknown));
 
@@ -258,6 +276,28 @@ export class Importer {
       .update({ status, notified: SILENT.has(status), ...extra })
       .eq('id', id)
       .eq('user_id', this.userId);
+  }
+
+  /**
+   * 入金に当たる給料の予定: 同じ口座に入る、まだ確認していない収入の予定で、自動で入れた給料（auto_salary）か
+   * 働き先（収入元）が付いているもの。日付が前後 SALARY_DAYS 日以内で、金額が同じもの → 日付が近いものの順に選ぶ
+   */
+  private async salaryPlan(account: string, row: ImportRow): Promise<string | null> {
+    const { data } = await this.db
+      .from('transactions')
+      .select('id, date, amount, auto_salary, employer_id')
+      .eq('user_id', this.userId)
+      .eq('type', 'income')
+      .eq('to_account_id', account)
+      .eq('is_confirmed', false)
+      .or('auto_salary.eq.true,employer_id.not.is.null')
+      .gte('date', addDays(row.date!, -SALARY_DAYS))
+      .lte('date', addDays(row.date!, SALARY_DAYS));
+    const gap = (d: string) => Math.abs(new Date(d).getTime() - new Date(row.date!).getTime());
+    const best = [...(data ?? [])].sort(
+      (a, b) => Number(b.amount === row.amount) - Number(a.amount === row.amount) || gap(a.date) - gap(b.date),
+    )[0];
+    return (best?.id as string | undefined) ?? null;
   }
 
   /** 手入力の記録で、同じ口座・同じ金額・日付が前後1日以内のもの */
@@ -373,6 +413,12 @@ export class Importer {
           await this.insert(row, { type: 'expense', from_account_id: account, payee: 'サンプルデビット' });
           return;
         }
+        // ATM の引き出しは、銀行 → 現金の振替
+        if (isAtm(row.raw_payee) && this.atmCash) {
+          if (await duplicate('from_account_id')) return;
+          await this.insert(row, { type: 'transfer', from_account_id: account, to_account_id: this.atmCash, payee: 'ATM' });
+          return;
+        }
         // 未確認の予定（定期支払い・クレカの引き落としなど）があれば、それを確認済みにする
         const { data: plans } = await this.db
           .from('transactions')
@@ -395,25 +441,21 @@ export class Importer {
         return;
       }
       case 'bank_in': {
-        // 給料の予定があれば、実際の額に直して確認済みにする
-        const { data: salary } = await this.db
-          .from('transactions')
-          .select('id')
-          .eq('user_id', this.userId)
-          .eq('to_account_id', account)
-          .eq('auto_salary', true)
-          .eq('is_confirmed', false)
-          .gte('date', addDays(row.date, -MATCH_DAYS))
-          .lte('date', addDays(row.date, MATCH_DAYS))
-          .order('date')
-          .limit(1);
-        if (salary?.[0]) {
+        // ATM の預け入れは、現金 → 銀行の振替
+        if (isAtm(row.raw_payee) && this.atmCash) {
+          if (await duplicate('to_account_id')) return;
+          await this.insert(row, { type: 'transfer', from_account_id: this.atmCash, to_account_id: account, payee: 'ATM' });
+          return;
+        }
+        // 給料の予定（自動で入れたもの・働き先を付けて手で入れたもの）があれば、実際の額・日付に直して確認済みにする
+        const salary = await this.salaryPlan(account, row);
+        if (salary) {
           await this.db
             .from('transactions')
-            .update({ amount: row.amount, is_confirmed: true })
-            .eq('id', salary[0].id)
+            .update({ amount: row.amount, date: row.date, is_confirmed: true })
+            .eq('id', salary)
             .eq('user_id', this.userId);
-          await this.setStatus(row.id, 'confirmed_plan', { transaction_id: salary[0].id });
+          await this.setStatus(row.id, 'confirmed_plan', { transaction_id: salary });
           return;
         }
         if (await duplicate('to_account_id')) return;

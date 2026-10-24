@@ -1,5 +1,5 @@
 // 本文は実際のメールの形をまねたもの（名前などは置き換えてある）
-import { isDebitCardName, MAIL_SENDERS, normalizeText, parseMail } from '../../../supabase/functions/_shared/emailParse';
+import { isAtm, isDebitCardName, MAIL_SENDERS, normalizeText, parseMail } from '../../../supabase/functions/_shared/emailParse';
 import { EMAIL_SENDERS } from './appsScript';
 
 const debitMail = {
@@ -160,5 +160,14 @@ describe('電気・ガスの請求のお知らせ', () => {
 
   it('Apps Script の最初の送信元の一覧は、サーバーの一覧と同じ', () => {
     expect([...EMAIL_SENDERS]).toEqual(MAIL_SENDERS);
+  });
+});
+
+describe('isAtm', () => {
+  it('連携サービス の ATM の引き出し・預け入れ', () => {
+    expect(isAtm('ATM から現金引出')).toBe(true);
+    expect(isAtm('ＡＴＭから現金預入')).toBe(true);
+    expect(isAtm('アクメワークス')).toBe(false);
+    expect(isAtm(null)).toBe(false);
   });
 });

@@ -36,6 +36,14 @@ export async function saveSummaryRules(rules: string | null): Promise<void> {
   if (error) throw error;
 }
 
+/** ATM の引き出し・預け入れで振り替える現金の口座（null ならいちばん先に作った現金の口座） */
+export async function saveAtmCashAccount(accountId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('email_import_settings')
+    .upsert({ atm_cash_account_id: accountId, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
 export async function fetchEmailImportSources(): Promise<EmailImportSource[]> {
   const { data, error } = await supabase.from('email_import_sources').select('*');
   if (error) throw error;

@@ -22,6 +22,7 @@ import {
   usePayeeRules,
   useRotateToken,
   useSaveEmailImportSource,
+  useSaveAtmCashAccount,
   useSaveSummaryRules,
   useUpdatePayeeRule,
 } from '@/features/emailImport/hooks';
@@ -55,6 +56,7 @@ export default function EmailImportScreen() {
   const accounts = useAccounts();
   const categories = useCategories();
   const saveSource = useSaveEmailImportSource();
+  const saveAtmCash = useSaveAtmCashAccount();
   const rotate = useRotateToken();
   const saveRules = useSaveSummaryRules();
   const updateRule = useUpdatePayeeRule();
@@ -122,6 +124,16 @@ export default function EmailImportScreen() {
                       onChange={(id) => saveSource.mutate({ source, enabled, accountId: id })}
                       error={accountId ? undefined : '口座を選んでください'}
                     />
+                    {/* ATM の引き出し・預け入れを振り替える現金の口座（選ばなければ、いちばん先に作った現金の口座） */}
+                    {source === 'bank_mail' && (
+                      <AccountPicker
+                        label="ATM の現金"
+                        kinds={['cash']}
+                        accounts={accounts.data!}
+                        value={settings.data?.atm_cash_account_id ?? null}
+                        onChange={(id) => saveAtmCash.mutate(id)}
+                      />
+                    )}
                   </View>
                 )}
               </View>

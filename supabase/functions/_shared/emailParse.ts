@@ -217,5 +217,11 @@ function parseGas(mail: MailInput): ParseResult {
   };
 }
 
+/**
+ * 連携サービス の名目が ATM の引き出し・預け入れか（例: 「ATM から現金引出」）。支払い・収入ではなく、銀行と現金の振替にする
+ * （2026-10-24 ユーザーの要望）
+ */
+export const isAtm = (name: string | null) => !!name && /^ATM/i.test(normalizeText(name));
+
 /** 連携サービス の出金の名目が サンプルデビットの利用か（「サンプルデビット」） */
 export const isDebitCardName = (name: string | null) => !!name && /^サンプルデビット/i.test(normalizeText(name));

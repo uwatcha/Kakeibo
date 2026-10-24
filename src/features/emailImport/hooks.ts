@@ -14,6 +14,7 @@ import {
   markReviewed,
   rotateEmailImportToken,
   saveEmailImportSource,
+  saveAtmCashAccount,
   saveSummaryRules,
   updatePayeeRule,
 } from './api';
@@ -57,6 +58,11 @@ export function useRotateToken() {
 export function useSaveSummaryRules() {
   const invalidate = useInvalidate();
   return useMutation({ mutationFn: saveSummaryRules, onSuccess: invalidate });
+}
+
+export function useSaveAtmCashAccount() {
+  const invalidate = useInvalidate();
+  return useMutation({ mutationFn: saveAtmCashAccount, onSuccess: invalidate });
 }
 
 export function useSaveEmailImportSource() {

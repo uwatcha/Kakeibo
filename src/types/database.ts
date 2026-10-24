@@ -302,6 +302,7 @@ export type Database = {
       }
       email_import_settings: {
         Row: {
+          atm_cash_account_id: string | null
           last_seen_at: string | null
           started_at: string | null
           summary_rules: string | null
@@ -310,6 +311,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          atm_cash_account_id?: string | null
           last_seen_at?: string | null
           started_at?: string | null
           summary_rules?: string | null
@@ -318,6 +320,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          atm_cash_account_id?: string | null
           last_seen_at?: string | null
           started_at?: string | null
           summary_rules?: string | null
@@ -325,7 +328,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "email_import_settings_atm_cash_account_id_fkey"
+            columns: ["atm_cash_account_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_import_settings_atm_cash_account_id_fkey"
+            columns: ["atm_cash_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_import_sources: {
         Row: {
