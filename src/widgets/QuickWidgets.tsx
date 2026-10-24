@@ -1,3 +1,7 @@
+// ウィジェットの部品は React の外（react-native-android-widget が関数として呼んで描く）で動くので、React Compiler の
+// 変換（useMemoCache）を入れない。入れると「Cannot read property 'useMemoCache' of null」で描けず、透明のままになる
+'use no memo';
+
 import { FlexWidget, SvgWidget, TextWidget } from 'react-native-android-widget';
 
 // ホーム画面のウィジェット（要件 REQ-15。react-native-android-widget）。1×1 の丸いボタンで、押すと
