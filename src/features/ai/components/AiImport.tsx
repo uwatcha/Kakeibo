@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Chip, HelperText, Snackbar, TextInput } from 'react-native-paper';
 
@@ -21,6 +21,7 @@ import {
   markDuplicates,
   toDrafts,
 } from '../extract';
+import { clearImportJob, type ImportJob, loadImportJob, saveImportJob } from '../importJob';
 import { matchPaymentAccount } from '../payment';
 import { useAttachments } from '../useAttachments';
 import { ImportReview } from './ImportReview';
@@ -35,7 +36,8 @@ type Props = {
 
 /**
  * AI入力: レシート・明細の写真や CSV・JSON などのファイルから、AI が記録を読み取る。
- * 読み取った記録は一覧（ImportReview）で確かめてから保存する（同じ日・同じ金額の記録があれば重複として最初は外す）
+ * 読み取った記録は一覧（ImportReview）で確かめてから保存する（同じ日・同じ金額の記録があれば重複として最初は外す）。
+ * 途中でアプリを閉じても、次に開いたときに続きから読み取る・一覧を出す（importJob.ts）
  */
 export function AiImport({ today, accounts, categories, aliases, balances }: Props) {
   const files = useAttachments();
@@ -47,25 +49,20 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
   const create = useCreateTransactions();
   const [saved, setSaved] = useState<number | null>(null);
 
-  const read = async () => {
+  /** 送る内容（job）を読み取って一覧を出す。読み取れたら一覧も端末に置き、駄目なら置いたものを消す */
+  const extract = async (job: ImportJob) => {
     setReading(true);
     files.setError(null);
     try {
-      const binaries = files.attachments.flatMap((a) =>
-        a.kind === 'file' ? [{ mimeType: a.mimeType, data: a.data }] : [],
-      );
-      const texts = [
-        ...files.attachments.flatMap((a) => (a.kind === 'text' ? [`# ${a.name}\n${a.text}`] : [])),
-        text.trim(),
-      ].filter(Boolean);
       const accountLikes = accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived }));
       const { records } = await extractRecords(
-        extractPrompt(today, accountLikes, categories, aliases),
-        texts.join('\n\n'),
-        binaries,
+        extractPrompt(job.today, accountLikes, categories, aliases),
+        job.texts,
+        job.binaries,
       );
       const found = toDrafts(records, accounts, categories, aliases);
       if (found.length === 0) {
+        clearImportJob();
         files.setError('記録を読み取れませんでした');
         return;
       }
@@ -79,20 +76,59 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
         (payment) => matchPaymentAccount(payment, accounts),
         cash,
       );
+      const picked = marked.filter((d) => !d.duplicate).map((d) => d.key);
+      saveImportJob({ ...job, drafts: marked, selected: picked });
       setDrafts(marked);
-      setSelected(new Set(marked.filter((d) => !d.duplicate).map((d) => d.key)));
+      setSelected(new Set(picked));
     } catch (e) {
+      // 混み合い・通信の失敗は置いたままにして、次に開いたときに読み取り直す
+      if (!(e instanceof AiError && e.temporary)) clearImportJob();
       files.setError(e instanceof AiError ? e.message : '読み取れませんでした');
     } finally {
       setReading(false);
     }
   };
 
+  const read = () => {
+    const job: ImportJob = {
+      today,
+      texts: [
+        ...files.attachments.flatMap((a) => (a.kind === 'text' ? [`# ${a.name}\n${a.text}`] : [])),
+        text.trim(),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+      binaries: files.attachments.flatMap((a) => (a.kind === 'file' ? [{ mimeType: a.mimeType, data: a.data }] : [])),
+      savedAt: Date.now(),
+    };
+    saveImportJob(job);
+    extract(job);
+  };
+
+  // 前に閉じたときの続き: 一覧まで進んでいればそのまま出し、読み取りの途中なら読み取り直す
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    loadImportJob().then((job) => {
+      if (!job) return;
+      if (job.drafts) {
+        setDrafts(job.drafts);
+        setSelected(new Set(job.selected ?? []));
+      } else {
+        extract(job);
+      }
+    });
+    // 開いたときに1回だけ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const save = async () => {
     const rows = (drafts ?? []).filter((d) => selected.has(d.key) && isDraftReady(d, fallback));
     try {
       await create.mutateAsync(rows.map((d) => draftToRow(d, fallback, today)));
       setSaved(rows.length);
+      clearImportJob();
       setDrafts(null);
       files.clear();
       setText('');
@@ -169,7 +205,10 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
             balances={balances}
             saving={create.isPending}
             onSave={save}
-            onBack={() => setDrafts(null)}
+            onBack={() => {
+              clearImportJob();
+              setDrafts(null);
+            }}
           />
         )}
       </ScrollView>

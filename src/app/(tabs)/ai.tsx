@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Tabs, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
@@ -12,6 +12,7 @@ import { buildAliases, maskText } from '@/features/ai/anonymize';
 import { buildChatSystem } from '@/features/ai/chatContext';
 import { AiImport } from '@/features/ai/components/AiImport';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
+import { loadImportJob } from '@/features/ai/importJob';
 import { ChatMessages } from '@/features/ai/components/ChatMessages';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
 import {
@@ -76,6 +77,10 @@ export default function AiChatScreen() {
   const [input, setInput] = useState('');
   // 相談（チャット）か、入力（写真・ファイルから記録を読み取る）か
   const [mode, setMode] = useState<'chat' | 'import'>('chat');
+  // AI入力の途中で閉じていたら、入力を開いて続きを出す
+  useEffect(() => {
+    loadImportJob().then((job) => job && setMode('import'));
+  }, []);
   useRestoreConversation(conversationId, conversations.data);
   const sender = useChatSender({ conversationId, restoreInput: setInput, onSent: () => usage.refetch() });
 
