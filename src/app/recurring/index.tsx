@@ -1,6 +1,6 @@
 import { router, Stack } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Snackbar, Switch, Text, useTheme } from 'react-native-paper';
 
 import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
@@ -9,7 +9,7 @@ import { QueriesState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { useAccounts } from '@/features/accounts/hooks';
 import type { RecurringRule } from '@/features/recurring/api';
-import { useRules } from '@/features/recurring/hooks';
+import { useRules, useSetRuleActive } from '@/features/recurring/hooks';
 import { scheduleLabel } from '@/features/recurring/labels';
 import { nextOccurrence } from '@/features/recurring/schedule';
 import { amountKindOf, describeAccounts, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
@@ -24,6 +24,7 @@ export default function RecurringRulesScreen() {
   const theme = useTheme();
   const rules = useRules();
   const accounts = useAccounts();
+  const setActive = useSetRuleActive();
   const today = toTokyoDateString();
 
   const describe = (rule: RecurringRule) => {
@@ -39,7 +40,20 @@ export default function RecurringRulesScreen() {
       subtitle={describe(rule)}
       icon={TRANSACTION_RULES[rule.type].icon}
       iconColor={rule.is_active ? undefined : theme.colors.onSurfaceVariant}
-      right={<Amount value={rule.amount} kind={amountKindOf(rule.type)} variant="bodyLarge" style={styles.amount} />}
+      right={
+        <View style={styles.right}>
+          <Amount value={rule.amount} kind={amountKindOf(rule.type)} variant="bodyLarge" style={styles.amount} />
+          {/* 止めているものは一覧からそのまま動かせる（2026-10-24 改善要望: 動かし方が分からない） */}
+          {!rule.is_active && (
+            <Switch
+              value={false}
+              disabled={setActive.isPending}
+              onValueChange={() => setActive.mutate({ id: rule.id, isActive: true })}
+              accessibilityLabel={`${rule.name}を動かす`}
+            />
+          )}
+        </View>
+      }
       onPress={() => openRule(rule.id)}
     />
   );
@@ -64,6 +78,9 @@ export default function RecurringRulesScreen() {
         </ScrollView>
       )}
       <AddFab label="定期支払いを追加" onPress={() => openRule('new')} />
+      <Snackbar visible={setActive.isError} onDismiss={setActive.reset}>
+        変更できませんでした。通信状態を確認してください
+      </Snackbar>
     </View>
   );
 }
@@ -73,4 +90,5 @@ const styles = StyleSheet.create({
   list: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 96 },
   empty: { padding: 24, textAlign: 'center' },
   amount: { fontWeight: '700' },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });
