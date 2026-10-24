@@ -1,4 +1,5 @@
 import { addDays } from '@/lib/date';
+import { monthsLater } from '@/features/employers/salarySchedule';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
@@ -9,8 +10,11 @@ export type RecurringRuleInsert = Database['public']['Tables']['recurring_rules'
 export type RecurringRuleUpdate = Database['public']['Tables']['recurring_rules']['Update'];
 type Transaction = Database['public']['Tables']['transactions']['Row'];
 
-/** 何日先の回まで記録を作っておくか（予定として一覧に出す。残高にはその日まで入らない） */
-export const GENERATE_AHEAD_DAYS = 31;
+/**
+ * 何か月先の回まで記録を作っておくか（予定として一覧に出す。残高にはその日まで入らない）。
+ * 2026-10-24 改善要望で31日先から2か月先に（ライフライン・クレカ・サブスクも給料の予定と同じ先まで見えるように）
+ */
+export const GENERATE_AHEAD_MONTHS = 2;
 
 export async function fetchRules(): Promise<RecurringRule[]> {
   const { data, error } = await supabase.from('recurring_rules').select('*').order('sort_order').order('created_at');
@@ -31,7 +35,7 @@ export async function fetchGeneratedTransactions(ruleId: string): Promise<Transa
 
 /** ルールの回のうち、まだ追加していない分を記録にする。追加した件数を返す */
 async function generateForRule(rule: RecurringRule, today: string): Promise<number> {
-  const until = addDays(today, GENERATE_AHEAD_DAYS);
+  const until = monthsLater(today, GENERATE_AHEAD_MONTHS);
   const dates = occurrencesBetween(rule, rule.generated_until, until);
   if (dates.length > 0) {
     const { error } = await supabase.from('transactions').upsert(
