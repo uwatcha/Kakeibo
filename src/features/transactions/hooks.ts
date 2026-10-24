@@ -9,7 +9,9 @@ import {
   deleteTransaction,
   fetchAccountTransactions,
   fetchAdvancesFor,
-  fetchExpensesAround,
+  fetchAdvancesTo,
+  fetchCollectsFrom,
+  setAdvancesRepaidBy,
   fetchUnconfirmed,
   fetchPayeeHistory,
   fetchMonthTransactions,
@@ -27,7 +29,8 @@ export const transactionKeys = {
   search: (filter: string) => [...transactionKeys.all, 'search', filter] as const,
   account: (accountId: string) => [...transactionKeys.all, 'account', accountId] as const,
   payees: () => [...transactionKeys.all, 'payees'] as const,
-  expensesAround: (date: string) => [...transactionKeys.all, 'expensesAround', date] as const,
+  collectsFrom: (personId: string, since: string) => [...transactionKeys.all, 'collectsFrom', personId, since] as const,
+  advancesTo: (personId: string) => [...transactionKeys.all, 'advancesTo', personId] as const,
   advancesFor: (id: string) => [...transactionKeys.all, 'advancesFor', id] as const,
   unconfirmed: (today: string) => [...transactionKeys.all, 'unconfirmed', today] as const,
 };
@@ -57,19 +60,30 @@ export function usePayeeHistory() {
 }
 
 /** 立て替えの「元の支払い」の候補（その日の前後1週間の支払い） */
-export function useExpensesAround(date: string, enabled: boolean) {
+/** 立て替えの「返してもらった記録」の候補: その相手からの、立て替えた日以降の貸し金戻り */
+export function useCollectsFrom(personId: string | null, since: string, enabled: boolean) {
   return useQuery({
-    queryKey: transactionKeys.expensesAround(date),
-    queryFn: () => fetchExpensesAround(date, 7),
-    enabled,
+    queryKey: transactionKeys.collectsFrom(personId ?? '', since),
+    queryFn: () => fetchCollectsFrom(personId!, since),
+    enabled: enabled && !!personId,
   });
 }
 
-export function useAdvancesFor(expenseId: string | undefined) {
+/** 貸し金戻りの「返してもらった立て替え」の候補: その相手への立て替え */
+export function useAdvancesTo(personId: string | null, enabled: boolean) {
   return useQuery({
-    queryKey: transactionKeys.advancesFor(expenseId ?? ''),
-    queryFn: () => fetchAdvancesFor(expenseId!),
-    enabled: !!expenseId,
+    queryKey: transactionKeys.advancesTo(personId ?? ''),
+    queryFn: () => fetchAdvancesTo(personId!),
+    enabled: enabled && !!personId,
+  });
+}
+
+/** その貸し金戻りで返してもらった立て替え */
+export function useAdvancesFor(collectId: string | undefined) {
+  return useQuery({
+    queryKey: transactionKeys.advancesFor(collectId ?? ''),
+    queryFn: () => fetchAdvancesFor(collectId!),
+    enabled: !!collectId,
   });
 }
 
@@ -106,6 +120,16 @@ export function useUpdateTransaction() {
   const invalidate = useInvalidateAfterWrite();
   return useMutation({
     mutationFn: ({ id, values }: { id: string; values: TransactionUpdate }) => updateTransaction(id, values),
+    onSuccess: invalidate,
+  });
+}
+
+/** 貸し金戻りで返してもらった立て替えを入れ直す */
+export function useSetAdvancesRepaidBy() {
+  const invalidate = useInvalidateAfterWrite();
+  return useMutation({
+    mutationFn: ({ collectId, advanceIds }: { collectId: string; advanceIds: string[] }) =>
+      setAdvancesRepaidBy(collectId, advanceIds),
     onSuccess: invalidate,
   });
 }

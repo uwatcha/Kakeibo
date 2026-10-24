@@ -30,8 +30,10 @@ export type FormValues = {
   pointsUsed: string;
   /** 収入元（給与を払ってくれた働き先）。カテゴリが「給与・アルバイト」のときは必須 */
   employerId: string | null;
-  /** 立て替えのときの元の支払い（No.43） */
+  /** 立て替えのとき、それを返してもらった貸し金戻り（No.43。2026-10-24 に元の支払いから変更） */
   relatedTransactionId: string | null;
+  /** 貸し金戻りのとき、それで返してもらった立て替え（保存のあとに立て替えの側に書く。setAdvancesRepaidBy） */
+  repaidAdvanceIds: string[];
 };
 
 export type FormErrors = DraftErrors & { listPrice?: string; pointsUsed?: string; employerId?: string };
@@ -51,6 +53,7 @@ export function emptyFormValues(today: string): FormValues {
     pointsUsed: '',
     employerId: null,
     relatedTransactionId: null,
+    repaidAdvanceIds: [],
   };
 }
 
@@ -70,6 +73,8 @@ export function toFormValues(t: Transaction): FormValues {
     pointsUsed: t.points_used === null ? '' : String(t.points_used),
     employerId: t.employer_id,
     relatedTransactionId: t.related_transaction_id,
+    // 立て替えの側に書いてあるので、画面で読み込んでから入れる
+    repaidAdvanceIds: [],
   };
 }
 

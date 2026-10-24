@@ -1,5 +1,5 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -27,7 +27,7 @@ import { CategoryPicker } from '@/features/transactions/components/CategoryPicke
 import { DateField } from '@/features/transactions/components/DateField';
 import { recordStatus } from '@/features/transactions/confirmation';
 import { AccountFields } from '@/features/transactions/form/AccountFields';
-import { LinkedAdvances, RelatedExpenseField } from '@/features/transactions/form/AdvanceLinks';
+import { RepaidAdvancesField, RepaymentField } from '@/features/transactions/form/AdvanceLinks';
 import { DuplicateDialog } from '@/features/transactions/form/DuplicateDialog';
 import { EmployerField } from '@/features/transactions/form/EmployerField';
 import { PayeeField } from '@/features/transactions/form/PayeeField';
@@ -42,10 +42,12 @@ import {
 } from '@/features/transactions/form/values';
 import {
   useAdvancesFor,
+  useAdvancesTo,
+  useCollectsFrom,
   useCreateTransaction,
   useDeleteTransaction,
-  useExpensesAround,
   usePayeeHistory,
+  useSetAdvancesRepaidBy,
   useTransaction,
   useUpdateTransaction,
 } from '@/features/transactions/hooks';
@@ -85,6 +87,7 @@ export default function TransactionEditScreen() {
   const create = useCreateTransaction();
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
+  const setRepaid = useSetAdvancesRepaidBy();
   const payeeHistory = usePayeeHistory();
   const employers = useEmployers();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -111,9 +114,11 @@ export default function TransactionEditScreen() {
   const fromAccountId = useWatch({ control, name: 'fromAccountId' });
   const categoryId = useWatch({ control, name: 'categoryId' });
   const date = useWatch({ control, name: 'date' });
-  // 立て替えの「元の支払い」の候補と、支払いの記録にひも付いた立て替え
-  const nearbyExpenses = useExpensesAround(date, type === 'advance');
-  const linkedAdvances = useAdvancesFor(!isNew && type === 'expense' ? id : undefined);
+  const toAccountId = useWatch({ control, name: 'toAccountId' });
+  // 立て替え ↔ 貸し金戻り: 立て替えは相手（入金先）からの貸し金戻りを、貸し金戻りは相手（出金元）への立て替えを候補にする
+  const collects = useCollectsFrom(toAccountId, date, type === 'advance');
+  const advancesTo = useAdvancesTo(fromAccountId, type === 'collect');
+  const linkedAdvances = useAdvancesFor(isNew ? undefined : id);
   const isSalary = isSalaryCategory(categoryId, categories.data ?? []);
 
   const assist = useFormAssist({
@@ -132,6 +137,16 @@ export default function TransactionEditScreen() {
   useEffect(() => {
     if (transaction.data) reset(toFormValues(transaction.data));
   }, [transaction.data, reset]);
+  // 貸し金戻りで返してもらった立て替えは立て替えの側に書いてあるので、読み込めたら1回だけ入れる
+  const repaidFilled = useRef(false);
+  useEffect(() => {
+    if (!transaction.data || !linkedAdvances.data || repaidFilled.current) return;
+    repaidFilled.current = true;
+    setValue(
+      'repaidAdvanceIds',
+      linkedAdvances.data.map((t) => t.id),
+    );
+  }, [transaction.data, linkedAdvances.data, setValue]);
 
   // 新しい記録で同じ日・同じ金額の記録があれば、保存する前に確かめる（REQ-17）
   const [duplicate, setDuplicate] = useState<{ values: FormValues; matches: Transaction[] } | null>(null);
@@ -150,11 +165,18 @@ export default function TransactionEditScreen() {
     }
     const row = toTransactionRow(values, categories.data ?? [], toTokyoDateString());
     try {
+      let savedId = id;
       if (isNew) {
-        await create.mutateAsync(row);
+        savedId = await create.mutateAsync(row);
         await saveLastUsedAccounts(values.type, { fromAccountId: row.from_account_id, toAccountId: row.to_account_id });
       } else {
         await update.mutateAsync({ id, values: row });
+      }
+      // 貸し金戻りで返してもらった立て替え（種類を変えたら、つないであったものを外す）
+      if (values.type === 'collect' && (isNew ? values.repaidAdvanceIds.length > 0 : true)) {
+        await setRepaid.mutateAsync({ collectId: savedId, advanceIds: values.repaidAdvanceIds });
+      } else if (!isNew && (linkedAdvances.data?.length ?? 0) > 0) {
+        await setRepaid.mutateAsync({ collectId: savedId, advanceIds: [] });
       }
       router.back();
     } catch {
@@ -326,11 +348,10 @@ export default function TransactionEditScreen() {
           />
         )}
 
-        {type === 'advance' && (
-          <RelatedExpenseField control={control} expenses={nearbyExpenses.data ?? []} categories={categories.data!} />
+        {type === 'advance' && <RepaymentField control={control} collects={collects.data ?? []} />}
+        {type === 'collect' && (
+          <RepaidAdvancesField control={control} advances={advancesTo.data ?? []} collectId={isNew ? null : id} />
         )}
-
-        {type === 'expense' && <LinkedAdvances advances={linkedAdvances.data ?? []} accounts={accountList} />}
 
         <Controller
           control={control}
@@ -401,8 +422,8 @@ export default function TransactionEditScreen() {
       </Portal>
 
       <Snackbar
-        visible={create.isError || update.isError || remove.isError}
-        onDismiss={() => (create.reset(), update.reset(), remove.reset())}
+        visible={create.isError || update.isError || remove.isError || setRepaid.isError}
+        onDismiss={() => (create.reset(), update.reset(), remove.reset(), setRepaid.reset())}
       >
         保存できませんでした。通信状態を確認してください
       </Snackbar>

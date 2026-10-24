@@ -1,4 +1,4 @@
-import { addDays, addMonths } from '@/lib/date';
+import { addMonths } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
@@ -60,28 +60,60 @@ export async function fetchDateAmountsBetween(
 }
 
 /** date の前後 days 日の支払い（立て替えの「元の支払い」を選ぶ候補。新しい順） */
-export async function fetchExpensesAround(date: string, days: number): Promise<Transaction[]> {
+/**
+ * 立て替えと、それを返してもらった貸し金戻り（2026-10-24 改善要望で、つなぐ先を元の支払いから貸し金戻りに変更）。
+ * 立て替えの related_transaction_id が貸し金戻りを指す。1回の貸し金戻りで、いくつもの立て替えを返してもらえる
+ */
+/** その相手からの貸し金戻り（since の日から。古い順） */
+export async function fetchCollectsFrom(personId: string, since: string): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
-    .eq('type', 'expense')
-    .gte('date', addDays(date, -days))
-    .lte('date', addDays(date, days))
-    .order('date', { ascending: false })
-    .order('created_at', { ascending: false });
+    .eq('type', 'collect')
+    .eq('from_account_id', personId)
+    .gte('date', since)
+    .order('date')
+    .limit(50);
   if (error) throw error;
   return data;
 }
 
-/** その支払いにひも付いた立て替え */
-export async function fetchAdvancesFor(expenseId: string): Promise<Transaction[]> {
+/** その相手への立て替え（新しい順） */
+export async function fetchAdvancesTo(personId: string): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
-    .eq('related_transaction_id', expenseId)
+    .eq('type', 'advance')
+    .eq('to_account_id', personId)
+    .order('date', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data;
+}
+
+/** その貸し金戻りで返してもらった立て替え */
+export async function fetchAdvancesFor(collectId: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('related_transaction_id', collectId)
     .order('date');
   if (error) throw error;
   return data;
+}
+
+/** 貸し金戻りで返してもらった立て替えを advanceIds にする（外したものはつながりを消す） */
+export async function setAdvancesRepaidBy(collectId: string, advanceIds: readonly string[]): Promise<void> {
+  const unlink = supabase.from('transactions').update({ related_transaction_id: null }).eq('related_transaction_id', collectId);
+  const { error } = await (advanceIds.length > 0 ? unlink.not('id', 'in', `(${advanceIds.join(',')})`) : unlink);
+  if (error) throw error;
+  if (advanceIds.length === 0) return;
+  const { error: linkError } = await supabase
+    .from('transactions')
+    .update({ related_transaction_id: collectId })
+    .in('id', [...advanceIds])
+    .eq('type', 'advance');
+  if (linkError) throw linkError;
 }
 
 /** 日付が過ぎたのに未確認の記録（古い順）。確認するまで残高・集計に入らない */
@@ -109,9 +141,11 @@ export async function fetchTransaction(id: string): Promise<Transaction> {
   return data;
 }
 
-export async function createTransaction(values: TransactionInsert): Promise<void> {
-  const { error } = await supabase.from('transactions').insert(values);
+/** 記録を1件足し、その id を返す */
+export async function createTransaction(values: TransactionInsert): Promise<string> {
+  const { data, error } = await supabase.from('transactions').insert(values).select('id').single();
   if (error) throw error;
+  return data.id;
 }
 
 /** まとめて追加する（AI入力） */

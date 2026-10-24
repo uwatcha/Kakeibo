@@ -47,8 +47,10 @@ jest.mock('@/features/transactions/hooks', () => ({
   useUpdateTransaction: () => mockM(),
   useDeleteTransaction: () => mockM(),
   usePayeeHistory: () => mockQ(['コンビニ']),
-  useExpensesAround: () => mockQ([]),
+  useCollectsFrom: () => mockQ([]),
+  useAdvancesTo: () => mockQ([]),
   useAdvancesFor: () => mockQ([]),
+  useSetAdvancesRepaidBy: () => mockM(),
 }));
 
 import TransactionEditScreen from '@/app/transaction/[id]';
