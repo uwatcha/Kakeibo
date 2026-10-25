@@ -15,6 +15,7 @@ import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { RecurringRunner } from '@/features/recurring/RecurringRunner';
 import { UpdateButton } from '@/features/updates/UpdateButton';
 import { themes } from '@/theme';
+import { refreshWidgets } from '@/widgets/refresh';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,6 +28,10 @@ function RootNavigator() {
   useEffect(() => {
     if (!isLoading) SplashScreen.hideAsync();
   }, [isLoading]);
+  // ホーム画面のウィジェットを描き直す（配信で描く処理が変わっても、置き直さずに直るように）
+  useEffect(() => {
+    refreshWidgets();
+  }, []);
 
   if (isLoading) return null;
 
