@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef } from 'react';
-import { type LayoutRectangle, ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, type LayoutRectangle, ScrollView, StyleSheet, View } from 'react-native';
 import { Chip } from 'react-native-paper';
 
 export type ChipOption = { value: string; label: string; icon?: string };
@@ -64,7 +64,11 @@ export function ChipGroup({ options, value, onChange, allowDeselect = false, ext
         icon={selected ? 'check' : o.icon}
         selected={selected}
         showSelectedOverlay
-        onPress={() => onChange(selected && allowDeselect ? null : o.value)}
+        onPress={() => {
+          // キーボードを閉じて、同じタップで選ぶ（金額を入れたあとに口座などを押したとき）
+          Keyboard.dismiss();
+          onChange(selected && allowDeselect ? null : o.value);
+        }}
         onLayout={(e) => {
           chipLayouts.current.set(o.value, e.nativeEvent.layout);
           if (twoRows) inColumn.current.add(o.value);
@@ -89,6 +93,8 @@ export function ChipGroup({ options, value, onChange, allowDeselect = false, ext
     <ScrollView
       ref={scrollRef}
       horizontal
+      // キーボードが出ていても、最初のタップでチップを押せるようにする（閉じるのは onPress で）
+      keyboardShouldPersistTaps="handled"
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={twoRows ? styles.grid : styles.row}
       scrollEventThrottle={64}

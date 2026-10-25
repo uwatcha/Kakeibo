@@ -1,7 +1,7 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form';
-import { StyleSheet, View } from 'react-native';
+import { Keyboard, StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
   Button,
@@ -261,7 +261,11 @@ export default function TransactionEditScreen() {
         )}
         <SegmentedButtons
           value={PRIMARY_TYPES.includes(type) ? type : OTHER}
-          onValueChange={(v) => assist.changeType(v === OTHER ? 'advance' : (v as TransactionType))}
+          onValueChange={(v) => {
+              // キーボードを閉じて、同じタップで種類を切り替える
+              Keyboard.dismiss();
+              assist.changeType(v === OTHER ? 'advance' : (v as TransactionType));
+            }}
           buttons={[
             ...PRIMARY_TYPES.map((t) => ({ value: t, label: TRANSACTION_RULES[t].label })),
             { value: OTHER, label: 'その他' },
@@ -306,7 +310,10 @@ export default function TransactionEditScreen() {
             render={({ field: { onChange, value } }) => (
               <SegmentedButtons
                 value={value}
-                onValueChange={onChange}
+                onValueChange={(v) => {
+                  Keyboard.dismiss();
+                  onChange(v);
+                }}
                 buttons={[
                   { value: 'increase', label: '残高を増やす', icon: 'plus' },
                   { value: 'decrease', label: '残高を減らす', icon: 'minus' },

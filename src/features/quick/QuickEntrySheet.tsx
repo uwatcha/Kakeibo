@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form';
-import { BackHandler, Linking, StyleSheet, View } from 'react-native';
+import { BackHandler, Keyboard, Linking, StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Button, HelperText, Portal, SegmentedButtons, Snackbar, Text, TextInput, useTheme } from 'react-native-paper';
 
@@ -137,7 +137,11 @@ export function QuickEntrySheet() {
 
           <SegmentedButtons
             value={PRIMARY_TYPES.includes(type) ? type : OTHER}
-            onValueChange={(v) => assist.changeType(v === OTHER ? 'advance' : (v as TransactionType))}
+            onValueChange={(v) => {
+              // キーボードを閉じて、同じタップで種類を切り替える
+              Keyboard.dismiss();
+              assist.changeType(v === OTHER ? 'advance' : (v as TransactionType));
+            }}
             buttons={[
               ...PRIMARY_TYPES.map((t) => ({ value: t, label: TRANSACTION_RULES[t].label })),
               { value: OTHER, label: 'その他' },
@@ -161,7 +165,10 @@ export function QuickEntrySheet() {
               render={({ field: { onChange, value } }) => (
                 <SegmentedButtons
                   value={value}
-                  onValueChange={onChange}
+                  onValueChange={(v) => {
+                  Keyboard.dismiss();
+                  onChange(v);
+                }}
                   buttons={[
                     { value: 'increase', label: '残高を増やす', icon: 'plus' },
                     { value: 'decrease', label: '残高を減らす', icon: 'minus' },
