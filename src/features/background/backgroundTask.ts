@@ -7,7 +7,7 @@ import { loadPending, trySend } from '@/features/ai/pendingSend';
 import { fetchEmailImportSettings, fetchUnnotified, markNotified } from '@/features/emailImport/api';
 import { importNotification } from '@/features/emailImport/notifications';
 import { scanNewPhotos } from '@/features/photoImport/scan';
-import { loadPhotoQueue, processPhotoQueue } from '@/features/photoImport/queue';
+import { loadPhotoQueue, processPhotoQueue, type QueueOutcome } from '@/features/photoImport/queue';
 import { loadPhotoImportState } from '@/features/photoImport/settings';
 
 /**
@@ -66,6 +66,27 @@ export async function notifyEmailImports(): Promise<void> {
   await markNotified(items.map((i) => i.id));
 }
 
+/** ウィジェットから撮った写真で、記録しなかったもの（記録・重複はメールと同じく email_imports から通知する） */
+async function notifyPhotoOutcomes(outcomes: QueueOutcome[]): Promise<void> {
+  for (const o of outcomes) {
+    await notify(
+      o.kind === 'empty' ? '写真から記録できる内容がありませんでした' : '写真を読み取れませんでした',
+      'レシート・決済の画面・値段の表示を撮ってください',
+      {},
+    );
+  }
+}
+
+/**
+ * ウィジェットから撮った写真を、すぐ裏で読み取って結果を通知する（ウィジェットは撮ったらすぐ閉じる）。
+ * 途中でアプリが止められても、写真は読み取り待ちに残り、定期の実行で続きから読む
+ */
+export async function processQuickPhotos(): Promise<void> {
+  await startBackgroundTask();
+  await notifyPhotoOutcomes(await processPhotoQueue().catch(() => []));
+  await notifyEmailImports().catch(() => undefined);
+}
+
 /** メールからの記録を使っているか（Gmail との連携の合言葉を作ってある） */
 async function usesEmailImport(): Promise<boolean> {
   try {
@@ -87,7 +108,7 @@ export async function runBackgroundJobs(): Promise<void> {
   if (photo) await scanNewPhotos().catch(() => undefined);
   // ウィジェットから撮って、混み合いで読み取れなかった写真
   const queued = (await loadPhotoQueue()).length > 0;
-  if (queued) await processPhotoQueue().catch(() => undefined);
+  if (queued) await notifyPhotoOutcomes(await processPhotoQueue().catch(() => []));
   const email = await usesEmailImport();
   if (email || photo || queued) await notifyEmailImports().catch(() => undefined);
   if (!email && !photo && (await loadPhotoQueue()).length === 0 && (await loadPending()).length === 0) {
