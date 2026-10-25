@@ -24,9 +24,10 @@ function useQuickUrl() {
   const [state, setState] = useState<{ mode: Mode; nonce: number } | null>(null);
   useEffect(() => {
     Linking.getInitialURL().then((url) => setState({ mode: modeOf(url), nonce: Date.now() }));
-    const subscription = Linking.addEventListener('url', ({ url }) =>
-      setState({ mode: modeOf(url), nonce: Date.now() }),
-    );
+    // アプリ本体の URL（kakeibo://）の知らせも届くので、ウィジェットの URL のときだけやり直す
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      if (/^kakeibo-quick:/i.test(url)) setState({ mode: modeOf(url), nonce: Date.now() });
+    });
     return () => subscription.remove();
   }, []);
   return state;
