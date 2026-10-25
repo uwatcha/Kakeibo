@@ -32,6 +32,16 @@ describe('findShortages', () => {
     ]);
   });
 
+  it('今の残高がマイナスなだけで、その口座から出ていく予定がなければ出さない（ほかの口座の予定の日でも）', () => {
+    const negative = new Map([
+      ['bank', 1000],
+      ['minus', -500],
+    ]);
+    expect(findShortages(negative, [move('2026-10-21', 300, 'bank', null)], '2026-10-20', '2026-12-31')).toEqual([]);
+    const paid = findShortages(negative, [move('2026-10-22', 200, 'minus', null)], '2026-10-20', '2026-12-31');
+    expect(paid.map((x) => [x.accountId, x.date, x.lowest])).toEqual([['minus', '2026-10-22', -700]]);
+  });
+
   it('期間外の予定は見ない', () => {
     expect(findShortages(balances, movements, '2026-10-18', '2026-10-26')).toEqual([]);
   });

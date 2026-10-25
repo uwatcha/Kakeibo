@@ -12,7 +12,7 @@ export type Shortage<M extends Movement = Movement> = {
 
 /**
  * 予定（未来の日付の記録）を日付順に反映して、途中でマイナスになる口座を探す（REQ-25）。
- * balances は今日の残高。through までの予定だけを見る。
+ * balances は今日の残高。through までの予定だけを見る。生活費の見積もりは使わず、入っている予定だけで判断する
  */
 export function findShortages<M extends Movement>(
   balances: ReadonlyMap<string, number>,
@@ -43,7 +43,10 @@ export function findShortages<M extends Movement>(
       if (balance >= 0) continue;
       const found = result.get(accountId);
       if (!found) {
+        // 足りないとするのは、その口座から出ていく予定があってマイナスになるときだけ（2026-10-25 改善要望）。
+        // 今の残高がマイナスなだけの口座（クレカの未払いの残りなど）は、支払いの予定がなければ出さない
         const causes = upcoming.filter((m) => m.date === date && m.from_account_id === accountId);
+        if (causes.length === 0) continue;
         result.set(accountId, { accountId, date, lowest: balance, causes });
       } else if (balance < found.lowest) found.lowest = balance;
     }
