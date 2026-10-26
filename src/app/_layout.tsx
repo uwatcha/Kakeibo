@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PaperProvider, useTheme } from 'react-native-paper';
@@ -85,7 +85,7 @@ export default function RootLayout() {
 
   return (
     // ドラッグ＆ドロップ（react-native-reorderable-list）などのジェスチャーに必要
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={theme}>
@@ -93,7 +93,16 @@ export default function RootLayout() {
               <StatusBar style="auto" />
               <RecurringRunner />
               <BackgroundRunner />
-              <RootNavigator />
+              {/* Web 版（PC）は横に広がりすぎないよう、スマホに近い幅で中央に置く */}
+              <View
+                style={[
+                  styles.frame,
+                  Platform.OS === 'web' && styles.webFrame,
+                  { backgroundColor: theme.colors.background },
+                ]}
+              >
+                <RootNavigator />
+              </View>
               <UpdateButton />
             </AuthProvider>
           </PaperProvider>
@@ -102,3 +111,8 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  frame: { flex: 1 },
+  webFrame: { width: '100%', maxWidth: 720, alignSelf: 'center' },
+});

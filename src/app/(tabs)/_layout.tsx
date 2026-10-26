@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { type ColorValue, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, type ColorValue, View } from 'react-native';
 import { IconButton, useTheme } from 'react-native-paper';
 
 import { AvailableAccountsButton } from '@/features/accounts/components/AvailableAccountsButton';
@@ -22,8 +22,16 @@ export default function TabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
-        tabBarStyle: { backgroundColor: theme.colors.surface, borderTopWidth: 0, elevation: 8 },
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopWidth: 0,
+          elevation: 8,
+          // Web 版は画面が横長だと低いタブバーになって文字が切れるので、高さを決めておく
+          ...(Platform.OS === 'web' && { height: 60, paddingBottom: 6 }),
+        },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        // Web 版は画面の幅（PC は広い）で横並びの低いタブになり、文字が切れるので、いつもアイコンの下に置く
+        tabBarLabelPosition: 'below-icon',
         // 大きな太字の見出しを左に置き、ヘッダーと画面の背景をつなげる
         headerStyle: { backgroundColor: theme.colors.background },
         headerShadowVisible: false,

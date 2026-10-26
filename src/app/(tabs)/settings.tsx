@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { type Href, router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
@@ -97,7 +97,8 @@ export default function SettingsScreen() {
           {navItem('働き先と給料日', 'briefcase', '/employers')}
           {navItem('定期支払い', 'autorenew', '/recurring')}
           {navItem('メールからの記録', 'email-sync-outline', '/email-import')}
-          {navItem('写真からの記録', 'image-search-outline', '/photo-import')}
+          {/* 端末の写真を見る機能なので、Web 版（PC）では出さない */}
+          {Platform.OS !== 'web' && navItem('写真からの記録', 'image-search-outline', '/photo-import')}
         </SectionCard>
         <SectionCard title="データ">
           {exportItem('csv', '記録を CSV で書き出す', 'file-delimited')}
