@@ -14,9 +14,12 @@ type Props = {
   onCommit: (payee: string) => void;
 };
 
+/** 候補の行の高さ。この欄を置く画面は、入力欄とキーボードの間をこの分だけ広げる（候補がキーボードに隠れないように） */
+export const SUGGESTION_SPACE = 48;
+
 /**
- * 内容の欄。入力中は、入力した文字を含む過去の内容を候補に出す。
- * 候補は欄の上に横1行で出す（下に出すとキーボードに隠れる。2026-10-28 改善要望）
+ * 内容の欄。入力中は、入力した文字を含む過去の内容を、欄の下に横1行で候補に出す
+ * （2026-10-28 改善要望: キーボードに隠れていたので、画面の bottomOffset を SUGGESTION_SPACE だけ広げる）
  */
 export function PayeeField({ control, history, onCommit }: Props) {
   const [focused, setFocused] = useState(false);
@@ -26,6 +29,18 @@ export function PayeeField({ control, history, onCommit }: Props) {
       name="payee"
       render={({ field: { onChange, onBlur, value } }) => (
         <View>
+          <TextInput
+            mode="outlined"
+            label="内容（任意）"
+            value={value}
+            onChangeText={onChange}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false);
+              onBlur();
+              onCommit(value);
+            }}
+          />
           {focused && (
             <ScrollView
               horizontal
@@ -49,18 +64,6 @@ export function PayeeField({ control, history, onCommit }: Props) {
               ))}
             </ScrollView>
           )}
-          <TextInput
-            mode="outlined"
-            label="内容（任意）"
-            value={value}
-            onChangeText={onChange}
-            onFocus={() => setFocused(true)}
-            onBlur={() => {
-              setFocused(false);
-              onBlur();
-              onCommit(value);
-            }}
-          />
         </View>
       )}
     />
@@ -68,5 +71,5 @@ export function PayeeField({ control, history, onCommit }: Props) {
 }
 
 const styles = StyleSheet.create({
-  suggestions: { gap: 6, paddingBottom: 6 },
+  suggestions: { gap: 6, paddingTop: 6 },
 });

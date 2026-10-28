@@ -13,7 +13,7 @@ import { CategoryPicker } from '@/features/transactions/components/CategoryPicke
 import { AccountFields } from '@/features/transactions/form/AccountFields';
 import { DuplicateDialog } from '@/features/transactions/form/DuplicateDialog';
 import { EmployerField } from '@/features/transactions/form/EmployerField';
-import { PayeeField } from '@/features/transactions/form/PayeeField';
+import { PayeeField, SUGGESTION_SPACE } from '@/features/transactions/form/PayeeField';
 import { useFormAssist } from '@/features/transactions/form/useFormAssist';
 import { emptyFormValues, type FormValues, toTransactionRow, validateForm } from '@/features/transactions/form/values';
 import { useCreateTransaction, usePayeeHistory } from '@/features/transactions/hooks';
@@ -113,7 +113,7 @@ export function QuickEntrySheet() {
         <KeyboardAwareScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
-          bottomOffset={16}
+          bottomOffset={16 + SUGGESTION_SPACE}
         >
           <Controller
             control={control}

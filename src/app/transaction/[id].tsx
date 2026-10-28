@@ -30,7 +30,7 @@ import { AccountFields } from '@/features/transactions/form/AccountFields';
 import { RepaidAdvancesField, RepaymentField } from '@/features/transactions/form/AdvanceLinks';
 import { DuplicateDialog } from '@/features/transactions/form/DuplicateDialog';
 import { EmployerField } from '@/features/transactions/form/EmployerField';
-import { PayeeField } from '@/features/transactions/form/PayeeField';
+import { PayeeField, SUGGESTION_SPACE } from '@/features/transactions/form/PayeeField';
 import { PointsSection } from '@/features/transactions/form/PointsSection';
 import { useFormAssist } from '@/features/transactions/form/useFormAssist';
 import {
@@ -237,7 +237,7 @@ export default function TransactionEditScreen() {
       <KeyboardAwareScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
-        bottomOffset={24}
+        bottomOffset={24 + SUGGESTION_SPACE}
       >
         {transaction.data && recordStatus(transaction.data, toTokyoDateString()) === 'unconfirmed' && (
           <View style={[styles.confirmBar, { backgroundColor: warningColors(theme.dark).background }]}>
