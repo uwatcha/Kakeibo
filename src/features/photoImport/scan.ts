@@ -8,6 +8,7 @@ import { AiError, extractRecords } from '@/features/ai/api';
 import { assignPaymentAccounts, extractPrompt, markDuplicates, toDrafts } from '@/features/ai/extract';
 import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
 import { fetchCategories } from '@/features/categories/api';
+import { fetchEmailImportSettings } from '@/features/emailImport/api';
 import { fetchDateAmountsBetween } from '@/features/transactions/api';
 import { isConfirmedOnSave } from '@/features/transactions/confirmation';
 import { addDays, toTokyoDateString } from '@/lib/date';
@@ -60,10 +61,12 @@ type PhotoContext = Awaited<ReturnType<typeof loadPhotoContext>>;
 /** 写真を読み取るときの材料（口座・カテゴリ・AI への指示）。何枚読んでも1回だけ作る */
 export async function loadPhotoContext() {
   const today = toTokyoDateString();
-  const [accounts, balances, categories] = await Promise.all([
+  const [accounts, balances, categories, settings] = await Promise.all([
     fetchAccounts(),
     fetchAccountBalances(),
     fetchCategories(),
+    // 設定の「自動入力のルール」（自分で書いたもの）も AI に渡す。読めなくても続ける
+    fetchEmailImportSettings().catch(() => null),
   ]);
   const aliases = buildAliases({
     today,
@@ -78,6 +81,7 @@ export async function loadPhotoContext() {
     accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived, isReserved: a.is_reserved })),
     categories,
     aliases,
+    settings?.summary_rules ?? null,
   )}\n${PHOTO_PROMPT_EXTRA}`;
   const cash = defaultCashAccount(accounts);
   return { today, accounts, categories, aliases, prompt, cash };

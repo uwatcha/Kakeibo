@@ -22,12 +22,20 @@ import { toTokyoDateString } from '@/lib/date';
 import { formatYen, parseNonNegativeYen } from '@/lib/money';
 import { supabase } from '@/lib/supabase';
 import { SPACING } from '@/theme';
+import { SummaryRulesDialog } from '@/features/emailImport/components/SummaryRulesDialog';
+import { useEmailImportSettings, useSaveSummaryRules } from '@/features/emailImport/hooks';
+
+import { DEFAULT_SUMMARY_RULES } from '../../../supabase/functions/_shared/emailRules';
 
 export default function SettingsScreen() {
   const theme = useTheme();
   const { session } = useAuth();
   const [exporting, setExporting] = useState<'csv' | 'backup' | null>(null);
   const [exportFailed, setExportFailed] = useState(false);
+  // 自動入力のルール（メールからの記録・AI入力・写真からの記録の AI に渡す。2026-10-28 改善要望）
+  const emailSettings = useEmailImportSettings();
+  const saveRules = useSaveSummaryRules();
+  const [editingRules, setEditingRules] = useState(false);
   // 生活費（ホームの取り置き後に使える額・自由に使える額の計算に使う）。空なら記録から自動で見積もる
   const living = useDailyLiving(toTokyoDateString());
   const saveLiving = useSaveMonthlyLivingCost();
@@ -96,6 +104,13 @@ export default function SettingsScreen() {
           {navItem('カテゴリの管理', 'shape', '/categories')}
           {navItem('働き先と給料日', 'briefcase', '/employers')}
           {navItem('定期支払い', 'autorenew', '/recurring')}
+          <ListRow
+            title="自動入力のルール"
+            subtitle={emailSettings.data?.summary_rules ? '自分で書いたルール' : '初期のルール'}
+            icon="text-box-edit-outline"
+            right={chevron}
+            onPress={() => setEditingRules(true)}
+          />
           {navItem('メールからの記録', 'email-sync-outline', '/email-import')}
           {/* 端末の写真を見る機能なので、Web 版（PC）では出さない */}
           {Platform.OS !== 'web' && navItem('写真からの記録', 'image-search-outline', '/photo-import')}
@@ -112,6 +127,16 @@ export default function SettingsScreen() {
         </Button>
       </ScrollView>
       <Portal>
+        {editingRules && (
+          <SummaryRulesDialog
+            initial={emailSettings.data?.summary_rules ?? DEFAULT_SUMMARY_RULES}
+            onDismiss={() => setEditingRules(false)}
+            onSave={(next) => {
+              saveRules.mutate(next);
+              setEditingRules(false);
+            }}
+          />
+        )}
         <Dialog visible={livingForm !== null} onDismiss={() => setLivingForm(null)}>
           <Dialog.Title>生活費</Dialog.Title>
           <Dialog.Content style={styles.dialog}>

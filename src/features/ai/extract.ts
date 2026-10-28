@@ -41,6 +41,8 @@ export function extractPrompt(
   accounts: readonly AccountLike[],
   categories: readonly Category[],
   aliases: Pick<Aliases, 'account'>,
+  /** 自分で書いた自動入力のルール（設定。なければ null）。ほかの指示より優先させる */
+  userRules: string | null = null,
 ): string {
   const usable = categories.filter((c) => !c.is_archived);
   const names = (kind: 'expense' | 'income') =>
@@ -68,6 +70,7 @@ export function extractPrompt(
       .join('、')}`,
     `支出のカテゴリ: ${names('expense')}`,
     `収入のカテゴリ: ${names('income')}`,
+    ...(userRules?.trim() ? ['# 自分で決めたルール（ほかの指示と食い違うときは、こちらを優先する）', userRules.trim()] : []),
   ].join('\n');
 }
 

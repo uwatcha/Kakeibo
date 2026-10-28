@@ -12,12 +12,15 @@ type Props = {
   onSave: (rules: string | null) => void;
 };
 
-/** 内容の要約ルールを書き換える。開くたびに作り直す（key を付けて Portal の中に置く） */
+/**
+ * 自動入力のルール（旧・内容の要約ルール）を書き換える。メールからの記録・AI入力・写真からの記録の AI に渡す
+ * （2026-10-28 改善要望）。開くたびに作り直す（key を付けて Portal の中に置く）
+ */
 export function SummaryRulesDialog({ initial, onDismiss, onSave }: Props) {
   const [draft, setDraft] = useState(initial);
   return (
     <Dialog visible onDismiss={onDismiss}>
-      <Dialog.Title>内容の要約ルール</Dialog.Title>
+      <Dialog.Title>自動入力のルール</Dialog.Title>
       <Dialog.ScrollArea style={styles.scrollArea}>
         <ScrollView keyboardShouldPersistTaps="handled">
           <TextInput mode="outlined" multiline value={draft} onChangeText={setDraft} />

@@ -4,6 +4,7 @@ import {
   assignPaymentAccounts,
   draftAccounts,
   draftToRow,
+  extractPrompt,
   isDraftReady,
   markDuplicates,
   type PhotoSource,
@@ -154,5 +155,26 @@ describe('draftAccounts / isDraftReady / draftToRow', () => {
       from_account_id: 'card',
       is_confirmed: false,
     });
+  });
+});
+
+describe('extractPrompt（自動入力のルール・普段使わない口座）', () => {
+  const accounts = [
+    { id: 'wallet', kind: 'cash' as const, isArchived: false },
+    { id: 'circle', kind: 'cash' as const, isArchived: false, isReserved: true },
+  ];
+  const aliases = { account: (id: string | null): string => (id === 'wallet' ? '財布A' : '現金B') };
+
+  it('自分で書いたルールを、優先するルールとして入れる', () => {
+    const prompt = extractPrompt('2026-10-28', accounts, [], aliases, 'サンプル店の食堂は食費 / 外食');
+    expect(prompt).toContain('# 自分で決めたルール');
+    expect(prompt).toContain('サンプル店の食堂は食費 / 外食');
+    expect(extractPrompt('2026-10-28', accounts, [], aliases)).not.toContain('自分で決めたルール');
+  });
+
+  it('普段使わない口座は、AI に選ばせない', () => {
+    const prompt = extractPrompt('2026-10-28', accounts, [], aliases);
+    expect(prompt).toContain('財布A');
+    expect(prompt).not.toContain('現金B');
   });
 });

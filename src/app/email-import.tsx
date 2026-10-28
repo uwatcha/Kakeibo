@@ -47,7 +47,7 @@ const formatTime = (iso: string) =>
     minute: '2-digit',
   });
 
-/** 設定 > メールからの記録。メールの種類ごとのオンオフと口座、Apps Script との連携、内容の要約ルール、利用先の対応表 */
+/** 設定 > メールからの記録。メールの種類ごとのオンオフと口座、Apps Script との連携、自動入力のルール、利用先の対応表 */
 export default function EmailImportScreen() {
   const theme = useTheme();
   const settings = useEmailImportSettings();
@@ -153,7 +153,7 @@ export default function EmailImportScreen() {
           />
         </SectionCard>
 
-        <SectionCard title="内容の要約ルール">
+        <SectionCard title="自動入力のルール">
           <ListRow
             title={settings.data?.summary_rules ? '自分で書いたルール' : '初期のルール'}
             subtitle={currentRules.split('\n')[0]}

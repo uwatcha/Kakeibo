@@ -4,6 +4,7 @@ import { Button, Chip, HelperText, Snackbar, TextInput } from 'react-native-pape
 
 import type { Account } from '@/features/accounts/api';
 import type { Category } from '@/features/categories/api';
+import { useEmailImportSettings } from '@/features/emailImport/hooks';
 import { fetchDateAmountsBetween } from '@/features/transactions/api';
 import { useCreateTransactions } from '@/features/transactions/hooks';
 import { addDays } from '@/lib/date';
@@ -41,6 +42,8 @@ type Props = {
  */
 export function AiImport({ today, accounts, categories, aliases, balances }: Props) {
   const files = useAttachments();
+  // 設定の「自動入力のルール」（自分で書いたもの）も AI に渡す
+  const emailSettings = useEmailImportSettings();
   const [text, setText] = useState('');
   const [reading, setReading] = useState(false);
   const [drafts, setDrafts] = useState<ImportDraft[] | null>(null);
@@ -56,7 +59,7 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
     try {
       const accountLikes = accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived, isReserved: a.is_reserved }));
       const { records } = await extractRecords(
-        extractPrompt(job.today, accountLikes, categories, aliases),
+        extractPrompt(job.today, accountLikes, categories, aliases, emailSettings.data?.summary_rules ?? null),
         job.texts,
         job.binaries,
       );
