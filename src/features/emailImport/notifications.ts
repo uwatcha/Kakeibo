@@ -45,7 +45,7 @@ function billNotification(i: UnnotifiedImport): { title: string; body: string; d
  */
 export function importNotification(
   i: UnnotifiedImport,
-): { title: string; body: string; data: Record<string, string> } | null {
+): { title: string; body: string; data: Record<string, string>; confirmable?: boolean } | null {
   const amount = i.transaction?.amount ?? i.amount;
   const what = [
     i.transaction?.payee ?? i.raw_payee ?? (i.kind ? UNNAMED[i.kind] : null),
@@ -60,6 +60,8 @@ export function importNotification(
         title: i.transaction?.type === 'income' ? '収入を記録しました' : '支払いを記録しました',
         body: i.transaction?.needs_payee ? `${what}（内容を入れてください）` : what,
         data: { transactionId: i.transaction_id },
+        // 通知の「確認」ボタンで、アプリを開かずに確認済みにできる（内容が分からないものは開いて入れてもらう）
+        confirmable: !i.transaction?.needs_payee,
       };
     case 'confirmed_plan':
       return i.transaction_id

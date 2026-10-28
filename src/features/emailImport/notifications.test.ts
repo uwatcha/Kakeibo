@@ -17,7 +17,13 @@ describe('importNotification', () => {
         status: 'recorded',
         transaction: { payee: 'セブンイレブン', amount: 580, type: 'expense', needs_payee: false },
       }),
-    ).toEqual({ title: '支払いを記録しました', body: 'セブンイレブン 580円', data: { transactionId: 't' } });
+    ).toEqual({
+      title: '支払いを記録しました',
+      body: 'セブンイレブン 580円',
+      data: { transactionId: 't' },
+      // 内容が分かっているので、通知の「確認」ボタンで確認済みにできる
+      confirmable: true,
+    });
   });
 
   it('サンプルカードの速報は「サンプルカード」、内容が分からなければそう添える', () => {

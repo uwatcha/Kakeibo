@@ -6,7 +6,7 @@ import { AppState } from 'react-native';
 
 import { useAuth } from '@/features/auth/AuthProvider';
 
-import { ensureBackgroundTask, runBackgroundJobs } from './backgroundTask';
+import { ensureBackgroundTask, handleNotificationAction, runBackgroundJobs } from './backgroundTask';
 
 /**
  * アプリを開いた・前面に戻ったときに、バックグラウンドの仕事（AI 相談の送り直し・メールからの記録の通知）をすぐやる。
@@ -32,7 +32,15 @@ export function BackgroundRunner() {
 
   const response = Notifications.useLastNotificationResponse();
   useEffect(() => {
-    if (!session || !response || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+    if (!session || !response) return;
+    // 通知の「確認」ボタン（アプリが閉じていて、開いたときに届いたもの）
+    if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
+      handleNotificationAction(response).then(() => {
+        Notifications.clearLastNotificationResponse();
+        queryClient.invalidateQueries();
+      });
+      return;
+    }
     const data = response.notification.request.content.data ?? {};
     if (typeof data.conversationId === 'string') {
       router.navigate({ pathname: '/ai', params: { c: data.conversationId } });
@@ -44,7 +52,7 @@ export function BackgroundRunner() {
       router.push('/ai-settings');
     }
     Notifications.clearLastNotificationResponse();
-  }, [session, response]);
+  }, [session, response, queryClient]);
 
   return null;
 }

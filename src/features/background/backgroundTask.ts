@@ -4,7 +4,7 @@ import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 
 import { loadPending, trySend } from '@/features/ai/pendingSend';
-import { fetchEmailImportSettings, fetchUnnotified, markNotified } from '@/features/emailImport/api';
+import { fetchEmailImportSettings, fetchUnnotified, markNotified, markReviewed } from '@/features/emailImport/api';
 import { importNotification } from '@/features/emailImport/notifications';
 import { scanNewPhotos } from '@/features/photoImport/scan';
 import { loadPhotoQueue, processPhotoQueue, type QueueOutcome } from '@/features/photoImport/queue';
@@ -32,9 +32,31 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function notify(title: string, body: string, data: Record<string, string>) {
+/**
+ * 自動で入った記録の通知に付ける「確認」ボタン（2026-10-28 改善要望）。押すとアプリを開かずに確認済みにし、
+ * 「記録の確認」の「自動で追加」から外す
+ */
+const AUTO_RECORD_CATEGORY = 'auto-record';
+const CONFIRM_ACTION = 'confirm';
+Notifications.setNotificationCategoryAsync(AUTO_RECORD_CATEGORY, [
+  { identifier: CONFIRM_ACTION, buttonTitle: '確認', options: { opensAppToForeground: false } },
+]).catch(() => undefined);
+
+/** 通知のボタンが押されたとき（アプリが動いていれば、閉じていてもここに来る） */
+export async function handleNotificationAction(response: Notifications.NotificationResponse): Promise<boolean> {
+  if (response.actionIdentifier !== CONFIRM_ACTION) return false;
+  const id = response.notification.request.content.data?.transactionId;
+  if (typeof id === 'string') await markReviewed([id]).catch(() => undefined);
+  await Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => undefined);
+  return true;
+}
+Notifications.addNotificationResponseReceivedListener((response) => {
+  handleNotificationAction(response);
+});
+
+async function notify(title: string, body: string, data: Record<string, string>, confirmable = false) {
   await Notifications.scheduleNotificationAsync({
-    content: { title, body, data },
+    content: { title, body, data, ...(confirmable && { categoryIdentifier: AUTO_RECORD_CATEGORY }) },
     trigger: Platform.OS === 'android' ? { channelId: CHANNEL } : null,
   });
 }
@@ -61,7 +83,7 @@ export async function notifyEmailImports(): Promise<void> {
   const items = await fetchUnnotified();
   for (const item of items) {
     const message = importNotification(item);
-    if (message) await notify(message.title, message.body, message.data);
+    if (message) await notify(message.title, message.body, message.data, message.confirmable);
   }
   await markNotified(items.map((i) => i.id));
 }
