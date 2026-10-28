@@ -11,7 +11,7 @@ export function homeContext(figures: HomeFigures, aliases: Pick<Aliases, 'accoun
   const { available, summary, budget } = figures;
   const lines = ['## ホームに出ている額（今の画面の表示）'];
   lines.push(
-    `- 普段使う口座: ${formatYen(summary.everydayTotal)}`,
+    `- 所持金（普段使う口座の合計）: ${formatYen(summary.everydayTotal)}`,
     `- 実質残高: ${formatYen(available.amount)}`,
     `- 純資産: ${formatYen(summary.netWorth)}`,
   );

@@ -194,12 +194,12 @@ export function homeSheet(
       // 普段使う口座（現金・銀行・電子マネー・投資のうち、普段使わない口座でないもの）の合計（2026-10-28 ユーザーの要望）
       const list = [...summary.everyday].sort((a, b) => b.balance - a.balance);
       return {
-        title: '普段使う口座',
+        title: '所持金',
         total: summary.everydayTotal,
         sections: [{ title: '口座', total: summary.everydayTotal, rows: accountRows(list) }],
         formulas: [
           {
-            result: '普段使う口座',
+            result: '所持金',
             terms: list.map((a, i) => ({ ...(i > 0 && { op: '＋' as const }), label: a.name, value: a.balance })),
           },
         ],
