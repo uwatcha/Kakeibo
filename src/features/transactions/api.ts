@@ -2,6 +2,8 @@ import { addDays, addMonths } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
+import { type SearchFilters, sourceFilter } from './search';
+
 export type Transaction = Database['public']['Tables']['transactions']['Row'];
 export type TransactionInsert = Database['public']['Tables']['transactions']['Insert'];
 export type TransactionUpdate = Database['public']['Tables']['transactions']['Update'];
@@ -166,14 +168,32 @@ export async function deleteTransaction(id: string): Promise<void> {
 }
 
 /** 全期間から検索する（新しい順に最大200件）。filter は buildSearchFilter で作る */
-export async function searchTransactions(filter: string): Promise<Transaction[]> {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .or(filter)
+/**
+ * 記録を探す: text は言葉の検索（buildSearchFilter。内容・メモ・カテゴリ・金額のどれか）、filters は項目ごとの絞り込み
+ * （すべてに当てはまるもの）。categoryIds は小分類を足したもの（expandCategoryIds）を渡す
+ */
+export async function searchTransactions(text: string | null, filters: SearchFilters): Promise<Transaction[]> {
+  let query = supabase.from('transactions').select('*');
+  // 「〜か〜」の条件（言葉・口座・入力元）は、1つの式にまとめてすべて満たすもの（and）にする
+  const anyOf = [
+    text,
+    filters.accountIds.length > 0
+      ? `from_account_id.in.(${filters.accountIds.join(',')}),to_account_id.in.(${filters.accountIds.join(',')})`
+      : null,
+    sourceFilter(filters.sources),
+  ].filter((g): g is string => !!g);
+  if (anyOf.length === 1) query = query.or(anyOf[0]);
+  if (anyOf.length > 1) query = query.or(`and(${anyOf.map((g) => `or(${g})`).join(',')})`);
+  if (filters.types.length > 0) query = query.in('type', filters.types as Transaction['type'][]);
+  if (filters.categoryIds.length > 0) query = query.in('category_id', filters.categoryIds);
+  if (filters.from) query = query.gte('date', filters.from);
+  if (filters.to) query = query.lte('date', filters.to);
+  if (filters.amountMin !== null) query = query.gte('amount', filters.amountMin);
+  if (filters.amountMax !== null) query = query.lte('amount', filters.amountMax);
+  const { data, error } = await query
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
-    .limit(200);
+    .limit(300);
   if (error) throw error;
   return data;
 }

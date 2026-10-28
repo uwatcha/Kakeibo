@@ -21,6 +21,7 @@ import {
   type TransactionUpdate,
   updateTransaction,
 } from './api';
+import { hasFilters, type SearchFilters } from './search';
 
 export const transactionKeys = {
   all: ['transactions'] as const,
@@ -40,11 +41,12 @@ export function useMonthTransactions(month: string) {
 }
 
 /** filter が null のあいだは検索しない */
-export function useSearchTransactions(filter: string | null) {
+/** 記録を探す（text は言葉の検索、filters は項目ごとの絞り込み）。どちらもなければ探さない */
+export function useSearchTransactions(text: string | null, filters: SearchFilters, enabled: boolean) {
   return useQuery({
-    queryKey: transactionKeys.search(filter ?? ''),
-    queryFn: () => searchTransactions(filter!),
-    enabled: filter !== null,
+    queryKey: transactionKeys.search(JSON.stringify({ text, filters })),
+    queryFn: () => searchTransactions(text, filters),
+    enabled: enabled && (text !== null || hasFilters(filters)),
   });
 }
 

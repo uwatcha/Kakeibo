@@ -15,7 +15,14 @@ import { useMonthTransactions, useSearchTransactions } from '@/features/transact
 import { TransactionDayList } from '@/features/transactions/components/TransactionDayList';
 import { monthTotals } from '@/features/transactions/list';
 import { touchesAccounts } from '@/features/transactions/scope';
-import { buildSearchFilter } from '@/features/transactions/search';
+import { SearchFiltersBar } from '@/features/transactions/components/SearchFiltersBar';
+import {
+  buildSearchFilter,
+  EMPTY_FILTERS,
+  expandCategoryIds,
+  hasFilters,
+  type SearchFilters,
+} from '@/features/transactions/search';
 import { addMonths, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { SPACING } from '@/theme';
@@ -57,6 +64,8 @@ export default function TransactionsScreen() {
   // 検索中は月をまたいで全期間から探す。入力が止まってから 300ms 後に検索する
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
+  // 項目ごとの絞り込み（検索窓の下のボタン）
+  const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [debouncedQuery, setDebouncedQuery] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 300);
@@ -70,12 +79,19 @@ export default function TransactionsScreen() {
   const term = debouncedQuery.trim();
   const matchedCategoryIds =
     term === '' ? [] : (categories.data ?? []).filter((c) => c.name.includes(term)).map((c) => c.id);
-  const searchFilter = searching && categories.data ? buildSearchFilter(term, matchedCategoryIds) : null;
-  const searchResults = useSearchTransactions(searchFilter);
+  const searchFilter = categories.data ? buildSearchFilter(term, matchedCategoryIds) : null;
+  const queryFilters = {
+    ...filters,
+    categoryIds: expandCategoryIds(filters.categoryIds, categories.data ?? []),
+  };
+  const searchResults = useSearchTransactions(searchFilter, queryFilters, searching && !!categories.data);
+  // 言葉か絞り込みのどちらかがあるときだけ探す
+  const hasQuery = searchFilter !== null || hasFilters(filters);
 
   const closeSearch = () => {
     setSearching(false);
     setQuery('');
+    setFilters(EMPTY_FILTERS);
   };
 
   // 実質残高に含める口座（右上のパネルで選ぶ）が関わる記録だけを出し、月の収入・支出もそれで計算する
@@ -85,13 +101,13 @@ export default function TransactionsScreen() {
   );
   const ready =
     !!availableIds &&
-    (searching ? searchFilter === null || searchResults.data : transactions.data) &&
+    (searching ? !hasQuery || searchResults.data : transactions.data) &&
     accounts.data &&
     categories.data;
   const filtered = searching ? listSource : filterByCategory(listSource, categoryFilter, categories.data ?? []);
   const totals = monthTotals(filtered);
   // 月や検索語が変わったときだけ、予定の下まで送る
-  const viewKey = searching ? `search:${term}` : `${month}:${categoryFilter ?? ''}`;
+  const viewKey = searching ? `search:${term}:${JSON.stringify(filters)}` : `${month}:${categoryFilter ?? ''}`;
 
   const filterLabel =
     categoryFilter === 'none' ? '未分類' : categories.data?.find((c) => c.id === categoryFilter)?.name;
@@ -99,15 +115,25 @@ export default function TransactionsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {searching ? (
-        <Searchbar
-          placeholder="内容・メモ・カテゴリ・金額"
-          value={query}
-          onChangeText={setQuery}
-          autoFocus
-          icon="arrow-left"
-          onIconPress={closeSearch}
-          style={[styles.searchbar, { backgroundColor: theme.colors.surface }]}
-        />
+        <View>
+          <Searchbar
+            placeholder="内容・メモ・カテゴリ・金額"
+            value={query}
+            onChangeText={setQuery}
+            autoFocus
+            icon="arrow-left"
+            onIconPress={closeSearch}
+            style={[styles.searchbar, { backgroundColor: theme.colors.surface }]}
+          />
+          {accounts.data && categories.data && (
+            <SearchFiltersBar
+              filters={filters}
+              onChange={setFilters}
+              accounts={accounts.data}
+              categories={categories.data}
+            />
+          )}
+        </View>
       ) : (
         <SectionCard style={styles.summary}>
           <View style={styles.monthBar}>
@@ -172,7 +198,7 @@ export default function TransactionsScreen() {
           accounts={accounts.data!}
           categories={categories.data!}
           viewKey={viewKey}
-          emptyText={searching ? (term === '' ? '' : '一致する記録はありません') : 'この月の記録はありません'}
+          emptyText={searching ? (hasQuery ? '一致する記録はありません' : '') : 'この月の記録はありません'}
           refreshing={transactions.isRefetching}
           onRefresh={transactions.refetch}
         />
