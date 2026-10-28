@@ -5,7 +5,7 @@ import { ActivityIndicator, Button, Text, useTheme } from 'react-native-paper';
 
 import { processQuickPhotos } from '@/features/background/backgroundTask';
 import { queuePhoto } from '@/features/photoImport/queue';
-import { toJpegBase64 } from '@/features/photoImport/scan';
+import { toJpegBase64 } from '@/features/ai/image';
 import { RADIUS, SPACING } from '@/theme';
 
 import { closeQuick } from './QuickEntrySheet';

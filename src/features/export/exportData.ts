@@ -1,5 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 
 import { toTokyoDateString } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +24,16 @@ async function fetchAll<T>(
 }
 
 async function shareText(fileName: string, content: string, mimeType: string): Promise<void> {
+  // Web 版（PC）は共有の代わりに、ファイルとしてダウンロードする
+  if (Platform.OS === 'web') {
+    const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
   const file = new File(Paths.cache, fileName);
   if (file.exists) file.delete();
   file.create();

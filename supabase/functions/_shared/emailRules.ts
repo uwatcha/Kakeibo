@@ -1,5 +1,5 @@
 // メールからの記録で、AI に内容（店名）とカテゴリを決めてもらうときのルールの初期値。
-// 設定の「内容の要約ルール」で書き換えられる（email_import_settings.summary_rules。null ならこれ）。アプリの設定画面からも読む
+// 設定の「自動入力のルール」（旧・内容の要約ルール）で書き換えられる（email_import_settings.summary_rules。null ならこれ）。アプリの設定画面からも読む
 
 export const DEFAULT_SUMMARY_RULES = [
   '- 店名は、よく知られた書き方にする（例: 「ジエイアールヒガシニホンモバイルスイカ」→「モバイル Suica」、「ソバヤ」→「そば屋」）',

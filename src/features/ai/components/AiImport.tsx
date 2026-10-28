@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Chip, HelperText, Snackbar, TextInput } from 'react-native-paper';
 
 import type { Account } from '@/features/accounts/api';
@@ -155,9 +155,12 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
         {drafts === null ? (
           <>
             <View style={styles.buttons}>
-              <Button mode="outlined" icon="camera" onPress={() => files.addImage(true)} disabled={reading}>
-                写真を撮る
-              </Button>
+              {/* カメラは PC では使わないので、Web 版では出さない */}
+              {Platform.OS !== 'web' && (
+                <Button mode="outlined" icon="camera" onPress={() => files.addImage(true)} disabled={reading}>
+                  写真を撮る
+                </Button>
+              )}
               <Button mode="outlined" icon="image" onPress={() => files.addImage(false)} disabled={reading}>
                 画像を選ぶ
               </Button>

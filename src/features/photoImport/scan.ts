@@ -1,11 +1,10 @@
-import { File } from 'expo-file-system';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library/legacy';
 
 import { fetchAccountBalances, fetchAccounts } from '@/features/accounts/api';
 import { buildAliases } from '@/features/ai/anonymize';
 import { AiError, extractRecords } from '@/features/ai/api';
 import { assignPaymentAccounts, extractPrompt, markDuplicates, toDrafts } from '@/features/ai/extract';
+import { toJpegBase64 } from '@/features/ai/image';
 import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
 import { fetchCategories } from '@/features/categories/api';
 import { fetchEmailImportSettings } from '@/features/emailImport/api';
@@ -19,22 +18,10 @@ import { loadPhotoImportState, savePhotoImportState } from './settings';
 
 /** 1回に AI に見せる写真の数（無料枠を使いすぎないよう。残りは次に確かめるとき） */
 const MAX_PER_RUN = 8;
-/** AI に送る写真の幅（文字が読める大きさまで小さくして送る） */
-const SEND_WIDTH = 1024;
 /** 見るアルバム（カメラで撮った写真とスクリーンショット。LINE などで受け取った画像は見ない） */
 const TARGET_ALBUM = /camera|screenshot|スクリーンショット|カメラ/i;
 
 export type ScanResult = { checked: number; recorded: number; duplicates: number; waiting: boolean };
-
-/** 写真を小さくして base64 の JPEG にする */
-export async function toJpegBase64(uri: string, width: number): Promise<string> {
-  const context = ImageManipulator.manipulate(uri);
-  if (width > SEND_WIDTH) context.resize({ width: SEND_WIDTH });
-  const image = await context.renderAsync();
-  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.7, base64: true });
-  if (saved.base64) return saved.base64;
-  return new File(saved.uri).base64();
-}
 
 /** 新しい写真（since より後に撮ったもの）を、撮った順に */
 async function newPhotos(since: number, processed: ReadonlySet<string>): Promise<MediaLibrary.Asset[]> {

@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, IconButton, Text, useTheme } from 'react-native-paper';
 
 import { Amount } from '@/components/Amount';
@@ -27,14 +28,20 @@ const LABEL_EVERY_DAYS = 7;
 export default function BalanceChartScreen() {
   const theme = useTheme();
   const color = useLineColor();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const window = useWindowDimensions();
+  // Web 版（PC）は画面を中央の枠（最大 720px、_layout.tsx）に置くので、ウィンドウではなく枠の大きさを使う
+  const [frame, setFrame] = useState<{ width: number; height: number } | null>(null);
+  const screenWidth = Platform.OS === 'web' ? (frame?.width ?? 0) : window.width;
+  const screenHeight = Platform.OS === 'web' ? (frame?.height ?? 0) : window.height;
   const balances = useAccountBalances();
   const movements = useMovementsAfter(BEGINNING);
   const today = toTokyoDateString();
 
   // 回したあとの横幅は画面の高さ、高さは画面の幅
-  const width = screenHeight;
-  const height = screenWidth;
+  // スマホは画面ごと90度回して横向きで見る。Web 版（PC）は横長の画面なので回さない
+  const rotate = Platform.OS !== 'web';
+  const width = rotate ? screenHeight : screenWidth;
+  const height = rotate ? screenWidth : screenHeight;
 
   let body = <ActivityIndicator />;
   if (balances.error || movements.error) {
@@ -96,11 +103,15 @@ export default function BalanceChartScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      onLayout={(e) => setFrame({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+    >
       <StatusBar hidden />
       <View
         style={[
-          styles.rotated,
+          styles.frame,
+          rotate && styles.rotated,
           {
             width,
             height,
@@ -124,12 +135,8 @@ export default function BalanceChartScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  rotated: {
-    position: 'absolute',
-    transform: [{ rotate: '90deg' }],
-    paddingHorizontal: PADDING,
-    paddingBottom: PADDING,
-  },
+  frame: { position: 'absolute', paddingHorizontal: PADDING, paddingBottom: PADDING },
+  rotated: { transform: [{ rotate: '90deg' }] },
   header: { height: HEADER_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bold: { fontWeight: '700' },
   legend: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingBottom: 8 },
