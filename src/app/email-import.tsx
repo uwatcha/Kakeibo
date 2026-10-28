@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Dialog, Portal, Snackbar, Switch, Text, useTheme } from 'react-native-paper';
@@ -13,7 +13,6 @@ import { useCategories } from '@/features/categories/hooks';
 import { categoryLabel } from '@/features/categories/tree';
 import type { PayeeRule } from '@/features/emailImport/api';
 import { PayeeRuleDialog } from '@/features/emailImport/components/PayeeRuleDialog';
-import { SummaryRulesDialog } from '@/features/emailImport/components/SummaryRulesDialog';
 import { TokenDialog } from '@/features/emailImport/components/TokenDialog';
 import {
   useDeletePayeeRule,
@@ -23,7 +22,6 @@ import {
   useRotateToken,
   useSaveEmailImportSource,
   useSaveAtmCashAccount,
-  useSaveSummaryRules,
   useUpdatePayeeRule,
 } from '@/features/emailImport/hooks';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
@@ -58,13 +56,11 @@ export default function EmailImportScreen() {
   const saveSource = useSaveEmailImportSource();
   const saveAtmCash = useSaveAtmCashAccount();
   const rotate = useRotateToken();
-  const saveRules = useSaveSummaryRules();
   const updateRule = useUpdatePayeeRule();
   const deleteRule = useDeletePayeeRule();
 
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const [editingRules, setEditingRules] = useState(false);
   const [editing, setEditing] = useState<PayeeRule | null>(null);
 
   const queries = [settings, sources, rules, accounts, categories];
@@ -79,7 +75,7 @@ export default function EmailImportScreen() {
 
   const linked = !!settings.data?.token_hash;
   const currentRules = settings.data?.summary_rules ?? DEFAULT_SUMMARY_RULES;
-  const failed = saveSource.isError || rotate.isError || saveRules.isError || updateRule.isError || deleteRule.isError;
+  const failed = saveSource.isError || rotate.isError || updateRule.isError || deleteRule.isError;
 
   const createToken = async () => {
     setConfirmRotate(false);
@@ -158,7 +154,7 @@ export default function EmailImportScreen() {
             title={settings.data?.summary_rules ? '自分で書いたルール' : '初期のルール'}
             subtitle={currentRules.split('\n')[0]}
             icon="text-box-edit-outline"
-            onPress={() => setEditingRules(true)}
+            onPress={() => router.push('/auto-rules')}
           />
         </SectionCard>
 
@@ -195,16 +191,6 @@ export default function EmailImportScreen() {
         </Dialog>
 
         <TokenDialog token={token} onClose={() => setToken(null)} />
-        {editingRules && (
-          <SummaryRulesDialog
-            initial={currentRules}
-            onDismiss={() => setEditingRules(false)}
-            onSave={(next) => {
-              saveRules.mutate(next);
-              setEditingRules(false);
-            }}
-          />
-        )}
         {editing && (
           <PayeeRuleDialog
             key={editing.raw_payee}
@@ -225,7 +211,7 @@ export default function EmailImportScreen() {
 
       <Snackbar
         visible={failed}
-        onDismiss={() => [saveSource, rotate, saveRules, updateRule, deleteRule].forEach((m) => m.reset())}
+        onDismiss={() => [saveSource, rotate, updateRule, deleteRule].forEach((m) => m.reset())}
       >
         保存できませんでした
       </Snackbar>

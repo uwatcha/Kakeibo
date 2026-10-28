@@ -70,6 +70,7 @@ function RootNavigator() {
         <Stack.Screen name="unconfirmed" options={{ headerShown: true, title: '記録の確認' }} />
         <Stack.Screen name="info" options={{ headerShown: true, title: '用語の説明' }} />
         <Stack.Screen name="email-import" options={{ headerShown: true, title: 'メールからの記録' }} />
+        <Stack.Screen name="auto-rules" options={{ headerShown: true, title: '自動入力のルール' }} />
         <Stack.Screen name="photo-import" options={{ headerShown: true, title: '写真からの記録' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
