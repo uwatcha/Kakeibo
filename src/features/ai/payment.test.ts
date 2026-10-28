@@ -1,4 +1,4 @@
-import { matchPaymentAccount } from './payment';
+import { defaultCashAccount, matchPaymentAccount } from './payment';
 
 const a = (id: string, name: string, kind: 'cash' | 'bank' | 'emoney' | 'credit_card', is_archived = false) => ({
   id,
@@ -31,5 +31,19 @@ describe('matchPaymentAccount', () => {
     expect(matchPaymentAccount('QUICPay', accounts)).toBeNull();
     expect(matchPaymentAccount(null, accounts)).toBeNull();
     expect(matchPaymentAccount('現金', [a('wallet', '財布', 'cash', true)])).toBeNull();
+  });
+});
+
+describe('普段使わない口座（自動入力では使わない）', () => {
+  const withReserved = [
+    { id: 'circle', name: 'サークルの財布', kind: 'cash' as const, is_archived: false, is_reserved: true },
+    { id: 'wallet', name: '財布', kind: 'cash' as const, is_archived: false },
+  ];
+  it('現金と書かれていれば、普段使う現金の口座にする', () => {
+    expect(matchPaymentAccount('現金', withReserved)).toBe('wallet');
+    expect(defaultCashAccount(withReserved)).toBe('wallet');
+  });
+  it('口座の名前がそのまま書かれていれば、普段使わない口座でも使う', () => {
+    expect(matchPaymentAccount('サークルの財布', withReserved)).toBe('circle');
   });
 });

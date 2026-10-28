@@ -223,5 +223,40 @@ function parseGas(mail: MailInput): ParseResult {
  */
 export const isAtm = (name: string | null) => !!name && /^ATM/i.test(normalizeText(name));
 
+/** 電子マネーの名前と、メールの名目での書き方（カタカナ） */
+const TOPUP_ALIASES: Record<string, string[]> = {
+  suica: ['スイカ'],
+  pasmo: ['パスモ'],
+  icoca: ['イコカ'],
+  kitaca: ['キタカ'],
+  paypay: ['ペイペイ'],
+  majica: ['マジカ'],
+  nanaco: ['ナナコ'],
+  waon: ['ワオン'],
+  edy: ['エデイ', 'エディ'],
+  サンプル電子マネー: ['サンプルデンシマネー'],
+};
+
+type TopUpAccount = { id: string; name: string; kind: string; is_archived: boolean };
+
+const loose = (s: string) => normalizeText(s).toLowerCase().replace(/\s/g, '');
+
+/**
+ * 出金の名目が、自分の電子マネー（現金の口座の majica なども）への入金か。入金先の口座を返す（2026-10-28 改善要望:
+ * サンプル銀行から電子マネーへの入金は振替にする）。名目に口座の名前か、その読み（例: 「サンプルデンシマネー」→ サンプル電子マネー、
+ * 「MAJICA」→ majica）が入っていれば、その口座。from（出金元）自身は除く
+ */
+export function topUpTarget(raw: string | null, accounts: readonly TopUpAccount[], from: string): string | null {
+  if (!raw) return null;
+  const text = loose(raw);
+  for (const a of accounts) {
+    if (a.is_archived || a.id === from || !['emoney', 'cash'].includes(a.kind)) continue;
+    const name = loose(a.name);
+    const keys = [name, ...Object.entries(TOPUP_ALIASES).flatMap(([k, kana]) => (name.includes(k) ? [k, ...kana] : []))];
+    if (keys.some((k) => k.length >= 2 && text.includes(k.toLowerCase()))) return a.id;
+  }
+  return null;
+}
+
 /** 連携サービス の出金の名目が サンプルデビットの利用か（「サンプルデビット」） */
 export const isDebitCardName = (name: string | null) => !!name && /^サンプルデビット/i.test(normalizeText(name));

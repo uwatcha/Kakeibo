@@ -46,4 +46,9 @@ describe('pickerAccounts', () => {
   it('残高がわからないときは残高では隠さない', () => {
     expect(ids(pickerAccounts(accounts, ['receivable'], null, undefined, false))).toEqual(['kenta', 'sakura']);
   });
+
+  it('普段使わない口座は後ろに並べる', () => {
+    const list = [acc('reserve', 'cash', { is_reserved: true }), acc('wallet', 'cash'), acc('bank', 'cash')];
+    expect(ids(pickerAccounts(list, ['cash'], null, undefined, false))).toEqual(['wallet', 'bank', 'reserve']);
+  });
 });

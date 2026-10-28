@@ -2,7 +2,7 @@
 // DB や AI を呼ばない部分は _shared/emailParse.ts（メールの読み取り）と _shared/emailPayee.ts（内容・カテゴリの決め方）
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
-import { type Bill, type EmailKind, isAtm, isDebitCardName, parseMail, SOURCE_OF } from '../_shared/emailParse.ts';
+import { type Bill, type EmailKind, isAtm, isDebitCardName, parseMail, SOURCE_OF, topUpTarget } from '../_shared/emailParse.ts';
 import {
   addDays,
   buildPayeePrompt,
@@ -48,6 +48,8 @@ export class Importer {
   private enabled = new Map<string, boolean>();
   /** ATM の引き出し・預け入れで振り替える現金の口座 */
   private atmCash: string | null = null;
+  /** 電子マネーへの入金を見分けるための口座（topUpTarget） */
+  private accountList: { id: string; name: string; kind: string; is_archived: boolean }[] = [];
 
   constructor(
     private db: SupabaseClient,
@@ -55,7 +57,7 @@ export class Importer {
   ) {}
 
   async load() {
-    const [rules, categories, sources, settings, cash] = await Promise.all([
+    const [rules, categories, sources, settings, cash, accountList] = await Promise.all([
       this.db.from('payee_rules').select('raw_payee, kind, payee, category_id').eq('user_id', this.userId),
       this.db.from('categories').select('id, name, kind, parent_id, is_archived').eq('user_id', this.userId),
       this.db.from('email_import_sources').select('source, enabled, account_id').eq('user_id', this.userId),
@@ -68,7 +70,9 @@ export class Importer {
         .eq('is_archived', false)
         .order('created_at')
         .limit(1),
+      this.db.from('accounts').select('id, name, kind, is_archived').eq('user_id', this.userId),
     ]);
+    this.accountList = accountList.data ?? [];
     this.atmCash = settings.data?.atm_cash_account_id ?? cash.data?.[0]?.id ?? null;
     for (const r of (rules.data ?? []) as PayeeRule[]) this.rules.set(r.raw_payee, r);
     this.categories = (categories.data ?? []) as PayeeCategory[];
@@ -184,9 +188,9 @@ export class Importer {
     if (rows.length === 0) return;
 
     // 対応表にない利用先は、まとめて AI に決めてもらう。混み合いならその行は待ちにする
-    // ATM は振替にするので、内容を AI に聞かない
+    // ATM・電子マネーへの入金は振替にするので、内容を AI に聞かない
     const unknown = payeeQuestions(
-      rows.filter((r) => !isAtm(r.raw_payee)),
+      rows.filter((r) => !isAtm(r.raw_payee) && !this.isTopUp(r)),
       new Set(this.rules.keys()),
     );
     let aiBusy = false;
@@ -276,6 +280,13 @@ export class Importer {
       .update({ status, notified: SILENT.has(status), ...extra })
       .eq('id', id)
       .eq('user_id', this.userId);
+  }
+
+  /** 電子マネーへの入金のメールか（出金元はその種類の口座） */
+  private isTopUp(row: ImportRow): boolean {
+    if (!row.kind || (row.kind !== 'debit_mail' && row.kind !== 'bank_out')) return false;
+    const account = this.accounts.get(SOURCE_OF[row.kind]);
+    return !!account && !!topUpTarget(row.raw_payee, this.accountList, account);
   }
 
   /**
@@ -379,6 +390,15 @@ export class Importer {
       if (id) await this.setStatus(row.id, 'duplicate', { duplicate_of: id });
       return !!id;
     };
+    /** 電子マネーへの入金なら、出金元 → その電子マネーの振替にする（2026-10-28 改善要望）。入金でなければ false */
+    const topUp = async () => {
+      const target = topUpTarget(row.raw_payee, this.accountList, account);
+      if (!target) return false;
+      if (!(await duplicate('from_account_id'))) {
+        await this.insert(row, { type: 'transfer', from_account_id: account, to_account_id: target, payee: 'チャージ', raw_payee: row.raw_payee });
+      }
+      return true;
+    };
     const expense = (r: { payee: string | null; categoryId: string | null; needsPayee: boolean }) =>
       this.insert(row, {
         type: 'expense',
@@ -398,6 +418,7 @@ export class Importer {
           await this.setStatus(row.id, 'merged', { transaction_id: bankMail.transaction_id });
           return;
         }
+        if (await topUp()) return;
         if (await duplicate('from_account_id')) return;
         await expense(this.resolve(row.raw_payee));
         return;
@@ -419,6 +440,7 @@ export class Importer {
           await this.insert(row, { type: 'transfer', from_account_id: account, to_account_id: this.atmCash, payee: 'ATM' });
           return;
         }
+        if (await topUp()) return;
         // 未確認の予定（定期支払い・クレカの引き落としなど）があれば、それを確認済みにする
         const { data: plans } = await this.db
           .from('transactions')

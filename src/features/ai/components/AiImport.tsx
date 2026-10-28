@@ -22,7 +22,7 @@ import {
   toDrafts,
 } from '../extract';
 import { clearImportJob, type ImportJob, loadImportJob, saveImportJob } from '../importJob';
-import { matchPaymentAccount } from '../payment';
+import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '../payment';
 import { useAttachments } from '../useAttachments';
 import { ImportReview } from './ImportReview';
 
@@ -54,7 +54,7 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
     setReading(true);
     files.setError(null);
     try {
-      const accountLikes = accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived }));
+      const accountLikes = accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived, isReserved: a.is_reserved }));
       const { records } = await extractRecords(
         extractPrompt(job.today, accountLikes, categories, aliases),
         job.texts,
@@ -70,11 +70,12 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
       const dates = found.map((d) => d.date).sort();
       const existing = await fetchDateAmountsBetween(addDays(dates[0], -1), addDays(dates[dates.length - 1], 1));
       // 支払いの口座: 書かれた支払い方法から決め、分からないセルフレジの画面・自販機は現金とみなす
-      const cash = accounts.find((a) => a.kind === 'cash' && !a.is_archived)?.id ?? null;
+      const cash = defaultCashAccount(accounts);
       const marked = assignPaymentAccounts(
         markDuplicates(found, existing),
         (payment) => matchPaymentAccount(payment, accounts),
         cash,
+        (payee) => matchStoreAccount(payee, accounts),
       );
       const picked = marked.filter((d) => !d.duplicate).map((d) => d.key);
       saveImportJob({ ...job, drafts: marked, selected: picked });

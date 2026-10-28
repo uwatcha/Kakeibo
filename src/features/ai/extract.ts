@@ -33,7 +33,7 @@ export type ImportDraft = {
 
 export type PhotoSource = 'receipt' | 'screen' | 'price' | 'other';
 
-type AccountLike = { id: string; kind: AccountKind; isArchived: boolean };
+type AccountLike = { id: string; kind: AccountKind; isArchived: boolean; isReserved?: boolean };
 
 /** 読み取りの指示。口座は置き換えた名前で渡し、カテゴリは名前（大分類 / 小分類）で選ばせる */
 export function extractPrompt(
@@ -61,8 +61,9 @@ export function extractPrompt(
     '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
     '- payment: レシートや画面に書かれている支払い方法をそのまま（例: 「現金」「クレジット」「サンプルカード」「交通系IC Suica」「PayPay」）。現金のレシートでお預り・お釣りが書かれていれば「現金」。書かれていなければ null',
     '- 自販機などの値段の表示は、買った商品の値段を金額にし、内容は「自販機（商品名）」のようにする。日付は写真から分からなければ今日',
+    // 普段使わない口座は、AI に選ばせない（2026-10-28 改善要望: 自動入力で使われることが多かった）
     `口座: ${accounts
-      .filter((a) => !a.isArchived)
+      .filter((a) => !a.isArchived && !a.isReserved)
       .map((a) => aliases.account(a.id))
       .join('、')}`,
     `支出のカテゴリ: ${names('expense')}`,
@@ -149,9 +150,14 @@ export function assignPaymentAccounts(
   drafts: readonly ImportDraft[],
   match: (payment: string | null) => string | null,
   cashAccountId: string | null,
+  /** お店ごとの決まり（サンプル店ならサンプル電子マネー）。AI が選んだ口座より優先する */
+  byStore: (payee: string | null) => string | null = () => null,
 ): ImportDraft[] {
   return drafts.map((d) => {
-    if (d.type !== 'expense' || d.fromAccountId) return d;
+    if (d.type !== 'expense') return d;
+    const store = byStore(d.payee);
+    if (store) return { ...d, fromAccountId: store, note: 'お店の決まり' };
+    if (d.fromAccountId) return d;
     const matched = match(d.payment);
     if (matched) return { ...d, fromAccountId: matched, note: d.note ?? `支払い方法: ${d.payment}` };
     if ((d.source === 'screen' || d.source === 'price') && d.note !== 'メールで記録済み' && cashAccountId) {

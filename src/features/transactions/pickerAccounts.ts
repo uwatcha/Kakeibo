@@ -20,6 +20,9 @@ export function pickerAccounts<T extends PickerAccount>(
     a.id !== value &&
     PERSON_KINDS.includes(a.kind) &&
     (a.is_reserved || (balances !== undefined && (balances.get(a.id) ?? 0) === 0));
-  const shown = candidates.filter((a) => !isHidden(a));
+  // 普段使わない口座（is_reserved）は後ろに並べる（2026-10-28 改善要望）。それ以外の順はそのまま
+  const shown = candidates
+    .filter((a) => !isHidden(a))
+    .sort((a, b) => Number(!!a.is_reserved) - Number(!!b.is_reserved));
   return { shown, hiddenCount: candidates.length - shown.length };
 }

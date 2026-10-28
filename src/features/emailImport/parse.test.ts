@@ -1,5 +1,5 @@
 // 本文は実際のメールの形をまねたもの（名前などは置き換えてある）
-import { isAtm, isDebitCardName, MAIL_SENDERS, normalizeText, parseMail } from '../../../supabase/functions/_shared/emailParse';
+import { isAtm, isDebitCardName, MAIL_SENDERS, topUpTarget, normalizeText, parseMail } from '../../../supabase/functions/_shared/emailParse';
 import { EMAIL_SENDERS } from './appsScript';
 
 const debitMail = {
@@ -169,5 +169,25 @@ describe('isAtm', () => {
     expect(isAtm('ＡＴＭから現金預入')).toBe(true);
     expect(isAtm('アクメワークス')).toBe(false);
     expect(isAtm(null)).toBe(false);
+  });
+});
+
+describe('topUpTarget（電子マネーへの入金）', () => {
+  const accounts = [
+    { id: 'bank', name: 'サンプル銀行', kind: 'bank', is_archived: false },
+    { id: 'emoneya', name: 'サンプル電子マネー', kind: 'emoney', is_archived: false },
+    { id: 'majica', name: 'majica', kind: 'cash', is_archived: false },
+    { id: 'suica', name: 'Suica', kind: 'emoney', is_archived: false },
+    { id: 'wallet', name: '財布', kind: 'cash', is_archived: false },
+  ];
+  it('実際のメールの名目から、入金先の口座を決める', () => {
+    expect(topUpTarget('サンプルデンシマネーデンシマネーニユウキンサイト', accounts, 'bank')).toBe('emoneya');
+    expect(topUpTarget('JD /MAJICA', accounts, 'bank')).toBe('majica');
+    expect(topUpTarget('ジエイアールヒガシニホンモバイルスイカ', accounts, 'bank')).toBe('suica');
+  });
+  it('お店での支払いは入金にしない', () => {
+    expect(topUpTarget('ラクテンペイ フアミリーマート', accounts, 'bank')).toBeNull();
+    expect(topUpTarget('サンプルデビット', accounts, 'bank')).toBeNull();
+    expect(topUpTarget(null, accounts, 'bank')).toBeNull();
   });
 });

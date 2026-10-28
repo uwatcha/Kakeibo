@@ -6,7 +6,7 @@ import { fetchAccountBalances, fetchAccounts } from '@/features/accounts/api';
 import { buildAliases } from '@/features/ai/anonymize';
 import { AiError, extractRecords } from '@/features/ai/api';
 import { assignPaymentAccounts, extractPrompt, markDuplicates, toDrafts } from '@/features/ai/extract';
-import { matchPaymentAccount } from '@/features/ai/payment';
+import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
 import { fetchCategories } from '@/features/categories/api';
 import { fetchDateAmountsBetween } from '@/features/transactions/api';
 import { isConfirmedOnSave } from '@/features/transactions/confirmation';
@@ -75,11 +75,11 @@ export async function loadPhotoContext() {
   });
   const prompt = `${extractPrompt(
     today,
-    accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived })),
+    accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived, isReserved: a.is_reserved })),
     categories,
     aliases,
   )}\n${PHOTO_PROMPT_EXTRA}`;
-  const cash = accounts.find((a) => a.kind === 'cash' && !a.is_archived)?.id ?? null;
+  const cash = defaultCashAccount(accounts);
   return { today, accounts, categories, aliases, prompt, cash };
 }
 
@@ -112,6 +112,7 @@ export async function recordPhoto(
     markDuplicates(found, existing),
     (payment) => matchPaymentAccount(payment, accounts),
     cash,
+    (payee) => matchStoreAccount(payee, accounts),
   );
   for (const [index, { draft, status }] of planPhotoRecords(drafts, cash).entries()) {
     let transactionId: string | null = null;
