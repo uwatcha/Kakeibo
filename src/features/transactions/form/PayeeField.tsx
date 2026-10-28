@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { type Control, Controller } from 'react-hook-form';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Chip, TextInput } from 'react-native-paper';
 
 import { suggestPayees } from '../payeeSuggest';
@@ -14,7 +14,10 @@ type Props = {
   onCommit: (payee: string) => void;
 };
 
-/** 内容の欄。入力中は、入力した文字を含む過去の内容を候補に出す */
+/**
+ * 内容の欄。入力中は、入力した文字を含む過去の内容を候補に出す。
+ * 候補は欄の上に横1行で出す（下に出すとキーボードに隠れる。2026-10-28 改善要望）
+ */
 export function PayeeField({ control, history, onCommit }: Props) {
   const [focused, setFocused] = useState(false);
   return (
@@ -23,6 +26,29 @@ export function PayeeField({ control, history, onCommit }: Props) {
       name="payee"
       render={({ field: { onChange, onBlur, value } }) => (
         <View>
+          {focused && (
+            <ScrollView
+              horizontal
+              keyboardShouldPersistTaps="handled"
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestions}
+            >
+              {suggestPayees(history, value).map((payee) => (
+                <Chip
+                  key={payee}
+                  compact
+                  icon="history"
+                  onPress={() => {
+                    onChange(payee);
+                    // キーボードは閉じない（閉じると欄を離れたときの処理が、押す前の文字でカテゴリを予測し直してしまう）
+                    onCommit(payee);
+                  }}
+                >
+                  {payee}
+                </Chip>
+              ))}
+            </ScrollView>
+          )}
           <TextInput
             mode="outlined"
             label="内容（任意）"
@@ -35,23 +61,6 @@ export function PayeeField({ control, history, onCommit }: Props) {
               onCommit(value);
             }}
           />
-          {focused && (
-            <View style={styles.suggestions}>
-              {suggestPayees(history, value).map((payee) => (
-                <Chip
-                  key={payee}
-                  compact
-                  icon="history"
-                  onPress={() => {
-                    onChange(payee);
-                    onCommit(payee);
-                  }}
-                >
-                  {payee}
-                </Chip>
-              ))}
-            </View>
-          )}
         </View>
       )}
     />
@@ -59,5 +68,5 @@ export function PayeeField({ control, history, onCommit }: Props) {
 }
 
 const styles = StyleSheet.create({
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  suggestions: { gap: 6, paddingBottom: 6 },
 });

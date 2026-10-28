@@ -1,4 +1,4 @@
-import { addMonths } from '@/lib/date';
+import { addDays, addMonths } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
@@ -179,6 +179,20 @@ export async function searchTransactions(filter: string): Promise<Transaction[]>
 }
 
 /** 同じ日・同じ金額の記録（重複入力の確認用）。excludeId は編集中の記録 */
+/** 同じ金額で、date の前後 days 日の記録（重複の可能性をすべて見るため。日付順） */
+export async function fetchSameAmountAround(date: string, amount: number, days: number): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('amount', amount)
+    .gte('date', addDays(date, -days))
+    .lte('date', addDays(date, days))
+    .order('date')
+    .limit(20);
+  if (error) throw error;
+  return data;
+}
+
 export async function findSameDayAmount(date: string, amount: number, excludeId?: string): Promise<Transaction[]> {
   let query = supabase.from('transactions').select('*').eq('date', date).eq('amount', amount).limit(5);
   if (excludeId) query = query.neq('id', excludeId);

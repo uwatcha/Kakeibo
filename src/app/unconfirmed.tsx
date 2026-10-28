@@ -16,6 +16,7 @@ import {
   useNeedsPayee,
   useOpenImports,
 } from '@/features/emailImport/hooks';
+import { DuplicateCandidates } from '@/features/emailImport/components/DuplicateCandidates';
 import type { Transaction } from '@/features/transactions/api';
 import { useConfirmTransactions, useUnconfirmed } from '@/features/transactions/hooks';
 import { amountKindOf, describeAccounts, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
@@ -55,6 +56,8 @@ export default function ReviewScreen() {
   const reviewed = useMarkReviewed();
   const dismiss = useDismissImport();
   const addDuplicate = useAddDuplicateImport();
+  // 重複の可能性で、重なっていそうな記録を開いている行
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
 
   const queries = [unconfirmed, autoAdded, open, needsPayee, accounts];
@@ -174,7 +177,8 @@ export default function ReviewScreen() {
                   .filter(Boolean)
                   .join('・')}
                 wrap
-                onPress={i.duplicate_of ? () => openTransaction(i.duplicate_of!) : undefined}
+                // 押すと、重なっていそうな記録（同じ金額・前後3日）をすべて下に出す
+                onPress={i.date && i.amount ? () => setExpanded(expanded === i.id ? null : i.id) : undefined}
                 right={
                   <Amount
                     value={i.amount ?? 0}
@@ -183,6 +187,7 @@ export default function ReviewScreen() {
                   />
                 }
               />
+              {expanded === i.id && i.date && i.amount && <DuplicateCandidates date={i.date} amount={i.amount} />}
               <View style={styles.actions}>
                 <Button compact onPress={() => dismiss.mutate(i.id)} disabled={busy}>
                   追加しない
