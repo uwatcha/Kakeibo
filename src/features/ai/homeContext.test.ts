@@ -30,13 +30,11 @@ describe('homeContext', () => {
           to_account_id: null,
         },
       ],
-      periodMovements: [],
-      cardSettings: [],
       dailyLiving: 0,
     });
     const text = homeContext(figures, { account: (id) => (id === 'bank' ? '銀行A' : '銀行B') });
     expect(text).toContain('実質残高: 60,000円');
-    expect(text).toContain('月末までに使える額: 30,000円');
+    expect(text).toContain('月末までに残る額: 30,000円');
     expect(text).toContain('足りなくなる口座: 銀行A が 2026-10-30 に −20,000円（振替で足りる（銀行Bから 20,000円））');
     expect(text).not.toContain('本当の名前');
   });

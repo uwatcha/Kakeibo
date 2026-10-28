@@ -1,4 +1,4 @@
-import { type HomeFigures, shortfallTitle, untilPaydayLabel } from '@/features/home/figures';
+import { budgetCard, type HomeFigures } from '@/features/home/figures';
 import { formatYen } from '@/lib/money';
 
 import type { Aliases } from './anonymize';
@@ -10,19 +10,16 @@ import type { Aliases } from './anonymize';
 export function homeContext(figures: HomeFigures, aliases: Pick<Aliases, 'account'>): string {
   const { available, summary, budget } = figures;
   const lines = ['## ホームに出ている額（今の画面の表示）'];
-  lines.push(
-    `- 実質残高: ${formatYen(available.amount)}${available.cardHorizon ? `（${available.cardHorizon}までの予定 ${formatYen(available.planned)} を含む）` : ''}`,
-    `- 純資産: ${formatYen(summary.netWorth)}`,
-  );
+  lines.push(`- 実質残高: ${formatYen(available.amount)}`, `- 純資産: ${formatYen(summary.netWorth)}`);
   if (budget) {
-    const { result } = budget;
-    const title = result.amount < 0 ? shortfallTitle(budget) : budget.title;
-    const until = untilPaydayLabel(budget);
+    const show = (key: Parameters<typeof budgetCard>[1]) => {
+      const card = budgetCard(budget, key);
+      return card.amount < 0 ? `${card.shortTitle}: ${formatYen(-card.amount)}` : `${card.title}: ${formatYen(card.amount)}`;
+    };
     lines.push(
-      `- ${title}: ${formatYen(Math.abs(result.amount))}（${budget.through}まで・あと${budget.daysLeft}日${budget.perDay !== null ? `・1日あたり ${formatYen(budget.perDay)}` : ''}）`,
-      `  - 内訳: 今の残高（現金・銀行など）${formatYen(budget.cashBalance)} / 予定 ${formatYen(result.planned)} / 今の期間のクレカの利用 −${formatYen(result.cardUsage)} / 取り置き −${formatYen(result.reserve)}`,
-      ...result.shortfalls.map((f) => `  - 取り置きの内訳: ${f.from}〜${f.to}の不足 ${formatYen(f.amount)}`),
-      `- ${until.label}: ${formatYen(until.amount)}`,
+      `- ${show('untilPayday')}（${budget.through}まで・あと${budget.daysLeft}日${budget.perDay !== null ? `・1日あたり ${formatYen(budget.perDay)}` : ''}。実質残高 ${formatYen(available.amount)} ＋ 予定 ${formatYen(budget.planned)}）`,
+      `- ${show('afterReserve')}（取り置き ${formatYen(budget.reserve)} = ${budget.next.from}〜${budget.next.through} の生活費 ${formatYen(budget.dailyLiving * budget.next.days)} − その期間の予定 ${formatYen(budget.next.planned)}。足りれば 0）`,
+      `- ${show('free')}（給料日までの生活費 ${formatYen(budget.livingUntil)} = 1日 ${formatYen(budget.dailyLiving)} × ${budget.daysLeft}日 を引いた額）`,
     );
   }
   for (const s of figures.shortages) {

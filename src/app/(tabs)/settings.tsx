@@ -28,7 +28,7 @@ export default function SettingsScreen() {
   const { session } = useAuth();
   const [exporting, setExporting] = useState<'csv' | 'backup' | null>(null);
   const [exportFailed, setExportFailed] = useState(false);
-  // 生活費（給料日までに使える額の取り置きの計算に使う）。空なら記録から自動で見積もる
+  // 生活費（ホームの取り置き後に使える額・自由に使える額の計算に使う）。空なら記録から自動で見積もる
   const living = useDailyLiving(toTokyoDateString());
   const saveLiving = useSaveMonthlyLivingCost();
   // 1日と1か月の2つの欄。片方を入れると、もう片方を30日で換算して入れる（保存は1か月分）

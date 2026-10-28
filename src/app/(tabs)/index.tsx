@@ -12,28 +12,29 @@ import { homeSheet, type HomeSheetKey } from '@/features/home/breakdown';
 import { AccountSections } from '@/features/home/components/AccountSections';
 import { ReviewCard } from '@/features/home/components/ReviewCard';
 import { ShortageCard } from '@/features/home/components/ShortageCard';
-import { type HomeBudget, shortfallTitle, untilPaydayLabel } from '@/features/home/figures';
+import { budgetCard, type BudgetCardKey, type HomeBudget } from '@/features/home/figures';
 import { useHomeFigures } from '@/features/home/hooks';
-import { formatDay, toTokyoDateString } from '@/lib/date';
+import { toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { SPACING } from '@/theme';
 
 /**
- * 給料日までに使える額のカード。マイナスなら「足りない額」に言い換えて正の数を赤で出し、元の見出しを取り消し線で残す。
- * カードの下に、2か月先は見ずに次の給料日まで乗り切れるかの額
+ * 給料日までの3つのカード（給料日までに残る額・取り置き後に使える額・自由に使える額）。
+ * マイナスなら「〜に足りない額」に言い換えて正の数を赤で出し、元の見出しを取り消し線で残す
  */
-function budgetPage(budget: HomeBudget, onPress: () => void) {
-  const short = budget.result.amount < 0;
-  const until = untilPaydayLabel(budget);
+function budgetPage(budget: HomeBudget, key: BudgetCardKey, onPress: () => void) {
+  const card = budgetCard(budget, key);
+  const short = card.amount < 0;
+  // 1日あたりは、給料日までに残る額と自由に使える額だけ（日割りで使う額なので）
+  const perDay = key !== 'afterReserve' && card.amount > 0 ? Math.floor(card.amount / budget.daysLeft) : null;
   return {
-    title: short ? shortfallTitle(budget) : budget.title,
-    replacedTitle: short ? budget.title : undefined,
+    title: short ? card.shortTitle : card.title,
+    replacedTitle: short ? card.title : undefined,
     tone: short ? ('negative' as const) : undefined,
-    amount: Math.abs(budget.result.amount),
-    detail: [budget.perDay !== null ? `1日あたり ${formatYen(budget.perDay)}` : null, `あと${budget.daysLeft}日`]
+    amount: Math.abs(card.amount),
+    detail: [perDay !== null ? `1日あたり ${formatYen(perDay)}` : null, `あと${budget.daysLeft}日`]
       .filter(Boolean)
       .join('・'),
-    sub: { label: until.label, amount: until.amount, tone: until.short ? ('negative' as const) : undefined },
     onPress,
   };
 }
@@ -74,14 +75,13 @@ export default function HomeScreen() {
 
         <BalanceCarousel
           pages={[
-            {
-              title: '実質残高',
-              amount: available.amount,
-              detail: available.cardHorizon ? `${formatDay(available.cardHorizon)}までの予定を含む` : undefined,
-              onPress: () => setBreakdown('available'),
-            },
+            { title: '実質残高', amount: available.amount, onPress: () => setBreakdown('available') },
             { title: '純資産', amount: summary.netWorth, onPress: () => setBreakdown('net') },
-            ...(budget ? [budgetPage(budget, () => setBreakdown('spendable'))] : []),
+            ...(budget
+              ? (['untilPayday', 'afterReserve', 'free'] as const).map((key) =>
+                  budgetPage(budget, key, () => setBreakdown(key)),
+                )
+              : []),
           ]}
         />
 

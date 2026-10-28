@@ -7,9 +7,9 @@ import { TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 
-import { type HomeBudget, type HomeFigures, untilPaydayLabel } from './figures';
+import { budgetCard, type BudgetCardKey, type HomeBudget, type HomeFigures } from './figures';
 
-export type HomeSheetKey = 'available' | 'net' | 'spendable';
+export type HomeSheetKey = 'available' | 'net' | BudgetCardKey;
 export type HomeSheet = { title: string; total: number; sections: BreakdownSection[]; note?: string };
 
 const accountRows = (list: readonly AccountBalance[]): BreakdownRow[] =>
@@ -45,55 +45,93 @@ function plannedSection(
   return { title: `予定（${formatDay(through)}まで）`, total, rows };
 }
 
-/** 給料日までに使える額の内訳: 今の残高・予定・今の期間のクレカの利用・取り置き */
-function budgetSheet(budget: HomeBudget, future: readonly Movement[], today: string): HomeSheet {
-  const { result } = budget;
-  const until = untilPaydayLabel(budget);
-  return {
-    title: budget.title,
-    total: result.amount,
-    note: [
-      `${until.label} ${formatYen(until.amount)}`,
-      budget.perDay !== null ? `1日あたり ${formatYen(budget.perDay)}（あと${budget.daysLeft}日）` : null,
-    ]
-      .filter(Boolean)
-      .join('・'),
-    sections: [
-      {
-        title: '今の残高（現金・銀行など）',
-        total: budget.cashBalance,
-        rows: accountRows(budget.cashAccounts.filter((a) => a.balance !== 0).sort((a, b) => b.balance - a.balance)),
-      },
-      plannedSection(future, today, budget.through, result.planned, budget.cashIds),
-      {
-        title: '今の期間のクレカの利用',
-        total: 0 - result.cardUsage,
-        rows:
-          result.cardUsage > 0
-            ? [
-                {
-                  key: 'card',
-                  icon: 'credit-card',
-                  title: '給料日の後に引き落とされる分',
-                  amount: 0 - result.cardUsage,
-                  kind: 'delta',
-                },
-              ]
-            : [],
-      },
-      {
-        title: '取り置き（先の給料で足りない分）',
-        total: 0 - result.reserve,
-        rows: result.shortfalls.map((f) => ({
-          key: f.from,
-          icon: 'piggy-bank-outline',
-          title: `${formatDay(f.from)}〜${formatDay(f.to)}の不足`,
-          amount: 0 - f.amount,
-          kind: 'delta',
-        })),
-      },
-    ],
-  };
+/** 給料日までに残る額（と、それをもとにした額）の土台: 実質残高 ＋ 給料日の前日までの予定 */
+function untilPaydaySections(
+  budget: HomeBudget,
+  figures: HomeFigures,
+  accounts: readonly AccountBalance[],
+  future: readonly Movement[],
+  today: string,
+): BreakdownSection[] {
+  const { available } = figures;
+  const included = accounts
+    .filter((a) => available.targets.has(a.id) && a.balance !== 0)
+    .sort((a, b) => b.balance - a.balance);
+  return [
+    { title: '実質残高', total: available.amount, rows: accountRows(included) },
+    plannedSection(future, today, budget.through, budget.planned, available.targets),
+  ];
+}
+
+const livingRow = (key: string, title: string, amount: number): BreakdownRow => ({
+  key,
+  icon: 'silverware-fork-knife',
+  title,
+  amount,
+  kind: 'delta',
+});
+
+/** 給料日までの3つの額の内訳 */
+function budgetSheet(
+  key: BudgetCardKey,
+  budget: HomeBudget,
+  figures: HomeFigures,
+  accounts: readonly AccountBalance[],
+  future: readonly Movement[],
+  today: string,
+): HomeSheet {
+  const card = budgetCard(budget, key);
+  const base = untilPaydaySections(budget, figures, accounts, future, today);
+  const untilTitle = budgetCard(budget, 'untilPayday').title;
+  const perDay = (amount: number) =>
+    amount > 0 ? `1日あたり ${formatYen(Math.floor(amount / budget.daysLeft))}（あと${budget.daysLeft}日）` : undefined;
+  switch (key) {
+    case 'untilPayday':
+      return { title: card.title, total: card.amount, sections: base, note: perDay(card.amount) };
+    case 'afterReserve': {
+      const { next } = budget;
+      const living = budget.dailyLiving * next.days;
+      return {
+        title: card.title,
+        total: card.amount,
+        sections: [
+          { title: untilTitle, total: budget.untilPayday, rows: [] },
+          {
+            title: `取り置き（${formatDay(next.from)}〜${formatDay(next.through)}に足りない分）`,
+            total: 0 - budget.reserve,
+            rows: [
+              ...plannedSection(future, budget.through, next.through, next.planned, figures.available.targets).rows,
+              livingRow('living', `生活費 ${formatYen(budget.dailyLiving)} × ${next.days}日`, 0 - living),
+            ],
+          },
+        ],
+        note:
+          budget.reserve === 0
+            ? `次の期間の予定 ${formatYen(next.planned)}・生活費 ${formatYen(living)}（足りるので取り置きなし）`
+            : undefined,
+      };
+    }
+    case 'free':
+      return {
+        title: card.title,
+        total: card.amount,
+        sections: [
+          { title: untilTitle, total: budget.untilPayday, rows: [] },
+          {
+            title: '給料日までの生活費',
+            total: 0 - budget.livingUntil,
+            rows: [
+              livingRow(
+                'living',
+                `生活費 ${formatYen(budget.dailyLiving)} × ${budget.daysLeft}日`,
+                0 - budget.livingUntil,
+              ),
+            ],
+          },
+        ],
+        note: perDay(card.amount),
+      };
+  }
 }
 
 /** ホームのカードを押したときの内訳 */
@@ -114,9 +152,6 @@ export function homeSheet(
         sections: [
           { title: 'プラスの口座', total: split.plusTotal, rows: accountRows(split.plus) },
           { title: 'マイナスの口座', total: split.minusTotal, rows: accountRows(split.minus) },
-          ...(future && available.cardHorizon
-            ? [plannedSection(future, today, available.cardHorizon, available.planned, available.targets)]
-            : []),
         ],
       };
     }
@@ -132,7 +167,7 @@ export function homeSheet(
         ],
       };
     }
-    case 'spendable':
-      return figures.budget && future ? budgetSheet(figures.budget, future, today) : null;
+    default:
+      return figures.budget && future ? budgetSheet(key, figures.budget, figures, accounts, future, today) : null;
   }
 }

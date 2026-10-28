@@ -1,7 +1,7 @@
 import type { AccountBalance } from '@/features/accounts/summary';
 import type { Movement } from '@/features/reports/api';
 
-import { computeHomeFigures, currentPeriodStart, untilPaydayLabel } from './figures';
+import { budgetCard, computeHomeFigures } from './figures';
 
 const account = (id: string, kind: AccountBalance['kind'], balance: number, extra: Partial<AccountBalance> = {}) => ({
   id,
@@ -38,44 +38,53 @@ const accounts = [
   account('nisa', 'investment', 50000, { includeInAvailable: false }),
 ];
 
-describe('currentPeriodStart', () => {
-  it('前回の給料日。働き先がなければ月の初め', () => {
-    expect(currentPeriodStart(employers, today)).toBe('2026-09-25');
-    expect(currentPeriodStart([], today)).toBe('2026-10-01');
-  });
-});
-
 describe('computeHomeFigures', () => {
-  it('実質残高は、含めるクレカのいちばん後の引き落とし日までの予定を含める', () => {
-    const future = [
-      m('2026-10-27', 30000, 'bank', 'card'), // 引き落とし（含める口座どうし → 0）
-      m('2026-10-26', 5000, 'bank', null), // 引き落としより前の支払い → 含める
-      m('2026-11-01', 9000, 'bank', null), // 引き落としより後 → 含めない
-    ];
+  it('実質残高は、含める口座の今の残高の合計（クレカの未払いを引く。先の予定は見ない）', () => {
+    const future = [m('2026-10-26', 5000, 'bank', null, 'expense')];
     const figures = computeHomeFigures({ today, accounts, employers, future });
-    expect(figures.available).toMatchObject({ cardHorizon: '2026-10-27', planned: -5000, amount: 65000 });
-    // 材料がそろうまで使える額は出さない
+    expect(figures.available.amount).toBe(70000);
+    // 生活費が読めるまで、給料日までの額は出さない
     expect(figures.budget).toBeNull();
   });
 
-  it('使える額は、含める資産の口座だけで計算し、給料日の前日までの日数で1日あたりを出す', () => {
-    const figures = computeHomeFigures({
-      today,
-      accounts,
-      employers,
-      future: [m('2026-10-23', 20000, 'bank', null)],
-      periodMovements: [],
-      cardSettings: [],
-      dailyLiving: 0,
+  // 次の給料日は 10/23（25日が日曜なので前の金曜）、その次は 11/25
+  const future = [
+    m('2026-10-22', 20000, 'bank', null, 'expense'),
+    m('2026-10-23', 200000, null, 'bank', 'income'),
+    m('2026-10-27', 30000, 'bank', 'card'), // クレカの引き落とし（含める口座どうし → 0）
+    m('2026-11-10', 50000, 'bank', null, 'expense'),
+  ];
+
+  it('給料日までに残る額 = 実質残高 ＋ 給料日の前日までの予定。自由に使える額はそこから生活費を引く', () => {
+    const { budget } = computeHomeFigures({ today, accounts, employers, future, dailyLiving: 3000 });
+    expect(budget).toMatchObject({
+      through: '2026-10-22',
+      daysLeft: 2,
+      planned: -20000,
+      untilPayday: 50000,
+      perDay: 25000,
+      livingUntil: 6000,
+      free: 44000,
     });
-    // 次の給料日は 10/23（25日が日曜なので前の金曜）
-    expect(figures.budget).toMatchObject({ through: '2026-10-22', daysLeft: 2, cashBalance: 100000 });
-    expect(figures.budget!.result.untilPayday).toBe(100000);
-    expect(untilPaydayLabel(figures.budget!)).toEqual({
-      label: '次の給料日までに残る額',
-      amount: 100000,
-      short: false,
+  });
+
+  it('次の期間の予定（給料を含む）で生活費が足りれば、取り置きはしない', () => {
+    const { budget } = computeHomeFigures({ today, accounts, employers, future, dailyLiving: 3000 });
+    expect(budget!.next).toEqual({ from: '2026-10-23', through: '2026-11-24', days: 33, planned: 150000 });
+    expect(budget).toMatchObject({ reserve: 0, afterReserve: 50000 });
+  });
+
+  it('足りなければ、その分を取り置き、マイナスなら「足りない額」と言い換える', () => {
+    const smallSalary = future.map((x) => (x.type === 'income' ? { ...x, amount: 80000 } : x));
+    const { budget } = computeHomeFigures({ today, accounts, employers, future: smallSalary, dailyLiving: 3000 });
+    // 生活費 3,000 × 33日 = 99,000、予定 +80,000 − 50,000 = 30,000 → 69,000 足りない
+    expect(budget).toMatchObject({ reserve: 69000, afterReserve: -19000 });
+    expect(budgetCard(budget!, 'afterReserve')).toEqual({
+      title: '取り置き後に使える額',
+      shortTitle: '取り置きに足りない額',
+      amount: -19000,
     });
+    expect(budgetCard(budget!, 'untilPayday').title).toBe('給料日までに残る額');
   });
 
   it('予定で残高がマイナスになる口座を出し、振替に使う口座から足りるか見る', () => {

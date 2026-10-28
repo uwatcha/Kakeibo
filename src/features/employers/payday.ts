@@ -100,7 +100,7 @@ export function paydaysBetween(rule: PaydayRule, after: string, through: string)
 }
 
 /**
- * 期間の区切り（給料日までに使える額で使う）: 月ごとに、すべての働き先の給料をもらい終える日（その月でいちばん遅い給料日）。
+ * 期間の区切り（ホームの給料日までの額で使う）: 月ごとに、すべての働き先の給料をもらい終える日（その月でいちばん遅い給料日）。
  * after より後、through までを古い順に返す
  */
 export function allPaidDays(employers: readonly PaydayRule[], after: string, through: string): string[] {
