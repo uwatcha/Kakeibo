@@ -311,19 +311,24 @@ export class Importer {
     return (best?.id as string | undefined) ?? null;
   }
 
-  /** 手入力の記録で、同じ口座・同じ金額・日付が前後1日以内のもの */
+  /**
+   * メール以外で入った記録との重複: 手入力の記録は同じ口座・同じ金額・前後1日。写真から入った記録は、口座を推定で決めている
+   * （現金・サンプル電子マネーなど）ので、口座が違っても同じ金額・前後1日なら重複とみなす（2026-10-28 改善要望: 写真で先に
+   * 記録した支払いが、あとから届いたカードのメールで二重に入っていた）
+   */
   private async manualDuplicate(side: 'from_account_id' | 'to_account_id', account: string, row: ImportRow) {
     const { data } = await this.db
       .from('transactions')
-      .select('id')
+      .select('id, auto_source, from_account_id, to_account_id')
       .eq('user_id', this.userId)
-      .eq(side, account)
       .eq('amount', row.amount!)
-      .is('auto_source', null)
       .gte('date', addDays(row.date!, -DUPLICATE_DAYS))
       .lte('date', addDays(row.date!, DUPLICATE_DAYS))
-      .limit(1);
-    return data?.[0]?.id as string | undefined;
+      .limit(20);
+    const found = (data ?? []).find(
+      (t) => (t.auto_source === null && t[side] === account) || (t.auto_source === 'photo' && side === 'from_account_id'),
+    );
+    return found?.id as string | undefined;
   }
 
   /** ほかのメールで記録済みの同じ利用（kinds のメールで、まだほかの行と結び付いていない記録） */
