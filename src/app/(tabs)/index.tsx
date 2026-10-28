@@ -75,6 +75,7 @@ export default function HomeScreen() {
 
         <BalanceCarousel
           pages={[
+            { title: '普段使う口座', amount: summary.everydayTotal, onPress: () => setBreakdown('everyday') },
             { title: '実質残高', amount: available.amount, onPress: () => setBreakdown('available') },
             { title: '純資産', amount: summary.netWorth, onPress: () => setBreakdown('net') },
             ...(budget

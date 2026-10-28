@@ -50,7 +50,7 @@ const evaluate = (f: Formula) =>
   }, 0);
 
 describe('ホームの内訳の計算式', () => {
-  it.each(['available', 'net', 'untilPayday', 'afterReserve', 'free'] as const)(
+  it.each(['everyday', 'available', 'net', 'untilPayday', 'afterReserve', 'free'] as const)(
     '%s: 式を計算すると表示の額になる',
     (key) => {
       const sheet = homeSheet(key, figures, accounts, future, today)!;

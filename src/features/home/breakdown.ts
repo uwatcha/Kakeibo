@@ -9,7 +9,7 @@ import { formatYen } from '@/lib/money';
 
 import { budgetCard, type BudgetCardKey, type HomeBudget, type HomeFigures } from './figures';
 
-export type HomeSheetKey = 'available' | 'net' | BudgetCardKey;
+export type HomeSheetKey = 'everyday' | 'available' | 'net' | BudgetCardKey;
 export type HomeSheet = { title: string; total: number; sections: BreakdownSection[]; note?: string; formulas?: Formula[] };
 
 const accountRows = (list: readonly AccountBalance[]): BreakdownRow[] =>
@@ -190,6 +190,21 @@ export function homeSheet(
 ): HomeSheet | null {
   const { summary, available } = figures;
   switch (key) {
+    case 'everyday': {
+      // 普段使う口座（現金・銀行・電子マネー・投資のうち、普段使わない口座でないもの）の合計（2026-10-28 ユーザーの要望）
+      const list = [...summary.everyday].sort((a, b) => b.balance - a.balance);
+      return {
+        title: '普段使う口座',
+        total: summary.everydayTotal,
+        sections: [{ title: '口座', total: summary.everydayTotal, rows: accountRows(list) }],
+        formulas: [
+          {
+            result: '普段使う口座',
+            terms: list.map((a, i) => ({ ...(i > 0 && { op: '＋' as const }), label: a.name, value: a.balance })),
+          },
+        ],
+      };
+    }
     case 'available': {
       const split = availableBreakdown(accounts);
       return {

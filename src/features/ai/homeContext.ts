@@ -10,7 +10,11 @@ import type { Aliases } from './anonymize';
 export function homeContext(figures: HomeFigures, aliases: Pick<Aliases, 'account'>): string {
   const { available, summary, budget } = figures;
   const lines = ['## ホームに出ている額（今の画面の表示）'];
-  lines.push(`- 実質残高: ${formatYen(available.amount)}`, `- 純資産: ${formatYen(summary.netWorth)}`);
+  lines.push(
+    `- 普段使う口座: ${formatYen(summary.everydayTotal)}`,
+    `- 実質残高: ${formatYen(available.amount)}`,
+    `- 純資産: ${formatYen(summary.netWorth)}`,
+  );
   if (budget) {
     const show = (key: Parameters<typeof budgetCard>[1]) => {
       const card = budgetCard(budget, key);
