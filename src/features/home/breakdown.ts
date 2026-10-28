@@ -1,5 +1,5 @@
 import { ACCOUNT_KIND_INFO } from '@/features/accounts/accountKinds';
-import type { BreakdownRow, BreakdownSection } from './components/BreakdownSheet';
+import type { BreakdownRow, BreakdownSection, Formula } from './components/BreakdownSheet';
 import { type AccountBalance, availableBreakdown } from '@/features/accounts/summary';
 import type { Movement } from '@/features/reports/api';
 import { effectOn } from '@/features/reports/plans';
@@ -10,7 +10,7 @@ import { formatYen } from '@/lib/money';
 import { budgetCard, type BudgetCardKey, type HomeBudget, type HomeFigures } from './figures';
 
 export type HomeSheetKey = 'available' | 'net' | BudgetCardKey;
-export type HomeSheet = { title: string; total: number; sections: BreakdownSection[]; note?: string };
+export type HomeSheet = { title: string; total: number; sections: BreakdownSection[]; note?: string; formulas?: Formula[] };
 
 const accountRows = (list: readonly AccountBalance[]): BreakdownRow[] =>
   list.map((a) => ({
@@ -83,11 +83,28 @@ function budgetSheet(
   const card = budgetCard(budget, key);
   const base = untilPaydaySections(budget, figures, accounts, future, today);
   const untilTitle = budgetCard(budget, 'untilPayday').title;
+  // 働き先がなければ月末で区切るので、項の名前も「月末まで」にする
+  const until = budget.hasPayday ? '給料日' : '月末';
+  const plannedLabel = budget.hasPayday ? '給料日の前日までの予定' : '月末までの予定';
   const perDay = (amount: number) =>
     amount > 0 ? `1日あたり ${formatYen(Math.floor(amount / budget.daysLeft))}（あと${budget.daysLeft}日）` : undefined;
   switch (key) {
     case 'untilPayday':
-      return { title: card.title, total: card.amount, sections: base, note: perDay(card.amount) };
+      return {
+        title: card.title,
+        total: card.amount,
+        sections: base,
+        note: perDay(card.amount),
+        formulas: [
+          {
+            result: card.title,
+            terms: [
+              { label: '実質残高', value: figures.available.amount },
+              { op: '＋', label: plannedLabel, value: budget.planned },
+            ],
+          },
+        ],
+      };
     case 'afterReserve': {
       const { next } = budget;
       const living = budget.dailyLiving * next.days;
@@ -105,10 +122,23 @@ function budgetSheet(
             ],
           },
         ],
-        note:
-          budget.reserve === 0
-            ? `次の期間の予定 ${formatYen(next.planned)}・生活費 ${formatYen(living)}（足りるので取り置きなし）`
-            : undefined,
+        formulas: [
+          {
+            result: card.title,
+            terms: [
+              { label: untilTitle, value: budget.untilPayday },
+              { op: '−', label: '取り置き', value: budget.reserve },
+            ],
+          },
+          {
+            result: '取り置き',
+            terms: [
+              { label: '次の期間の生活費', value: living },
+              { op: '−', label: '次の期間の予定（給料を含む）', value: next.planned },
+            ],
+            note: `次の期間: ${formatDay(next.from)}〜${formatDay(next.through)}（${next.days}日）。生活費 ${formatYen(budget.dailyLiving)} × ${next.days}日。マイナスなら 0`,
+          },
+        ],
       };
     }
     case 'free':
@@ -118,7 +148,7 @@ function budgetSheet(
         sections: [
           { title: untilTitle, total: budget.untilPayday, rows: [] },
           {
-            title: '給料日までの生活費',
+            title: `${until}までの生活費`,
             total: 0 - budget.livingUntil,
             rows: [
               livingRow(
@@ -130,6 +160,22 @@ function budgetSheet(
           },
         ],
         note: perDay(card.amount),
+        formulas: [
+          {
+            result: card.title,
+            terms: [
+              { label: untilTitle, value: budget.untilPayday },
+              { op: '−', label: `${until}までの生活費`, value: budget.livingUntil },
+            ],
+          },
+          {
+            result: `${until}までの生活費`,
+            terms: [
+              { label: '生活費（1日）', value: budget.dailyLiving },
+              { op: '×', label: `${until}までの日数`, value: budget.daysLeft, unit: 'day' },
+            ],
+          },
+        ],
       };
   }
 }
@@ -153,17 +199,37 @@ export function homeSheet(
           { title: 'プラスの口座', total: split.plusTotal, rows: accountRows(split.plus) },
           { title: 'マイナスの口座', total: split.minusTotal, rows: accountRows(split.minus) },
         ],
+        formulas: [
+          {
+            result: '実質残高',
+            terms: [
+              { label: 'プラスの口座', value: split.plusTotal },
+              { op: '＋', label: 'マイナスの口座（クレカの未払いなど）', value: split.minusTotal },
+            ],
+          },
+        ],
       };
     }
     case 'net': {
       const assets = accounts.filter((a) => a.balance > 0).sort((a, b) => b.balance - a.balance);
       const debts = accounts.filter((a) => a.balance < 0).sort((a, b) => a.balance - b.balance);
+      const assetTotal = assets.reduce((t, a) => t + a.balance, 0);
+      const debtTotal = debts.reduce((t, a) => t + a.balance, 0);
       return {
         title: '純資産',
         total: summary.netWorth,
         sections: [
-          { title: '資産', total: assets.reduce((t, a) => t + a.balance, 0), rows: accountRows(assets) },
-          { title: '負債', total: debts.reduce((t, a) => t + a.balance, 0), rows: accountRows(debts) },
+          { title: '資産', total: assetTotal, rows: accountRows(assets) },
+          { title: '負債', total: debtTotal, rows: accountRows(debts) },
+        ],
+        formulas: [
+          {
+            result: '純資産',
+            terms: [
+              { label: '資産（すべての口座のプラス）', value: assetTotal },
+              { op: '＋', label: '負債（すべての口座のマイナス）', value: debtTotal },
+            ],
+          },
         ],
       };
     }

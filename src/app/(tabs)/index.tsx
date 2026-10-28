@@ -114,6 +114,7 @@ export default function HomeScreen() {
           total={openSheet.total}
           sections={openSheet.sections}
           note={openSheet.note}
+          formulas={openSheet.formulas}
         />
       )}
     </View>
