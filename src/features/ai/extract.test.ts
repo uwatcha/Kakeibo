@@ -221,3 +221,18 @@ describe('レシートの品目の内訳', () => {
     expect(draft.items).toBeUndefined();
   });
 });
+
+describe('extractPrompt（品目のカテゴリ・外税）', () => {
+  it('品目ごとにカテゴリを決めること、外税は税込にすること、判断基準を伝える', () => {
+    const cats: Category[] = [
+      ...categories,
+      { ...base, id: 'naka', parent_id: 'food', kind: 'expense', name: '中食' },
+      { ...base, id: 'groc', parent_id: 'food', kind: 'expense', name: '食料品' },
+    ];
+    const prompt = extractPrompt('2026-11-02', [], cats, { account: () => '' });
+    expect(prompt).toContain('店の種類やレシート全体で決めない');
+    expect(prompt).toContain('本体 848円・8% → 916円');
+    expect(prompt).toContain('- 食費 / 中食:');
+    expect(prompt).toContain('- 食費 / 食料品:');
+  });
+});

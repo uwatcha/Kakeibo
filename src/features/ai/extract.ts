@@ -5,6 +5,7 @@ import { isConfirmedOnSave } from '@/features/transactions/confirmation';
 
 import type { Aliases } from './anonymize';
 import { mainCategory, toItemRows, type TransactionItem } from '@/features/transactions/items';
+import { categoryGuideLines } from './categoryGuide';
 
 /** AI入力で作れる記録の種類 */
 export type ImportType = 'expense' | 'income' | 'transfer';
@@ -61,7 +62,9 @@ export function extractPrompt(
     '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull","items":[{"name":"品名","amount":整数の円,"category":"カテゴリかnull"}]}]',
     '- expense は支払い（from が払った口座）、income は収入（to が入った口座）、transfer は自分の口座どうしの移動（from と to）',
     '- レシート1枚は合計額（実際に払った額）で1件にする。明細やCSVは1行1件',
-    '- レシートに品目が2つ以上書かれていれば、items に品目ごとの内訳を入れる: [{"name":"品名","amount":税込の整数の円,"category":"下の一覧の名前かnull"}]。品名からカテゴリを決める（例: 食べ物は食費、洗剤は日用品）。品目ごとの割引（「20円引」など）はその品目の金額から引く。合計にかかる割引・ポイント値引き・消費税の端数のずれは items に入れない（合計との差は家計簿の側で「割引・調整」にする）。品目が1つ・読めないなら items は省く',
+    '- レシートに品目が2つ以上書かれていれば、items に品目ごとの内訳を入れる: [{"name":"品名","amount":税込の整数の円,"category":"下の一覧の名前かnull"}]。品目1つずつ、下の「カテゴリの判断基準」に沿って品名からカテゴリを決める（同じレシートでも品目ごとに違ってよい。店の種類やレシート全体で決めない）。品目ごとの割引（「20円引」など）はその品目の金額から引く。合計にかかる割引・ポイント値引き・消費税の端数のずれは items に入れない（合計との差は家計簿の側で「割引・調整」にする）。品目が1つ・読めないなら items は省く',
+    '- 品目の金額は税込にする。「外税」のレシート（本体価格が並び、あとで消費税を足す）は、品目ごとに税率を掛けて四捨五入する（「*」「※」「軽」などの軽減税率の印がある品目は 8%、それ以外は 10%。例: 本体 848円・8% → 916円）。内税のレシートは書かれた金額のまま',
+    '- 品名の頭や後ろの印（「*」「※」「軽」など）は取り、略した品名は分かる範囲で読みやすくする（例: 「昔ながらのコロッケ（肉」→「昔ながらのコロッケ（肉）」）',
     '- 返金・キャンセルなど符号がマイナスの行は、記録にしない',
     '- 口座が分からなければ null',
     '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
@@ -74,6 +77,9 @@ export function extractPrompt(
       .join('、')}`,
     `支出のカテゴリ: ${names('expense')}`,
     `収入のカテゴリ: ${names('income')}`,
+    ...categoryGuideLines(
+      usable.filter((c) => c.kind === 'expense').map((c) => categoryLabel(c.id, usable) ?? c.name),
+    ),
     ...(userRules?.trim() ? ['# 自分で決めたルール（ほかの指示と食い違うときは、こちらを優先する）', userRules.trim()] : []),
   ].join('\n');
 }
