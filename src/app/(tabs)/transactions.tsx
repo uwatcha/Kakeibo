@@ -26,6 +26,7 @@ import {
 import { addMonths, formatMonth, monthStart, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { SPACING } from '@/theme';
+import { ADJUSTMENT_KEY } from '@/features/transactions/items';
 
 /** 大分類で絞り込む（その大分類の小分類も含む）。'none' は未分類の支出 */
 function filterByCategory(
@@ -35,8 +36,14 @@ function filterByCategory(
 ): Transaction[] {
   if (!categoryId) return [...transactions];
   if (categoryId === 'none') return transactions.filter((t) => t.type === 'expense' && !t.category_id);
+  // 内訳がある記録は、どれかの行がそのカテゴリ（調整は割引・調整）なら出す
+  if (categoryId === ADJUSTMENT_KEY) return transactions.filter((t) => t.items?.some((i) => i.is_adjustment));
   const ids = new Set([categoryId, ...categories.filter((c) => c.parent_id === categoryId).map((c) => c.id)]);
-  return transactions.filter((t) => t.category_id !== null && ids.has(t.category_id));
+  return transactions.filter((t) =>
+    t.items?.length
+      ? t.items.some((i) => i.category_id !== null && ids.has(i.category_id))
+      : t.category_id !== null && ids.has(t.category_id),
+  );
 }
 
 /** 月の収入・支出・差額。ラベルは小さく、金額を大きく */

@@ -1,6 +1,6 @@
 import type { AccountKind } from '@/features/accounts/accountKinds';
 import type { Category } from '@/features/categories/api';
-import { parseNonNegativeYen, parseYen } from '@/lib/money';
+import { parseNonNegativeYen, parseSignedYen, parseYen } from '@/lib/money';
 
 import type { Transaction, TransactionInsert } from '../api';
 import { isConfirmedOnSave } from '../confirmation';
@@ -13,6 +13,7 @@ import {
   type TransactionType,
   validateDraft,
 } from '../transactionRules';
+import { type ItemDraft, mainCategory, toItemDrafts, toItemRows, type TransactionItem } from '../items';
 
 /** 記録の入力画面（src/app/transaction/[id].tsx）のフォームの値。金額などは入力中の文字のまま持つ */
 export type FormValues = {
@@ -34,9 +35,11 @@ export type FormValues = {
   relatedTransactionId: string | null;
   /** 貸し金戻りのとき、それで返してもらった立て替え（保存のあとに立て替えの側に書く。setAdvancesRepaidBy） */
   repaidAdvanceIds: string[];
+  /** 支払いの内訳の品目の行（2026-11-02。空なら内訳なし。調整の行は保存のときに計算する） */
+  items: ItemDraft[];
 };
 
-export type FormErrors = DraftErrors & { listPrice?: string; pointsUsed?: string; employerId?: string };
+export type FormErrors = DraftErrors & { listPrice?: string; pointsUsed?: string; employerId?: string; items?: string };
 
 export function emptyFormValues(today: string): FormValues {
   return {
@@ -54,6 +57,7 @@ export function emptyFormValues(today: string): FormValues {
     employerId: null,
     relatedTransactionId: null,
     repaidAdvanceIds: [],
+    items: [],
   };
 }
 
@@ -75,6 +79,7 @@ export function toFormValues(t: Transaction): FormValues {
     relatedTransactionId: t.related_transaction_id,
     // 立て替えの側に書いてあるので、画面で読み込んでから入れる
     repaidAdvanceIds: [],
+    items: t.type === 'expense' ? toItemDrafts(t.items) : [],
   };
 }
 
@@ -94,7 +99,16 @@ export function validateForm(
   if (values.type === 'income' && isSalaryCategory(values.categoryId, categories) && !values.employerId) {
     errors.employerId = '収入元を選んでください';
   }
+  if (values.type === 'expense' && values.items.some((i) => i.amount.trim() !== '' && parseSignedYen(i.amount) === null)) {
+    errors.items = '内訳の金額は整数（円）で入力してください';
+  }
   return errors;
+}
+
+/** 保存する内訳の行（支払いだけ。合計は金額の欄） */
+export function itemRows(values: FormValues): TransactionItem[] {
+  const total = parseYen(values.amount);
+  return values.type === 'expense' && total !== null ? toItemRows(total, values.items) : [];
 }
 
 /** フォームの値を保存する行にする（validateForm を通ったあとに呼ぶ）。その種類で使わない欄は空にする */
@@ -106,7 +120,12 @@ export function toTransactionRow(values: FormValues, categories: readonly Catego
     amount,
     from_account_id: fromAccountId,
     to_account_id: toAccountId,
-    category_id: TRANSACTION_RULES[values.type].categoryKind ? values.categoryId : null,
+    // 内訳があれば、いちばん金額の大きい品目のカテゴリを記録のカテゴリにする（一覧などに出す代表）
+    category_id: TRANSACTION_RULES[values.type].categoryKind
+      ? values.type === 'expense' && itemRows(values).length > 0
+        ? mainCategory(itemRows(values))
+        : values.categoryId
+      : null,
     date: values.date,
     payee: values.payee.trim() || null,
     memo: values.memo.trim() || null,

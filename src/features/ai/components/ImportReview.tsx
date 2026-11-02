@@ -84,7 +84,15 @@ export function ImportReview({
               title={d.payee ?? TRANSACTION_RULES[d.type].label}
               subtitle={
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {[formatDay(d.date), categoryLabel(d.categoryId, categories), where || '口座なし', d.note]
+                  {[
+                    formatDay(d.date),
+                    // 内訳があれば品目の数（保存すると品目ごとのカテゴリと割引・調整の行になる）
+                    d.items?.length
+                      ? `内訳 ${d.items.filter((i) => !i.is_adjustment).length}品目`
+                      : categoryLabel(d.categoryId, categories),
+                    where || '口座なし',
+                    d.note,
+                  ]
                     .filter(Boolean)
                     .join('・')}
                   {d.duplicate && <Text style={{ color: theme.colors.error }}>・重複の可能性</Text>}

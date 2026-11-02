@@ -647,6 +647,57 @@ export type Database = {
           },
         ]
       }
+      transaction_items: {
+        Row: {
+          amount: number
+          category_id: string | null
+          created_at: string
+          id: string
+          is_adjustment: boolean
+          name: string | null
+          sort_order: number
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          is_adjustment?: boolean
+          name?: string | null
+          sort_order?: number
+          transaction_id: string
+          user_id?: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          is_adjustment?: boolean
+          name?: string | null
+          sort_order?: number
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transaction_items_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number

@@ -8,7 +8,7 @@ import { toJpegBase64 } from '@/features/ai/image';
 import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
 import { fetchCategories } from '@/features/categories/api';
 import { fetchEmailImportSettings } from '@/features/emailImport/api';
-import { fetchDateAmountsBetween } from '@/features/transactions/api';
+import { fetchDateAmountsBetween, saveTransactionItems } from '@/features/transactions/api';
 import { isConfirmedOnSave } from '@/features/transactions/confirmation';
 import { addDays, toTokyoDateString } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
@@ -125,6 +125,8 @@ export async function recordPhoto(
         .single();
       if (error) throw error;
       transactionId = inserted.id;
+      // レシートの品目の内訳（品目ごとのカテゴリと、合計との差の割引・調整の行）
+      if (draft.items?.length) await saveTransactionItems(inserted.id, draft.items);
       result.recorded += 1;
     } else {
       result.duplicates += 1;

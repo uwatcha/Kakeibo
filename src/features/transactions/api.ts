@@ -3,22 +3,34 @@ import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
 import { type SearchFilters, sourceFilter } from './search';
+import type { TransactionItem } from './items';
 
-export type Transaction = Database['public']['Tables']['transactions']['Row'];
+/** 記録。items は内訳（読み込んだときだけ入る。fetchMonthTransactions・fetchTransaction） */
+export type Transaction = Database['public']['Tables']['transactions']['Row'] & { items?: TransactionItem[] };
 export type TransactionInsert = Database['public']['Tables']['transactions']['Insert'];
 export type TransactionUpdate = Database['public']['Tables']['transactions']['Update'];
+
+/** 記録と内訳（並び順どおり）を読むときの select */
+const WITH_ITEMS = '*, items:transaction_items(category_id, name, amount, is_adjustment, sort_order)';
+
+/** 内訳を並び順どおりにする */
+function sortItems<T extends { items?: unknown }>(t: T): T {
+  const items = t.items as (TransactionItem & { sort_order?: number })[] | undefined;
+  if (!items) return t;
+  return { ...t, items: [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) };
+}
 
 /** month は月初（YYYY-MM-01）。新しい日付・新しく入れた順 */
 export async function fetchMonthTransactions(month: string): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*')
+    .select(WITH_ITEMS)
     .gte('date', month)
     .lt('date', addMonths(month, 1))
     .order('date', { ascending: false })
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data;
+  return (data as Transaction[]).map(sortItems);
 }
 
 /** その口座から出た・入った記録（新しい順）。口座の利用履歴用 */
@@ -138,9 +150,9 @@ export async function confirmTransactions(ids: readonly string[]): Promise<void>
 }
 
 export async function fetchTransaction(id: string): Promise<Transaction> {
-  const { data, error } = await supabase.from('transactions').select('*').eq('id', id).single();
+  const { data, error } = await supabase.from('transactions').select(WITH_ITEMS).eq('id', id).single();
   if (error) throw error;
-  return data;
+  return sortItems(data as Transaction);
 }
 
 /** 記録を1件足し、その id を返す */
@@ -151,10 +163,28 @@ export async function createTransaction(values: TransactionInsert): Promise<stri
 }
 
 /** まとめて追加する（AI入力） */
-export async function createTransactions(rows: TransactionInsert[]): Promise<void> {
+export async function createTransactions(rows: (TransactionInsert & { items?: TransactionItem[] })[]): Promise<void> {
   if (rows.length === 0) return;
-  const { error } = await supabase.from('transactions').insert(rows);
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert(rows.map(({ items: _items, ...row }) => row))
+    .select('id');
   if (error) throw error;
+  // 内訳があれば、足した記録に付ける（insert は渡した順に返る）
+  for (const [i, row] of rows.entries()) {
+    if (row.items?.length) await saveTransactionItems(data[i].id, row.items);
+  }
+}
+
+/** 記録の内訳を入れ直す（今ある内訳を消して items を入れる。空なら内訳なし） */
+export async function saveTransactionItems(transactionId: string, items: readonly TransactionItem[]): Promise<void> {
+  const { error } = await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
+  if (error) throw error;
+  if (items.length === 0) return;
+  const { error: insertError } = await supabase
+    .from('transaction_items')
+    .insert(items.map((item, sort_order) => ({ ...item, transaction_id: transactionId, sort_order })));
+  if (insertError) throw insertError;
 }
 
 export async function updateTransaction(id: string, values: TransactionUpdate): Promise<void> {

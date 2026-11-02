@@ -30,12 +30,14 @@ import { AccountFields } from '@/features/transactions/form/AccountFields';
 import { RepaidAdvancesField, RepaymentField } from '@/features/transactions/form/AdvanceLinks';
 import { DuplicateDialog } from '@/features/transactions/form/DuplicateDialog';
 import { EmployerField } from '@/features/transactions/form/EmployerField';
+import { ItemsField } from '@/features/transactions/form/ItemsField';
 import { PayeeField, SUGGESTION_SPACE } from '@/features/transactions/form/PayeeField';
 import { PointsSection } from '@/features/transactions/form/PointsSection';
 import { useFormAssist } from '@/features/transactions/form/useFormAssist';
 import {
   emptyFormValues,
   type FormValues,
+  itemRows,
   toFormValues,
   toTransactionRow,
   validateForm,
@@ -47,6 +49,7 @@ import {
   useCreateTransaction,
   useDeleteTransaction,
   usePayeeHistory,
+  useSaveTransactionItems,
   useSetAdvancesRepaidBy,
   useTransaction,
   useUpdateTransaction,
@@ -88,6 +91,7 @@ export default function TransactionEditScreen() {
   const update = useUpdateTransaction();
   const remove = useDeleteTransaction();
   const setRepaid = useSetAdvancesRepaidBy();
+  const saveItems = useSaveTransactionItems();
   const payeeHistory = usePayeeHistory();
   const employers = useEmployers();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -114,6 +118,7 @@ export default function TransactionEditScreen() {
   const fromAccountId = useWatch({ control, name: 'fromAccountId' });
   const categoryId = useWatch({ control, name: 'categoryId' });
   const date = useWatch({ control, name: 'date' });
+  const items = useWatch({ control, name: 'items' });
   const toAccountId = useWatch({ control, name: 'toAccountId' });
   // 立て替え ↔ 貸し金戻り: 立て替えは相手（入金先）からの貸し金戻りを、貸し金戻りは相手（出金元）への立て替えを候補にする
   const collects = useCollectsFrom(toAccountId, date, type === 'advance');
@@ -171,6 +176,11 @@ export default function TransactionEditScreen() {
         await saveLastUsedAccounts(values.type, { fromAccountId: row.from_account_id, toAccountId: row.to_account_id });
       } else {
         await update.mutateAsync({ id, values: row });
+      }
+      // 内訳（支払いだけ。種類を変えた・行を消したら、今ある内訳も消える）
+      const rows = itemRows(values);
+      if (!isNew || rows.length > 0) {
+        await saveItems.mutateAsync({ transactionId: savedId, items: rows });
       }
       // 貸し金戻りで返してもらった立て替え（種類を変えたら、つないであったものを外す）
       if (values.type === 'collect' && (isNew ? values.repaidAdvanceIds.length > 0 : true)) {
@@ -325,7 +335,7 @@ export default function TransactionEditScreen() {
 
         <AccountFields control={control} errors={errors} type={type} accounts={accountList} balances={balances} />
 
-        {rule.categoryKind && (
+        {rule.categoryKind && !(type === 'expense' && items.length > 0) && (
           <Controller
             control={control}
             name="categoryId"
@@ -344,6 +354,9 @@ export default function TransactionEditScreen() {
             )}
           />
         )}
+
+        {/* 支払いの内訳（品目ごとのカテゴリ。最後に割引・調整の行） */}
+        {type === 'expense' && <ItemsField control={control} categories={categories.data!} error={errors.items?.message} />}
 
         {/* 給与・アルバイトの収入では、収入元（働き先）を必ず選ぶ */}
         {type === 'income' && isSalary && (
@@ -429,8 +442,8 @@ export default function TransactionEditScreen() {
       </Portal>
 
       <Snackbar
-        visible={create.isError || update.isError || remove.isError || setRepaid.isError}
-        onDismiss={() => (create.reset(), update.reset(), remove.reset(), setRepaid.reset())}
+        visible={create.isError || update.isError || remove.isError || setRepaid.isError || saveItems.isError}
+        onDismiss={() => (create.reset(), update.reset(), remove.reset(), setRepaid.reset(), saveItems.reset())}
       >
         保存できませんでした。通信状態を確認してください
       </Snackbar>

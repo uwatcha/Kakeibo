@@ -30,3 +30,13 @@ export function parseNonNegativeYen(input: string): number | null {
   if (/^[0０]+$/.test(trimmed)) return 0;
   return parseYen(trimmed);
 }
+
+/** 内訳の品目の金額の入力用。マイナス（品目の割引）も読む。0 も可。空欄・不正なら null */
+export function parseSignedYen(input: string): number | null {
+  const trimmed = input.trim().replace(/^[−－ー‐-]/, '-');
+  if (trimmed === '' ) return null;
+  const negative = trimmed.startsWith('-');
+  const value = parseNonNegativeYen(negative ? trimmed.slice(1) : trimmed);
+  if (value === null || (negative && trimmed.length === 1)) return null;
+  return negative ? -value : value;
+}

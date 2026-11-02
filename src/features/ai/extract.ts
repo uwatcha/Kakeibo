@@ -4,6 +4,7 @@ import { categoryLabel } from '@/features/categories/tree';
 import { isConfirmedOnSave } from '@/features/transactions/confirmation';
 
 import type { Aliases } from './anonymize';
+import { mainCategory, toItemRows, type TransactionItem } from '@/features/transactions/items';
 
 /** AI入力で作れる記録の種類 */
 export type ImportType = 'expense' | 'income' | 'transfer';
@@ -29,6 +30,8 @@ export type ImportDraft = {
   note: string | null;
   /** 重なっていそうな、すでにある記録（markDuplicates で入れる） */
   duplicateOf?: string | null;
+  /** レシートの品目の内訳（支払いで2品目以上のときだけ。調整の行は保存のときに合計との差で作る。2026-11-02） */
+  items?: TransactionItem[];
 };
 
 export type PhotoSource = 'receipt' | 'screen' | 'price' | 'other';
@@ -55,9 +58,10 @@ export function extractPrompt(
     'あなたは家計簿の入力係です。添付の写真（レシート・明細・値段の表示など）やファイル（CSV・JSON・テキスト）から、お金の記録を読み取ってください。',
     `今日は ${today} です。年が書かれていない日付は、今日より後にならない一番近い年にしてください。`,
     '次の形の JSON の配列だけを返してください。読み取れる記録がなければ空の配列 [] を返す。',
-    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull"}]',
+    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull","items":[{"name":"品名","amount":整数の円,"category":"カテゴリかnull"}]}]',
     '- expense は支払い（from が払った口座）、income は収入（to が入った口座）、transfer は自分の口座どうしの移動（from と to）',
-    '- レシート1枚は合計額で1件にする（品目ごとに分けない）。明細やCSVは1行1件',
+    '- レシート1枚は合計額（実際に払った額）で1件にする。明細やCSVは1行1件',
+    '- レシートに品目が2つ以上書かれていれば、items に品目ごとの内訳を入れる: [{"name":"品名","amount":税込の整数の円,"category":"下の一覧の名前かnull"}]。品名からカテゴリを決める（例: 食べ物は食費、洗剤は日用品）。品目ごとの割引（「20円引」など）はその品目の金額から引く。合計にかかる割引・ポイント値引き・消費税の端数のずれは items に入れない（合計との差は家計簿の側で「割引・調整」にする）。品目が1つ・読めないなら items は省く',
     '- 返金・キャンセルなど符号がマイナスの行は、記録にしない',
     '- 口座が分からなければ null',
     '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
@@ -100,13 +104,31 @@ export function toDrafts(
     if (!type || !date || !Number.isFinite(amount) || amount <= 0) return;
     const account = (v: unknown) => (typeof v === 'string' ? (accountByAlias.get(v) ?? null) : null);
     const category = typeof r.category === 'string' ? (categoryByName.get(r.category) ?? null) : null;
+    // 品目の内訳（支払いで、品目が2つ以上のときだけ。品目の割引はその品目の金額から引いてある）
+    const items =
+      type === 'expense' && Array.isArray(r.items)
+        ? toItemRows(
+            amount,
+            (r.items as Record<string, unknown>[])
+              .filter((it) => it && typeof it.amount === 'number')
+              .map((it, n) => ({
+                key: String(n),
+                name: typeof it.name === 'string' ? it.name.trim().slice(0, 60) : '',
+                categoryId: typeof it.category === 'string' ? (categoryByName.get(it.category) ?? null) : null,
+                amount: String(Math.round(it.amount as number)),
+              })),
+          )
+        : [];
+    const hasItems = items.filter((it) => !it.is_adjustment).length >= 2;
     drafts.push({
       key: String(i),
       date,
       type,
       amount,
       payee: typeof r.payee === 'string' && r.payee.trim() !== '' ? r.payee.trim().slice(0, 100) : null,
-      categoryId: type === 'transfer' ? null : category,
+      // 内訳があれば、いちばん金額の大きい品目のカテゴリを記録のカテゴリにする
+      categoryId: type === 'transfer' ? null : hasItems ? (mainCategory(items) ?? category) : category,
+      ...(hasItems && { items }),
       fromAccountId: type === 'income' ? null : account(r.from),
       toAccountId: type === 'expense' ? null : account(r.to),
       duplicate: false,
@@ -199,5 +221,6 @@ export function draftToRow(d: ImportDraft, fallback: FallbackAccounts, today: st
     from_account_id: fromAccountId,
     to_account_id: toAccountId,
     is_confirmed: isConfirmedOnSave(d.date, today),
+    ...(d.type === 'expense' && d.items?.length ? { items: d.items } : {}),
   };
 }

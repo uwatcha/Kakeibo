@@ -51,6 +51,7 @@ jest.mock('@/features/transactions/hooks', () => ({
   useAdvancesTo: () => mockQ([]),
   useAdvancesFor: () => mockQ([]),
   useSetAdvancesRepaidBy: () => mockM(),
+  useSaveTransactionItems: () => mockM(),
 }));
 
 import TransactionEditScreen from '@/app/transaction/[id]';
@@ -96,6 +97,18 @@ describe('記録の入力画面', () => {
     [
       '未確認・ポイントあり',
       { type: 'expense', date: '2026-10-01', is_confirmed: false, list_price: 1500, points_used: 300 },
+    ],
+    [
+      '内訳あり（割引・調整の行も）',
+      {
+        type: 'expense',
+        amount: 1058,
+        items: [
+          { category_id: 'eat', name: 'おにぎり', amount: 540, is_adjustment: false },
+          { category_id: null, name: '洗剤', amount: 520, is_adjustment: false },
+          { category_id: null, name: null, amount: -2, is_adjustment: true },
+        ],
+      },
     ],
   ])('編集: %s', async (_, values) => {
     mockParams.current = { id: 't1' };

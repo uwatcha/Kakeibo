@@ -178,3 +178,46 @@ describe('extractPrompt（自動入力のルール・普段使わない口座）
     expect(prompt).not.toContain('現金B');
   });
 });
+
+describe('レシートの品目の内訳', () => {
+  const aliases = { account: (id: string | null): string => id ?? '' };
+  it('品目が2つ以上なら内訳にし、合計との差を割引・調整の行にする。記録のカテゴリは金額の大きい品目（未分類なら全体のカテゴリ）', () => {
+    const [draft] = toDrafts(
+      [
+        {
+          date: '2026-11-01',
+          type: 'expense',
+          amount: 1000,
+          payee: 'スーパー',
+          category: '食費',
+          source: 'receipt',
+          items: [
+            { name: 'パン', amount: 300, category: '食費' },
+            { name: '洗剤', amount: 750, category: null },
+          ],
+        },
+      ],
+      [],
+      categories,
+      aliases,
+    );
+    expect(draft.items).toEqual([
+      { category_id: 'food', name: 'パン', amount: 300, is_adjustment: false },
+      { category_id: null, name: '洗剤', amount: 750, is_adjustment: false },
+      { category_id: null, name: null, amount: -50, is_adjustment: true },
+    ]);
+    // 金額の大きい品目（洗剤）が未分類なので、記録のカテゴリは AI が付けた全体のカテゴリのまま
+    expect(draft.categoryId).toBe('food');
+    expect(draftToRow(draft, { payFrom: 'wallet', payTo: null }, '2026-11-02').items).toHaveLength(3);
+  });
+
+  it('品目が1つなら内訳は作らない', () => {
+    const [draft] = toDrafts(
+      [{ date: '2026-11-01', type: 'expense', amount: 300, items: [{ name: 'パン', amount: 300, category: '食費' }] }],
+      [],
+      categories,
+      aliases,
+    );
+    expect(draft.items).toBeUndefined();
+  });
+});

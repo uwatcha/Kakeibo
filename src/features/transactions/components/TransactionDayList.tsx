@@ -38,7 +38,14 @@ function TransactionRow({
   const rule = TRANSACTION_RULES[t.type];
   const unconfirmed = recordStatus(t, toTokyoDateString()) === 'unconfirmed';
   const isFlow = t.type === 'expense' || t.type === 'income';
-  const category = isFlow ? (categoryLabel(t.category_id, categories) ?? `${rule.label}（未分類）`) : rule.label;
+  // 内訳があれば、カテゴリの代わりに品目の数（割引・調整の行は数えない）
+  const itemCount = t.items?.filter((i) => !i.is_adjustment).length ?? 0;
+  const category =
+    itemCount > 0
+      ? `内訳 ${itemCount}品目`
+      : isFlow
+        ? (categoryLabel(t.category_id, categories) ?? `${rule.label}（未分類）`)
+        : rule.label;
   // 内容があればそれを主にし、カテゴリ（種類）と口座は小さく下に出す
   const title = t.payee || category;
   const subtitle = [t.payee ? category : null, describeAccounts(t, accounts)].filter(Boolean).join('・');

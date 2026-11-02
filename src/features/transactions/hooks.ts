@@ -11,6 +11,7 @@ import {
   fetchAdvancesFor,
   fetchAdvancesTo,
   fetchCollectsFrom,
+  saveTransactionItems,
   setAdvancesRepaidBy,
   fetchUnconfirmed,
   fetchPayeeHistory,
@@ -21,6 +22,7 @@ import {
   type TransactionUpdate,
   updateTransaction,
 } from './api';
+import type { TransactionItem } from './items';
 import { hasFilters, type SearchFilters } from './search';
 
 export const transactionKeys = {
@@ -122,6 +124,16 @@ export function useUpdateTransaction() {
   const invalidate = useInvalidateAfterWrite();
   return useMutation({
     mutationFn: ({ id, values }: { id: string; values: TransactionUpdate }) => updateTransaction(id, values),
+    onSuccess: invalidate,
+  });
+}
+
+/** 記録の内訳を入れ直す（保存のあと。終わったら一覧を読み直す） */
+export function useSaveTransactionItems() {
+  const invalidate = useInvalidateAfterWrite();
+  return useMutation({
+    mutationFn: ({ transactionId, items }: { transactionId: string; items: TransactionItem[] }) =>
+      saveTransactionItems(transactionId, items),
     onSuccess: invalidate,
   });
 }
