@@ -12,7 +12,7 @@ type Page = {
   title: string;
   amount: number;
   detail?: string;
-  /** 計算方法。金額の下に小さく出す（式なら項の名前と値の2段、文ならそのまま） */
+  /** 計算方法。金額の下に小さく出す（式なら項の名前と値の2段、文なら「＝」を付けずにそのまま） */
   formula?: Formula | string;
   /** カード右上の小さなボタン */
   action?: { icon: string; label: string; onPress: () => void };
@@ -116,7 +116,7 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
               />
               {typeof page.formula === 'string' ? (
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  ＝ {page.formula}
+                  {page.formula}
                 </Text>
               ) : (
                 page.formula && <FormulaRows formula={page.formula} />
