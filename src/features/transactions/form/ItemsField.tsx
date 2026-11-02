@@ -59,7 +59,7 @@ export function ItemsField({
                 <TextInput
                   mode="outlined"
                   dense
-                  label="品名"
+                  label="品名（任意）"
                   value={item.name}
                   onChangeText={(name) => update(item.key, { name })}
                   style={styles.name}
