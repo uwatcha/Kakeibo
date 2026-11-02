@@ -41,7 +41,7 @@ function billNotification(i: UnnotifiedImport): { title: string; body: string; d
 
 /**
  * メールからの記録の通知の文と、押したときに開くもの。通知しないものは null。
- * サンプルカードの詳細で速報の記録に店名を入れたときなど（merged）は通知しない
+ * サンプルカードの詳細で速報の記録に店名を入れたときなど（メールどうしの merged）は通知しない
  */
 export function importNotification(
   i: UnnotifiedImport,
@@ -63,6 +63,11 @@ export function importNotification(
         // 通知の「確認」ボタンで、アプリを開かずに確認済みにできる（内容が分からないものは開いて入れてもらう）
         confirmable: !i.transaction?.needs_payee,
       };
+    case 'merged':
+      // 写真の内容を、メールで先に入った記録にまとめたとき（メールどうしをまとめたときは通知しない）
+      return i.kind === 'photo' && i.transaction_id
+        ? { title: 'レシートの内容を記録に入れました', body: what, data: { transactionId: i.transaction_id } }
+        : null;
     case 'confirmed_plan':
       return i.transaction_id
         ? { title: '予定を確認しました', body: what, data: { transactionId: i.transaction_id } }

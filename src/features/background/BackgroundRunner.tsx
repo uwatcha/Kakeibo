@@ -5,12 +5,13 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { useAuth } from '@/features/auth/AuthProvider';
+import { moveWaitingPhotos } from '@/features/photoImport/album';
 
 import { ensureBackgroundTask, handleNotificationAction, runBackgroundJobs } from './backgroundTask';
 
 /**
  * アプリを開いた・前面に戻ったときに、バックグラウンドの仕事（AI 相談の送り直し・メールからの記録の通知）をすぐやる。
- * 画面には何も出さない。通知を押したら、その会話・記録・確認の画面を開く
+ * 記録した写真を削除候補のアルバムへ移すとき（Android の確認）のほかは、画面には何も出さない。通知を押したら、その会話・記録・確認の画面を開く
  */
 export function BackgroundRunner() {
   const { session } = useAuth();
@@ -21,7 +22,10 @@ export function BackgroundRunner() {
     const run = () =>
       runBackgroundJobs()
         .catch(() => undefined)
-        .finally(() => queryClient.invalidateQueries());
+        .finally(() => queryClient.invalidateQueries())
+        // 記録した写真を削除候補のアルバムへ（システムの確認が出るので、画面が出ているときだけ）
+        .then(() => moveWaitingPhotos())
+        .catch(() => undefined);
     ensureBackgroundTask();
     run();
     const subscription = AppState.addEventListener('change', (state) => {

@@ -319,7 +319,7 @@ export class Importer {
   private async manualDuplicate(side: 'from_account_id' | 'to_account_id', account: string, row: ImportRow) {
     const { data } = await this.db
       .from('transactions')
-      .select('id, auto_source, from_account_id, to_account_id')
+      .select('id, type, auto_source, from_account_id, to_account_id')
       .eq('user_id', this.userId)
       .eq('amount', row.amount!)
       .gte('date', addDays(row.date!, -DUPLICATE_DAYS))
@@ -328,7 +328,30 @@ export class Importer {
     const found = (data ?? []).find(
       (t) => (t.auto_source === null && t[side] === account) || (t.auto_source === 'photo' && side === 'from_account_id'),
     );
-    return found?.id as string | undefined;
+    return found as { id: string; type: string; auto_source: string | null } | undefined;
+  }
+
+  /**
+   * 写真から入った支払いに、あとから届いたカード・銀行のメールをまとめる（2026-11-02 ユーザーの指定: 口座・金額・日付は
+   * メール、店名・カテゴリ・内訳は写真）。写真の記録の口座・日付をメールのものに直し、メールの行は merged にする。
+   * ほかのメール（デビットカード と 連携サービス、サンプルカードの速報と詳細）ですでにまとめた記録なら、直さずに merged にするだけ
+   */
+  private async mergeIntoPhoto(transactionId: string, account: string, row: ImportRow) {
+    const { count } = await this.db
+      .from('email_imports')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', this.userId)
+      .eq('status', 'merged')
+      .eq('transaction_id', transactionId);
+    if (!count) {
+      await this.db
+        .from('transactions')
+        // 利用先（raw_payee）は入れない（連携サービス の「サンプルデビット」などを対応表に覚えないため）
+        .update({ from_account_id: account, date: row.date, is_confirmed: row.date! <= tokyoToday() })
+        .eq('id', transactionId)
+        .eq('user_id', this.userId);
+    }
+    await this.setStatus(row.id, 'merged', { transaction_id: transactionId });
   }
 
   /** ほかのメールで記録済みの同じ利用（kinds のメールで、まだほかの行と結び付いていない記録） */
@@ -389,11 +412,17 @@ export class Importer {
       await this.setStatus(row.id, 'ignored');
       return;
     }
-    const duplicate = async (side: 'from_account_id' | 'to_account_id') => {
+    /** 重複なら記録しない。payment（支払いのメール）なら、写真から入った支払いには重複にせずまとめる */
+    const duplicate = async (side: 'from_account_id' | 'to_account_id', payment = false) => {
       if (force) return false;
-      const id = await this.manualDuplicate(side, account, row);
-      if (id) await this.setStatus(row.id, 'duplicate', { duplicate_of: id });
-      return !!id;
+      const found = await this.manualDuplicate(side, account, row);
+      if (!found) return false;
+      if (payment && found.auto_source === 'photo' && found.type === 'expense') {
+        await this.mergeIntoPhoto(found.id, account, row);
+      } else {
+        await this.setStatus(row.id, 'duplicate', { duplicate_of: found.id });
+      }
+      return true;
     };
     /** 電子マネーへの入金なら、出金元 → その電子マネーの振替にする（2026-10-28 改善要望）。入金でなければ false */
     const topUp = async () => {
@@ -424,7 +453,7 @@ export class Importer {
           return;
         }
         if (await topUp()) return;
-        if (await duplicate('from_account_id')) return;
+        if (await duplicate('from_account_id', true)) return;
         await expense(this.resolve(row.raw_payee));
         return;
       }
@@ -435,7 +464,7 @@ export class Importer {
             await this.setStatus(row.id, 'merged', { transaction_id: debitMail.transaction_id });
             return;
           }
-          if (await duplicate('from_account_id')) return;
+          if (await duplicate('from_account_id', true)) return;
           await this.insert(row, { type: 'expense', from_account_id: account, payee: 'サンプルデビット' });
           return;
         }
@@ -463,7 +492,7 @@ export class Importer {
           await this.setStatus(row.id, 'confirmed_plan', { transaction_id: plans[0].id });
           return;
         }
-        if (await duplicate('from_account_id')) return;
+        if (await duplicate('from_account_id', true)) return;
         await expense(this.resolve(row.raw_payee));
         return;
       }
@@ -498,7 +527,7 @@ export class Importer {
         return;
       }
       case 'card_quick': {
-        if (await duplicate('from_account_id')) return;
+        if (await duplicate('from_account_id', true)) return;
         // 店名は後から届く詳細のメールで入れる
         await this.insert(row, { type: 'expense', from_account_id: account });
         return;
@@ -510,7 +539,7 @@ export class Importer {
           await this.setStatus(row.id, 'merged', { transaction_id: quick.transaction_id });
           return;
         }
-        if (await duplicate('from_account_id')) return;
+        if (await duplicate('from_account_id', true)) return;
         await expense(this.resolve(row.raw_payee));
         return;
       }

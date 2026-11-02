@@ -10,6 +10,8 @@ type Page = {
   title: string;
   amount: number;
   detail?: string;
+  /** 計算方法（式と各項の値を1行の文にしたもの）。金額の下に小さく出す */
+  formula?: string;
   /** カード右上の小さなボタン */
   action?: { icon: string; label: string; onPress: () => void };
   /**
@@ -75,6 +77,11 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
                 numberOfLines={1}
                 adjustsFontSizeToFit
               />
+              {page.formula && (
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={2}>
+                  ＝ {page.formula}
+                </Text>
+              )}
               {page.detail && (
                 <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                   {page.detail}

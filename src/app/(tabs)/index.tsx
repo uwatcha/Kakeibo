@@ -7,7 +7,7 @@ import { AddFab } from '@/components/AddFab';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { BalanceCarousel } from '@/features/home/components/BalanceCarousel';
-import { BreakdownSheet } from '@/features/home/components/BreakdownSheet';
+import { BreakdownSheet, formulaText } from '@/features/home/components/BreakdownSheet';
 import { homeSheet, type HomeSheetKey } from '@/features/home/breakdown';
 import { AccountSections } from '@/features/home/components/AccountSections';
 import { ReviewCard } from '@/features/home/components/ReviewCard';
@@ -22,7 +22,7 @@ import { SPACING } from '@/theme';
  * 給料日までの3つのカード（給料日までに残る額・取り置き後に使える額・自由に使える額）。
  * マイナスなら「〜に足りない額」に言い換えて正の数を赤で出し、元の見出しを取り消し線で残す
  */
-function budgetPage(budget: HomeBudget, key: BudgetCardKey, onPress: () => void) {
+function budgetPage(budget: HomeBudget, key: BudgetCardKey) {
   const card = budgetCard(budget, key);
   const short = card.amount < 0;
   // 1日あたりは、給料日までに残る額と自由に使える額だけ（日割りで使う額なので）
@@ -35,7 +35,6 @@ function budgetPage(budget: HomeBudget, key: BudgetCardKey, onPress: () => void)
     detail: [perDay !== null ? `1日あたり ${formatYen(perDay)}` : null, `あと${budget.daysLeft}日`]
       .filter(Boolean)
       .join('・'),
-    onPress,
   };
 }
 
@@ -61,6 +60,11 @@ export default function HomeScreen() {
   const hasAccounts = accounts.some((a) => !a.isArchived);
   const accountName = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '';
   const openSheet = breakdown ? homeSheet(breakdown, figures, accounts, future.data, today) : null;
+  // カードの金額の下に、内訳の1つ目の式を出す
+  const formulaOf = (key: HomeSheetKey) => {
+    const formula = homeSheet(key, figures, accounts, future.data, today)?.formulas?.[0];
+    return formula ? formulaText(formula) : undefined;
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -75,15 +79,13 @@ export default function HomeScreen() {
 
         <BalanceCarousel
           pages={[
-            { title: '所持金', amount: summary.everydayTotal, onPress: () => setBreakdown('everyday') },
-            { title: '実質残高', amount: available.amount, onPress: () => setBreakdown('available') },
-            { title: '純資産', amount: summary.netWorth, onPress: () => setBreakdown('net') },
+            { title: '所持金', amount: summary.everydayTotal, key: 'everyday' as const },
+            { title: '実質残高', amount: available.amount, key: 'available' as const },
+            { title: '純資産', amount: summary.netWorth, key: 'net' as const },
             ...(budget
-              ? (['untilPayday', 'afterReserve', 'free'] as const).map((key) =>
-                  budgetPage(budget, key, () => setBreakdown(key)),
-                )
+              ? (['untilPayday', 'afterReserve', 'free'] as const).map((key) => ({ ...budgetPage(budget, key), key }))
               : []),
-          ]}
+          ].map(({ key, ...page }) => ({ ...page, formula: formulaOf(key), onPress: () => setBreakdown(key) }))}
         />
 
         {!hasAccounts && (

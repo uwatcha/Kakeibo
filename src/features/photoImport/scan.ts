@@ -3,7 +3,7 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import { fetchAccountBalances, fetchAccounts } from '@/features/accounts/api';
 import { buildAliases } from '@/features/ai/anonymize';
 import { AiError, extractRecords } from '@/features/ai/api';
-import { assignPaymentAccounts, extractPrompt, markDuplicates, toDrafts } from '@/features/ai/extract';
+import { assignPaymentAccounts, extractPrompt, type ImportDraft, markDuplicates, toDrafts } from '@/features/ai/extract';
 import { toJpegBase64 } from '@/features/ai/image';
 import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
 import { fetchCategories } from '@/features/categories/api';
@@ -13,6 +13,7 @@ import { isConfirmedOnSave } from '@/features/transactions/confirmation';
 import { addDays, toTokyoDateString } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 
+import { queueForAlbum } from './album';
 import { PHOTO_PROMPT_EXTRA, planPhotoRecords } from './plan';
 import { loadPhotoImportState, savePhotoImportState } from './settings';
 
@@ -21,7 +22,7 @@ const MAX_PER_RUN = 8;
 /** 見るアルバム（カメラで撮った写真とスクリーンショット。LINE などで受け取った画像は見ない） */
 const TARGET_ALBUM = /camera|screenshot|スクリーンショット|カメラ/i;
 
-export type ScanResult = { checked: number; recorded: number; duplicates: number; waiting: boolean };
+export type ScanResult = { checked: number; recorded: number; merged: number; duplicates: number; waiting: boolean };
 
 /** 新しい写真（since より後に撮ったもの）を、撮った順に */
 async function newPhotos(since: number, processed: ReadonlySet<string>): Promise<MediaLibrary.Asset[]> {
@@ -76,10 +77,41 @@ export async function loadPhotoContext() {
 
 export type PhotoRecordResult = {
   recorded: number;
+  /** メールで先に入っていた支払いに、店名・カテゴリ・内訳を入れた数 */
+  merged: number;
   duplicates: number;
-  /** 記録した・重複だった1件目（ウィジェットから撮ったときに知らせる） */
-  first: { status: 'recorded' | 'duplicate'; payee: string | null; amount: number } | null;
+  /** 記録した・まとめた・重複だった1件目 */
+  first: { status: 'recorded' | 'merged' | 'duplicate'; payee: string | null; amount: number } | null;
 };
+
+/**
+ * メールで先に入った支払いのうち、写真の内容をまとめる先（2026-11-02 ユーザーの指定: 口座・金額・日付はメール、
+ * 店名・カテゴリ・内訳は写真）。同じ金額・前後1日の、メールから入った支払いで、まだほかの写真をまとめていないもの
+ */
+async function emailRecordFor(
+  draft: ImportDraft,
+  existing: Awaited<ReturnType<typeof fetchDateAmountsBetween>>,
+): Promise<string | null> {
+  const near = existing.filter(
+    (t) =>
+      t.auto_source === 'email' &&
+      t.type === 'expense' &&
+      t.amount === draft.amount &&
+      t.date >= addDays(draft.date, -1) &&
+      t.date <= addDays(draft.date, 1),
+  );
+  for (const t of near) {
+    const { count, error } = await supabase
+      .from('email_imports')
+      .select('id', { count: 'exact', head: true })
+      .eq('kind', 'photo')
+      .eq('status', 'merged')
+      .eq('transaction_id', t.id);
+    if (error) throw error;
+    if (!count) return t.id;
+  }
+  return null;
+}
 
 /**
  * 写真（base64 の JPEG）1枚を AI に読み取らせ、レシート・決済画面・値段の表示なら支払いとして記録する
@@ -93,7 +125,7 @@ export async function recordPhoto(
   takenAt: number,
 ): Promise<PhotoRecordResult> {
   const { today, accounts, categories, aliases, prompt, cash } = context;
-  const result: PhotoRecordResult = { recorded: 0, duplicates: 0, first: null };
+  const result: PhotoRecordResult = { recorded: 0, merged: 0, duplicates: 0, first: null };
   const { records } = await extractRecords(prompt, '', [{ mimeType: 'image/jpeg', data }]);
   const found = toDrafts(records, accounts, categories, aliases);
   if (found.length === 0) return result;
@@ -105,9 +137,23 @@ export async function recordPhoto(
     cash,
     (payee) => matchStoreAccount(payee, accounts),
   );
-  for (const [index, { draft, status }] of planPhotoRecords(drafts, cash).entries()) {
+  for (const [index, plan] of planPhotoRecords(drafts, cash).entries()) {
+    const { draft } = plan;
+    let status: 'recorded' | 'merged' | 'duplicate' = plan.status;
     let transactionId: string | null = null;
-    if (status === 'recorded') {
+    const target = status === 'duplicate' ? await emailRecordFor(draft, existing) : null;
+    if (target) {
+      // メールの記録に、写真の店名・カテゴリ・内訳を入れる（口座・金額・日付はメールのまま）
+      const { error } = await supabase
+        .from('transactions')
+        .update({ payee: draft.payee, category_id: draft.categoryId, needs_payee: false })
+        .eq('id', target);
+      if (error) throw error;
+      if (draft.items?.length) await saveTransactionItems(target, draft.items);
+      status = 'merged';
+      transactionId = target;
+      result.merged += 1;
+    } else if (status === 'recorded') {
       const { data: inserted, error } = await supabase
         .from('transactions')
         .insert({
@@ -165,7 +211,7 @@ export async function scanNewPhotos(): Promise<ScanResult | null> {
   if (!(await MediaLibrary.getPermissionsAsync(false, ['photo'])).granted) return null;
   const processed = new Set(state.processed);
   const photos = await newPhotos(state.since, processed);
-  const result: ScanResult = { checked: 0, recorded: 0, duplicates: 0, waiting: false };
+  const result: ScanResult = { checked: 0, recorded: 0, merged: 0, duplicates: 0, waiting: false };
   if (photos.length === 0) {
     await savePhotoImportState({ ...state, lastRunAt: Date.now() });
     return result;
@@ -179,7 +225,10 @@ export async function scanNewPhotos(): Promise<ScanResult | null> {
       const data = await toJpegBase64(photo.uri, photo.width);
       const counts = await recordPhoto(context, data, `photo:${photo.id}`, photo.creationTime);
       result.recorded += counts.recorded;
+      result.merged += counts.merged;
       result.duplicates += counts.duplicates;
+      // 支払いの写真だったものは、アプリを開いたときに削除候補のアルバムへ移す
+      if (counts.recorded + counts.merged + counts.duplicates > 0) await queueForAlbum(photo.id);
     } catch (e) {
       // AI の混み合い・通信の失敗: ここで止めて、次に確かめるときにこの写真から続ける
       if (e instanceof AiError && e.temporary) {

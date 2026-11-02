@@ -67,7 +67,7 @@ export default function PhotoImportScreen() {
       setMessage(
         result.waiting
           ? 'AI が混み合っているので、続きはあとで確かめます'
-          : `${result.checked}枚を見て、${result.recorded}件を記録しました${result.duplicates > 0 ? `（重複の可能性 ${result.duplicates}件）` : ''}`,
+          : `${result.checked}枚を見て、${result.recorded}件を記録しました${result.merged > 0 ? `（メールの記録にまとめた ${result.merged}件）` : ''}${result.duplicates > 0 ? `（重複の可能性 ${result.duplicates}件）` : ''}`,
       );
     } catch {
       setMessage('確かめられませんでした');

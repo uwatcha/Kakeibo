@@ -26,6 +26,16 @@ describe('importNotification', () => {
     });
   });
 
+  it('写真の内容をメールの記録にまとめたときだけ知らせる（メールどうしは知らせない）', () => {
+    const transaction = { payee: 'スーパーA', amount: 1700, type: 'expense', needs_payee: false };
+    expect(importNotification({ ...base, kind: 'photo', status: 'merged', transaction })).toEqual({
+      title: 'レシートの内容を記録に入れました',
+      body: 'スーパーA 1,700円',
+      data: { transactionId: 't' },
+    });
+    expect(importNotification({ ...base, kind: 'card_detail', status: 'merged', transaction })).toBeNull();
+  });
+
   it('サンプルカードの速報は「サンプルカード」、内容が分からなければそう添える', () => {
     const quick = importNotification({
       ...base,

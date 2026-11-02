@@ -37,6 +37,17 @@ type Props = {
 
 const termValue = (t: FormulaTerm) => (t.unit === 'day' ? `${t.value}日` : formatYen(t.value));
 
+/**
+ * 式を1行の文にする（ホームのカードの金額の下に出す。2026-11-02 改善要望: 押さなくても計算方法が分かるように）。
+ * 項が多い（所持金の口座など）ときは maxTerms までにして、残りは「ほか n 件」にまとめる
+ */
+export function formulaText(formula: Formula, maxTerms = 3): string {
+  const shown = formula.terms.slice(0, maxTerms);
+  const rest = formula.terms.length - shown.length;
+  const text = shown.map((t) => `${t.op ? `${t.op} ` : ''}${t.label} ${termValue(t)}`).join(' ');
+  return rest > 0 ? `${text} ＋ ほか${rest}件` : text;
+}
+
 /** 計算式: 1行目に「結果 ＝ 項 ＋ 項」、その下に各項の値 */
 function FormulaBlock({ formula }: { formula: Formula }) {
   const theme = useTheme();
