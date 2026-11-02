@@ -232,6 +232,7 @@ describe('extractPrompt（品目のカテゴリ・外税）', () => {
     const prompt = extractPrompt('2026-11-02', [], cats, { account: () => '' });
     expect(prompt).toContain('店の種類やレシート全体で決めない');
     expect(prompt).toContain('本体 848円・8% → 916円');
+    expect(prompt).toContain('レジ袋（有料のレジ袋代）は品目に入れない');
     expect(prompt).toContain('- 食費 / 中食:');
     expect(prompt).toContain('- 食費 / 食料品:');
   });
