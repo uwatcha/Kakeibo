@@ -47,6 +47,21 @@ describe('computeHomeFigures', () => {
     expect(figures.budget).toBeNull();
   });
 
+  it('実質残高には、クレカの今の未払いを払い終える日までに入る収入を足す（給料日までに残る額は今の残高から）', () => {
+    // 15日締め・翌月10日払い: 10/21 の利用は 11/15 締め → 12/10 払い
+    const cardSchedules = new Map([['card', { closing_day: 15, payment_day: 10, payment_month_offset: 1 }]]);
+    const future = [
+      m('2026-11-05', 30000, null, 'bank', 'income'), // 仕送り
+      m('2026-12-15', 200000, null, 'bank', 'income'), // 支払いのあと
+      m('2026-11-01', 9000, 'friend', 'bank', 'collect'), // 貸し金戻りは足さない
+      m('2026-11-01', 7000, null, 'nisa', 'income'), // 含めない口座
+    ];
+    const figures = computeHomeFigures({ today, accounts, employers, future, dailyLiving: 0, cardSchedules });
+    expect(figures.available).toMatchObject({ current: 70000, income: 30000, amount: 100000, incomeThrough: '2026-12-10' });
+    // 給料日（10/23）の前日までの予定はないので、給料日までに残る額は今の残高のまま
+    expect(figures.budget?.untilPayday).toBe(70000);
+  });
+
   // 次の給料日は 10/23（25日が日曜なので前の金曜）、その次は 11/25
   const future = [
     m('2026-10-22', 20000, 'bank', null, 'expense'),

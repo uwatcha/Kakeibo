@@ -6,12 +6,14 @@ import { Amount } from '@/components/Amount';
 import { Carousel } from '@/components/Carousel';
 import { SectionCard } from '@/components/SectionCard';
 
+import { type Formula, termValue } from './BreakdownSheet';
+
 type Page = {
   title: string;
   amount: number;
   detail?: string;
-  /** 計算方法（式と各項の値を1行の文にしたもの）。金額の下に小さく出す */
-  formula?: string;
+  /** 計算方法。金額の下に小さく出す（式なら項の名前と値の2段、文ならそのまま） */
+  formula?: Formula | string;
   /** カード右上の小さなボタン */
   action?: { icon: string; label: string; onPress: () => void };
   /**
@@ -24,6 +26,41 @@ type Page = {
   /** カードを押したとき（内訳を開く）。あれば右上に「内訳 ›」を出す */
   onPress?: () => void;
 };
+
+/**
+ * カードの計算方法（2026-11-02 ユーザーの指定）: 上の段に項の名前、下の段に値を、
+ * 「＝ 名前 ＋ 名前」「＝ 値 ＋ 値」のように、記号の位置をそろえて列で並べる
+ */
+function FormulaRows({ formula }: { formula: Formula }) {
+  const theme = useTheme();
+  const muted = { color: theme.colors.onSurfaceVariant };
+  const symbol = (text: string, key: string) => (
+    <View key={key} style={styles.symbol}>
+      <Text variant="bodySmall" style={muted}>
+        {text}
+      </Text>
+      <Text variant="bodySmall" style={muted}>
+        {text}
+      </Text>
+    </View>
+  );
+  return (
+    <View style={styles.formula}>
+      {symbol('＝', 'eq')}
+      {formula.terms.flatMap((t, i) => [
+        ...(t.op ? [symbol(t.op, `op${i}`)] : []),
+        <View key={`term${i}`} style={styles.term}>
+          <Text variant="bodySmall" style={muted} numberOfLines={2}>
+            {t.label}
+          </Text>
+          <Text variant="bodySmall" style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
+            {termValue(t)}
+          </Text>
+        </View>,
+      ])}
+    </View>
+  );
+}
 
 /** ホーム上部の金額カード。横にスワイプして切り替える */
 export function BalanceCarousel({ pages }: { pages: Page[] }) {
@@ -77,10 +114,12 @@ export function BalanceCarousel({ pages }: { pages: Page[] }) {
                 numberOfLines={1}
                 adjustsFontSizeToFit
               />
-              {page.formula && (
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={2}>
+              {typeof page.formula === 'string' ? (
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                   ＝ {page.formula}
                 </Text>
+              ) : (
+                page.formula && <FormulaRows formula={page.formula} />
               )}
               {page.detail && (
                 <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -103,4 +142,9 @@ const styles = StyleSheet.create({
   replaced: { textDecorationLine: 'line-through', opacity: 0.7 },
   action: { margin: -8 },
   more: { flexDirection: 'row', alignItems: 'center' },
+  formula: { flexDirection: 'row', alignItems: 'stretch', gap: 6, marginTop: 2 },
+  // 名前が2行になっても、記号と値の段がそろうよう上下に分ける
+  symbol: { justifyContent: 'space-between' },
+  term: { flexShrink: 1, justifyContent: 'space-between' },
+  value: { fontWeight: '700' },
 });

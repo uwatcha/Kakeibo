@@ -1,5 +1,5 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Dialog, IconButton, Portal, SegmentedButtons, Snackbar, Text, useTheme } from 'react-native-paper';
 
@@ -13,7 +13,9 @@ import {
   useAutoAdded,
   useDismissImport,
   useMarkReviewed,
+  useMarkStatementChecked,
   useNeedsPayee,
+  useNotOnStatement,
   useOpenImports,
 } from '@/features/emailImport/hooks';
 import { DuplicateCandidates } from '@/features/emailImport/components/DuplicateCandidates';
@@ -24,13 +26,14 @@ import { formatDay, toTokyoDateString } from '@/lib/date';
 import { formatYen } from '@/lib/money';
 import { SPACING } from '@/theme';
 
-type ReviewTab = 'unconfirmed' | 'auto' | 'duplicate' | 'payee';
+type ReviewTab = 'unconfirmed' | 'auto' | 'duplicate' | 'payee' | 'statement';
 
 const TABS: { value: ReviewTab; label: string }[] = [
   { value: 'unconfirmed', label: '未確認' },
   { value: 'auto', label: '自動で追加' },
   { value: 'duplicate', label: '重複' },
   { value: 'payee', label: '内容の入力' },
+  { value: 'statement', label: '明細にない' },
 ];
 
 const openTransaction = (id: string) => router.push({ pathname: '/transaction/[id]', params: { id } });
@@ -41,6 +44,7 @@ const openTransaction = (id: string) => router.push({ pathname: '/transaction/[i
  * - 自動で追加: メールから自動で入った記録で、まだ見ていないもの（残高にはもう入っている）
  * - 重複: メールから読み取ったが、手入力の記録と重なっていそうで記録しなかったもの
  * - 内容の入力: AI が内容（店名）を決められなかった記録。直すと対応表に覚える
+ * - 明細にない: メールの来る口座への手入力の記録で、数日たってもメールが来ないもの（口座・金額の入れ間違いかもしれない）
  */
 export default function ReviewScreen() {
   const theme = useTheme();
@@ -51,16 +55,19 @@ export default function ReviewScreen() {
   const autoAdded = useAutoAdded();
   const open = useOpenImports();
   const needsPayee = useNeedsPayee();
+  const notOnStatement = useNotOnStatement();
   const accounts = useAccounts();
   const confirm = useConfirmTransactions();
   const reviewed = useMarkReviewed();
   const dismiss = useDismissImport();
   const addDuplicate = useAddDuplicateImport();
+  const statementChecked = useMarkStatementChecked();
   // 重複の可能性で、重なっていそうな記録を開いている行
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmAll, setConfirmAll] = useState(false);
+  const tabBar = useRef<ScrollView>(null);
 
-  const queries = [unconfirmed, autoAdded, open, needsPayee, accounts];
+  const queries = [unconfirmed, autoAdded, open, needsPayee, notOnStatement, accounts];
   if (queries.some((q) => !q.data)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -76,9 +83,11 @@ export default function ReviewScreen() {
     auto: autoAdded.data!.length,
     duplicate: duplicates.length,
     payee: needsPayee.data!.length,
+    statement: notOnStatement.data!.length,
   };
-  const busy = confirm.isPending || reviewed.isPending || dismiss.isPending || addDuplicate.isPending;
-  const failed = confirm.isError || reviewed.isError || dismiss.isError || addDuplicate.isError;
+  const mutations = [confirm, reviewed, dismiss, addDuplicate, statementChecked];
+  const busy = mutations.some((m) => m.isPending);
+  const failed = mutations.some((m) => m.isError);
 
   const row = (t: Transaction, right?: ReactNode) => (
     <ListRow
@@ -200,6 +209,31 @@ export default function ReviewScreen() {
           ))}
         </SectionCard>
       );
+  } else if (tab === 'statement') {
+    const items = notOnStatement.data!;
+    body =
+      items.length === 0 ? (
+        empty('明細にない記録はありません')
+      ) : (
+        <>
+          <SectionCard title={`${items.length}件`}>
+            {items.map((t) =>
+              row(
+                t,
+                rowAction('check-circle-outline', '確かめた', () => statementChecked.mutate([t.id])),
+              ),
+            )}
+          </SectionCard>
+          <Button
+            mode="contained"
+            icon="check-all"
+            onPress={() => statementChecked.mutate(items.map((t) => t.id))}
+            disabled={busy}
+          >
+            すべて確かめた
+          </Button>
+        </>
+      );
   } else {
     const items = needsPayee.data!;
     body =
@@ -213,7 +247,17 @@ export default function ReviewScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ title: '記録の確認' }} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        ref={tabBar}
+        style={styles.tabBar}
+        contentContainerStyle={styles.tabs}
+        // 右のほうのタブで開いたときは、そのタブが見えるよう右端まで送る
+        onContentSizeChange={() => {
+          if (initialTab === 'payee' || initialTab === 'statement') tabBar.current?.scrollToEnd({ animated: false });
+        }}
+      >
         <SegmentedButtons
           value={tab}
           onValueChange={(v) => setTab(v as ReviewTab)}
@@ -221,6 +265,8 @@ export default function ReviewScreen() {
           buttons={TABS.map((t) => ({
             value: t.value,
             label: counts[t.value] > 0 ? `${t.label} ${counts[t.value]}` : t.label,
+            // タブが5つで画面の幅に収まらないので、縮めずに横にスクロールさせる
+            style: styles.tab,
           }))}
         />
       </ScrollView>
@@ -247,7 +293,7 @@ export default function ReviewScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-      <Snackbar visible={failed} onDismiss={() => [confirm, reviewed, dismiss, addDuplicate].forEach((m) => m.reset())}>
+      <Snackbar visible={failed} onDismiss={() => mutations.forEach((m) => m.reset())}>
         保存できませんでした
       </Snackbar>
     </View>
@@ -256,7 +302,9 @@ export default function ReviewScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  tabBar: { flexGrow: 0 },
   tabs: { paddingHorizontal: SPACING.screen, paddingVertical: 8 },
+  tab: { minWidth: 112 },
   content: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 48 },
   empty: { padding: 24, textAlign: 'center' },
   right: { flexDirection: 'row', alignItems: 'center' },

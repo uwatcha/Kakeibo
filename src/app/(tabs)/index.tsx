@@ -7,7 +7,7 @@ import { AddFab } from '@/components/AddFab';
 import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import { BalanceCarousel } from '@/features/home/components/BalanceCarousel';
-import { BreakdownSheet, formulaText } from '@/features/home/components/BreakdownSheet';
+import { BreakdownSheet } from '@/features/home/components/BreakdownSheet';
 import { homeSheet, type HomeSheetKey } from '@/features/home/breakdown';
 import { AccountSections } from '@/features/home/components/AccountSections';
 import { ReviewCard } from '@/features/home/components/ReviewCard';
@@ -60,10 +60,11 @@ export default function HomeScreen() {
   const hasAccounts = accounts.some((a) => !a.isArchived);
   const accountName = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? '';
   const openSheet = breakdown ? homeSheet(breakdown, figures, accounts, future.data, today) : null;
-  // カードの金額の下に、内訳の1つ目の式を出す
+  // カードの金額の下に、内訳の1つ目の式を出す（所持金は出さない。純資産は式でなく文。2026-11-02 ユーザーの指定）
   const formulaOf = (key: HomeSheetKey) => {
-    const formula = homeSheet(key, figures, accounts, future.data, today)?.formulas?.[0];
-    return formula ? formulaText(formula) : undefined;
+    if (key === 'everyday') return undefined;
+    if (key === 'net') return '全ての口座を合算';
+    return homeSheet(key, figures, accounts, future.data, today)?.formulas?.[0];
   };
 
   return (

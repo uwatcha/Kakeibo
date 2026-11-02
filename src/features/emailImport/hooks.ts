@@ -9,9 +9,11 @@ import {
   fetchEmailImportSettings,
   fetchEmailImportSources,
   fetchNeedsPayee,
+  fetchNotOnStatement,
   fetchOpenImports,
   fetchPayeeRules,
   markReviewed,
+  markStatementChecked,
   rotateEmailImportToken,
   saveEmailImportSource,
   saveAtmCashAccount,
@@ -28,6 +30,7 @@ export const emailImportKeys = {
   open: () => [...emailImportKeys.all, 'open'] as const,
   autoAdded: () => ['transactions', 'autoAdded'] as const,
   needsPayee: () => ['transactions', 'needsPayee'] as const,
+  notOnStatement: () => ['transactions', 'notOnStatement'] as const,
 };
 
 function useInvalidate() {
@@ -49,6 +52,8 @@ export const usePayeeRules = () => useQuery({ queryKey: emailImportKeys.rules(),
 export const useOpenImports = () => useQuery({ queryKey: emailImportKeys.open(), queryFn: fetchOpenImports });
 export const useAutoAdded = () => useQuery({ queryKey: emailImportKeys.autoAdded(), queryFn: fetchAutoAdded });
 export const useNeedsPayee = () => useQuery({ queryKey: emailImportKeys.needsPayee(), queryFn: fetchNeedsPayee });
+export const useNotOnStatement = () =>
+  useQuery({ queryKey: emailImportKeys.notOnStatement(), queryFn: fetchNotOnStatement });
 
 export function useRotateToken() {
   const invalidate = useInvalidate();
@@ -101,4 +106,9 @@ export function useAddDuplicateImport() {
 export function useMarkReviewed() {
   const invalidate = useInvalidate();
   return useMutation({ mutationFn: markReviewed, onSuccess: invalidate });
+}
+
+export function useMarkStatementChecked() {
+  const invalidate = useInvalidate();
+  return useMutation({ mutationFn: markStatementChecked, onSuccess: invalidate });
 }

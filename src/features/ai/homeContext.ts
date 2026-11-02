@@ -12,7 +12,7 @@ export function homeContext(figures: HomeFigures, aliases: Pick<Aliases, 'accoun
   const lines = ['## ホームに出ている額（今の画面の表示）'];
   lines.push(
     `- 所持金（普段使う口座の合計）: ${formatYen(summary.everydayTotal)}`,
-    `- 実質残高: ${formatYen(available.amount)}`,
+    `- 実質残高: ${formatYen(available.amount)}（今の残高 ${formatYen(available.current)}${available.incomeThrough ? ` ＋ クレカの支払い（${available.incomeThrough}）までの収入 ${formatYen(available.income)}` : ''}）`,
     `- 純資産: ${formatYen(summary.netWorth)}`,
   );
   if (budget) {
@@ -21,7 +21,7 @@ export function homeContext(figures: HomeFigures, aliases: Pick<Aliases, 'accoun
       return card.amount < 0 ? `${card.shortTitle}: ${formatYen(-card.amount)}` : `${card.title}: ${formatYen(card.amount)}`;
     };
     lines.push(
-      `- ${show('untilPayday')}（${budget.through}まで・あと${budget.daysLeft}日${budget.perDay !== null ? `・1日あたり ${formatYen(budget.perDay)}` : ''}。実質残高 ${formatYen(available.amount)} ＋ 予定 ${formatYen(budget.planned)}）`,
+      `- ${show('untilPayday')}（${budget.through}まで・あと${budget.daysLeft}日${budget.perDay !== null ? `・1日あたり ${formatYen(budget.perDay)}` : ''}。今の残高 ${formatYen(available.current)} ＋ 予定 ${formatYen(budget.planned)}）`,
       `- ${show('afterReserve')}（取り置き ${formatYen(budget.reserve)} = ${budget.next.from}〜${budget.next.through} の生活費 ${formatYen(budget.dailyLiving * budget.next.days)} − その期間の予定 ${formatYen(budget.next.planned)}。足りれば 0）`,
       `- ${show('free')}（給料日までの生活費 ${formatYen(budget.livingUntil)} = 1日 ${formatYen(budget.dailyLiving)} × ${budget.daysLeft}日 を引いた額）`,
     );

@@ -719,6 +719,7 @@ export type Database = {
           raw_payee: string | null
           recurring_rule_id: string | null
           related_transaction_id: string | null
+          statement_checked: boolean
           to_account_id: string | null
           type: Database["public"]["Enums"]["txn_type"]
           updated_at: string
@@ -744,6 +745,7 @@ export type Database = {
           raw_payee?: string | null
           recurring_rule_id?: string | null
           related_transaction_id?: string | null
+          statement_checked?: boolean
           to_account_id?: string | null
           type: Database["public"]["Enums"]["txn_type"]
           updated_at?: string
@@ -769,6 +771,7 @@ export type Database = {
           raw_payee?: string | null
           recurring_rule_id?: string | null
           related_transaction_id?: string | null
+          statement_checked?: boolean
           to_account_id?: string | null
           type?: Database["public"]["Enums"]["txn_type"]
           updated_at?: string

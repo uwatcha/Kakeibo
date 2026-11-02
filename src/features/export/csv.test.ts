@@ -29,6 +29,7 @@ describe('transactionsToCsv', () => {
       auto_reviewed: true,
       needs_payee: false,
       raw_payee: null,
+      statement_checked: false,
     };
     const csv = transactionsToCsv(
       [

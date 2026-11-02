@@ -14,6 +14,7 @@ function txn(overrides: Partial<Transaction>): Transaction {
     employer_id: null,
     related_transaction_id: null,
     auto_salary: false,
+    statement_checked: false,
     auto_source: null,
     auto_reviewed: true,
     needs_payee: false,

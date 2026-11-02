@@ -9,6 +9,7 @@ import {
   useEmailImportSettings,
   useEmailImportSources,
   useNeedsPayee,
+  useNotOnStatement,
   useOpenImports,
 } from '@/features/emailImport/hooks';
 import { useUnconfirmed } from '@/features/transactions/hooks';
@@ -27,6 +28,7 @@ export function ReviewCard({ today, now }: { today: string; now: number }) {
   const autoAdded = useAutoAdded();
   const open = useOpenImports();
   const needsPayee = useNeedsPayee();
+  const notOnStatement = useNotOnStatement();
   const settings = useEmailImportSettings();
   const sources = useEmailImportSources();
 
@@ -56,6 +58,13 @@ export function ReviewCard({ today, now }: { today: string; now: number }) {
       color: warning,
     },
     { key: 'duplicate', count: duplicates, title: '重複の可能性', icon: 'content-duplicate', color: warning },
+    {
+      key: 'statement',
+      count: notOnStatement.data?.length ?? 0,
+      title: '明細にない記録',
+      icon: 'file-question-outline',
+      color: warning,
+    },
     {
       key: 'auto',
       count: autoAdded.data?.length ?? 0,

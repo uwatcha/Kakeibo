@@ -1,12 +1,13 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
 import { isConfirmedOnSave } from '@/features/transactions/confirmation';
-import { toTokyoDateString } from '@/lib/date';
+import { addDays, toTokyoDateString } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import type { Transaction } from '@/features/transactions/api';
 import type { Database } from '@/types/database';
 
 import type { EmailSource } from '../../../supabase/functions/_shared/emailParse';
+import { notOnStatement, STATEMENT_GRACE_DAYS, STATEMENT_LOOKBACK_DAYS } from './statement';
 
 export type EmailImportSettings = Database['public']['Tables']['email_import_settings']['Row'];
 export type EmailImportSource = Database['public']['Tables']['email_import_sources']['Row'];
@@ -200,4 +201,50 @@ export async function fetchNeedsPayee(): Promise<Transaction[]> {
     .order('date', { ascending: false });
   if (error) throw error;
   return data;
+}
+
+/**
+ * 明細にない記録: メールからの記録で見ている口座への手入力の記録（確認済み・残高調整を除く）で、
+ * メールを使い始めた日以降・数日たっても、どのメールとも結び付いていないもの（新しい順）
+ */
+export async function fetchNotOnStatement(): Promise<Transaction[]> {
+  const [settings, sources] = await Promise.all([fetchEmailImportSettings(), fetchEmailImportSources()]);
+  const watched = sources
+    .filter((s): s is EmailImportSource & { account_id: string } => s.enabled && !!s.account_id)
+    .map((s) => ({ source: s.source as EmailSource, accountId: s.account_id }));
+  if (!settings?.started_at || watched.length === 0) return [];
+  const today = toTokyoDateString();
+  const started = toTokyoDateString(new Date(settings.started_at));
+  const lookback = addDays(today, -STATEMENT_LOOKBACK_DAYS);
+  const from = started > lookback ? started : lookback;
+  const through = addDays(today, -STATEMENT_GRACE_DAYS);
+  if (from > through) return [];
+  const ids = [...new Set(watched.map((w) => w.accountId))].join(',');
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .is('auto_source', null)
+    .eq('is_confirmed', true)
+    .eq('statement_checked', false)
+    .neq('type', 'adjustment')
+    .gte('date', from)
+    .lte('date', through)
+    .or(`from_account_id.in.(${ids}),to_account_id.in.(${ids})`)
+    .order('date', { ascending: false });
+  if (error) throw error;
+  if (data.length === 0) return [];
+  // 重複として見送ったメール（duplicate_of）・予定を確認したメール（transaction_id）が指す記録
+  const { data: imports, error: importError } = await supabase
+    .from('email_imports')
+    .select('duplicate_of, transaction_id')
+    .gte('date', addDays(from, -STATEMENT_GRACE_DAYS));
+  if (importError) throw importError;
+  const matched = new Set(imports.flatMap((i) => [i.duplicate_of, i.transaction_id]).filter((id): id is string => !!id));
+  return notOnStatement(data, watched, matched);
+}
+
+/** 明細にない記録を、確かめた（明細にあった・そのままでよい）にする */
+export async function markStatementChecked(ids: string[]): Promise<void> {
+  const { error } = await supabase.from('transactions').update({ statement_checked: true }).in('id', ids);
+  if (error) throw error;
 }

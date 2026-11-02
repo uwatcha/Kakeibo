@@ -1,4 +1,4 @@
-import { useAccountBalances } from '@/features/accounts/hooks';
+import { useAccountBalances, useAllCardSettings } from '@/features/accounts/hooks';
 import { useEmployers } from '@/features/employers/hooks';
 import { useMovementsAfter } from '@/features/reports/hooks';
 import { useDailyLiving } from '@/features/settings/hooks';
@@ -14,6 +14,7 @@ export function useHomeFigures(today: string) {
   const employers = useEmployers();
   const future = useMovementsAfter(today);
   const living = useDailyLiving(today);
+  const cards = useAllCardSettings();
   const activeEmployers = employers.data?.filter((e) => !e.is_archived) ?? [];
 
   const figures: HomeFigures | null = balances.data
@@ -23,6 +24,7 @@ export function useHomeFigures(today: string) {
         employers: activeEmployers,
         future: future.data,
         dailyLiving: living.ready ? living.daily : undefined,
+        cardSchedules: cards.data ? new Map(cards.data.map((c) => [c.account_id, c])) : undefined,
       })
     : null;
   return { balances, future, figures };

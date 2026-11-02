@@ -1,4 +1,5 @@
 import { ASSET_KINDS } from '@/features/accounts/accountKinds';
+import { type CardSchedule, nextCardCycle } from '@/features/accounts/cardSchedule';
 import {
   type AccountBalance,
   type BalanceSummary,
@@ -15,6 +16,14 @@ import { addDays, addMonths, daysInclusive, monthStart } from '@/lib/date';
 
 /** 予定を見る期間の終わり（期限なし） */
 const LAST_DATE = '9999-12-31';
+
+/** 今の未払いを払い終える引き落とし日（今日の利用が入る回の引き落とし日） */
+function payOffDate(schedule: CardSchedule, today: string): string {
+  let cycle = nextCardCycle(schedule, today);
+  // もう締めた回の引き落としなら、その次の回
+  while (cycle.closingDate < today) cycle = nextCardCycle(schedule, addDays(cycle.paymentDate, 1));
+  return cycle.paymentDate;
+}
 
 /** 期間の区切り: すべての給料をもらい終える日（働き先がなければ月の初め）を、次から2つ */
 function upcomingPaydays(employers: readonly PaydayRule[], today: string): string[] {
@@ -34,6 +43,8 @@ export type HomeInput = {
   future?: readonly Movement[];
   /** 1日あたりの生活費。読み込み中なら undefined */
   dailyLiving?: number;
+  /** クレカの締め日・引き落とし日（口座の id ごと）。読み込み中なら undefined */
+  cardSchedules?: ReadonlyMap<string, CardSchedule>;
 };
 
 /**
@@ -49,7 +60,7 @@ export type HomeBudget = {
   daysLeft: number;
   /** 今日の翌日から給料日の前日までの予定の増減 */
   planned: number;
-  /** 給料日までに残る額 = 実質残高 ＋ planned */
+  /** 給料日までに残る額 = 今の残高 ＋ planned（実質残高に足した収入は planned に入っているので、今の残高から） */
   untilPayday: number;
   /** 1日あたり（給料日までに残る額 ÷ 残り日数）。マイナスなら null */
   perDay: number | null;
@@ -69,9 +80,20 @@ export type HomeBudget = {
 
 export type HomeFigures = {
   summary: BalanceSummary;
-  /** 実質残高: 含める口座の今の残高の合計（含めるクレカの未払いを引いた額。先の予定は見ない） */
+  /**
+   * 実質残高 = 今の残高 ＋ クレカの支払いまでに入る収入（2026-11-02 ユーザーの指定）。
+   * 今の残高は含める口座の今の残高の合計（含めるクレカの未払いを引いた額）。収入は、含めるクレカの今の未払いを
+   * 払い終える日（いちばん遅いカード）までの、含める口座に入る収入の予定（給料・仕送りなど）。貸し金戻りは、貸し借りの
+   * 相手が含める口座なら残高に入っているので足さない（含めない口座なら足さない。ユーザーの指定）
+   */
   available: {
     amount: number;
+    /** 今の残高 */
+    current: number;
+    /** クレカの支払いまでに入る収入 */
+    income: number;
+    /** 収入を数える最後の日（含めるクレカの未払いがなければ null で、収入は 0） */
+    incomeThrough: string | null;
     /** 実質残高に含める口座 */
     targets: ReadonlySet<string>;
   };
@@ -85,11 +107,24 @@ export type HomeFigures = {
 
 /** ホームのカード（実質残高・純資産・給料日までの3つの額）と、足りなくなる口座の計算 */
 export function computeHomeFigures(input: HomeInput): HomeFigures {
-  const { today, accounts, employers, future, dailyLiving } = input;
+  const { today, accounts, employers, future, dailyLiving, cardSchedules } = input;
   const summary = summarizeBalances([...accounts]);
   const targets = new Set(accounts.filter(isAvailableAccount).map((a) => a.id));
   const isTarget = (id: string) => targets.has(id);
-  const available = summary.availableNetWorth;
+  const current = summary.availableNetWorth;
+  const payOffDates = accounts
+    .filter((a) => targets.has(a.id) && a.kind === 'credit_card' && a.balance < 0)
+    .map((a) => cardSchedules?.get(a.id))
+    .filter((schedule): schedule is CardSchedule => !!schedule)
+    .map((schedule) => payOffDate(schedule, today))
+    .sort();
+  const incomeThrough = payOffDates.at(-1) ?? null;
+  const income =
+    future && incomeThrough
+      ? future
+          .filter((m) => m.type === 'income' && m.date > today && m.date <= incomeThrough)
+          .reduce((sum, m) => sum + (m.to_account_id && isTarget(m.to_account_id) ? m.amount : 0), 0)
+      : 0;
 
   const paydays = upcomingPaydays(employers, today);
   let budget: HomeBudget | null = null;
@@ -97,7 +132,7 @@ export function computeHomeFigures(input: HomeInput): HomeFigures {
     const through = addDays(paydays[0], -1);
     const daysLeft = Math.max(1, daysInclusive(today, through));
     const planned = plannedEffect(future, isTarget, today, through);
-    const untilPayday = available + planned;
+    const untilPayday = current + planned;
     const nextThrough = addDays(paydays[1], -1);
     const next = {
       from: paydays[0],
@@ -134,7 +169,13 @@ export function computeHomeFigures(input: HomeInput): HomeFigures {
       ? planCovers(shortages, lowestAhead(assetBalances, future, today), transferOrder([...accounts]))
       : new Map<string, ShortageCover>();
 
-  return { summary, available: { amount: available, targets }, budget, shortages, covers };
+  return {
+    summary,
+    available: { amount: current + income, current, income, incomeThrough, targets },
+    budget,
+    shortages,
+    covers,
+  };
 }
 
 export type BudgetCardKey = 'untilPayday' | 'afterReserve' | 'free';

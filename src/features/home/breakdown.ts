@@ -10,7 +10,13 @@ import { formatYen } from '@/lib/money';
 import { budgetCard, type BudgetCardKey, type HomeBudget, type HomeFigures } from './figures';
 
 export type HomeSheetKey = 'everyday' | 'available' | 'net' | BudgetCardKey;
-export type HomeSheet = { title: string; total: number; sections: BreakdownSection[]; note?: string; formulas?: Formula[] };
+export type HomeSheet = {
+  title: string;
+  total: number;
+  sections: BreakdownSection[];
+  note?: string;
+  formulas?: Formula[];
+};
 
 const accountRows = (list: readonly AccountBalance[]): BreakdownRow[] =>
   list.map((a) => ({
@@ -45,7 +51,32 @@ function plannedSection(
   return { title: `予定（${formatDay(through)}まで）`, total, rows };
 }
 
-/** 給料日までに残る額（と、それをもとにした額）の土台: 実質残高 ＋ 給料日の前日までの予定 */
+/** 実質残高に足す、クレカの支払いまでに含める口座に入る収入の予定 */
+function incomeSection(
+  future: readonly Movement[],
+  today: string,
+  through: string,
+  total: number,
+  targets: ReadonlySet<string>,
+): BreakdownSection {
+  const rows = future
+    .filter(
+      (m) =>
+        m.type === 'income' && m.date > today && m.date <= through && m.to_account_id && targets.has(m.to_account_id),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((m): BreakdownRow => ({
+      key: m.id,
+      icon: TRANSACTION_RULES.income.icon,
+      title: m.payee || TRANSACTION_RULES.income.label,
+      subtitle: formatDay(m.date),
+      amount: m.amount,
+      kind: 'delta',
+    }));
+  return { title: `クレカの支払い（${formatDay(through)}）までの収入`, total, rows };
+}
+
+/** 給料日までに残る額（と、それをもとにした額）の土台: 今の残高 ＋ 給料日の前日までの予定 */
 function untilPaydaySections(
   budget: HomeBudget,
   figures: HomeFigures,
@@ -58,7 +89,7 @@ function untilPaydaySections(
     .filter((a) => available.targets.has(a.id) && a.balance !== 0)
     .sort((a, b) => b.balance - a.balance);
   return [
-    { title: '実質残高', total: available.amount, rows: accountRows(included) },
+    { title: '今の残高', total: available.current, rows: accountRows(included) },
     plannedSection(future, today, budget.through, budget.planned, available.targets),
   ];
 }
@@ -99,7 +130,7 @@ function budgetSheet(
           {
             result: card.title,
             terms: [
-              { label: '実質残高', value: figures.available.amount },
+              { label: '今の残高', value: figures.available.current },
               { op: '＋', label: plannedLabel, value: budget.planned },
             ],
           },
@@ -207,22 +238,37 @@ export function homeSheet(
     }
     case 'available': {
       const split = availableBreakdown(accounts);
+      const currentFormula: Formula = {
+        result: '今の残高',
+        terms: [
+          { label: 'プラスの口座', value: split.plusTotal },
+          { op: '＋', label: 'マイナスの口座（クレカの未払いなど）', value: split.minusTotal },
+        ],
+      };
+      const { incomeThrough } = available;
       return {
         title: '実質残高',
         total: available.amount,
         sections: [
           { title: 'プラスの口座', total: split.plusTotal, rows: accountRows(split.plus) },
           { title: 'マイナスの口座', total: split.minusTotal, rows: accountRows(split.minus) },
+          ...(incomeThrough && future
+            ? [incomeSection(future, today, incomeThrough, available.income, available.targets)]
+            : []),
         ],
-        formulas: [
-          {
-            result: '実質残高',
-            terms: [
-              { label: 'プラスの口座', value: split.plusTotal },
-              { op: '＋', label: 'マイナスの口座（クレカの未払いなど）', value: split.minusTotal },
-            ],
-          },
-        ],
+        formulas: incomeThrough
+          ? [
+              {
+                result: '実質残高',
+                terms: [
+                  { label: '今の残高', value: available.current },
+                  { op: '＋', label: 'クレカの支払いまでの収入', value: available.income },
+                ],
+                note: `クレカの支払い: ${formatDay(incomeThrough)}（今の未払いを払い終える日）`,
+              },
+              currentFormula,
+            ]
+          : [{ ...currentFormula, result: '実質残高' }],
       };
     }
     case 'net': {
