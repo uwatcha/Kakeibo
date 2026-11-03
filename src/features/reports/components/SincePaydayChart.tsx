@@ -54,7 +54,7 @@ export function SincePaydayChart({
         <Card.Title title={TITLE} titleStyle={styles.title} />
         <Card.Content style={styles.gap}>
           <Button mode="outlined" icon="briefcase-plus" onPress={() => router.push('/employers')}>
-            働き先と給料日を登録
+            収入元と入金日を登録
           </Button>
         </Card.Content>
       </Card>

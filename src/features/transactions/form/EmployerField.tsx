@@ -36,7 +36,7 @@ export function EmployerField({ control, errors, employers, onPick }: Props) {
                 }}
               />
             ) : (
-              <HelperText type="error">設定の「働き先と給料日」で働き先を登録してください</HelperText>
+              <HelperText type="error">設定の「収入元と入金日」で収入元を登録してください</HelperText>
             )}
             {!!errors.employerId && <HelperText type="error">{errors.employerId.message}</HelperText>}
           </View>

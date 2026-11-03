@@ -98,7 +98,7 @@ export default function SettingsScreen() {
             }
           />
           {navItem('カテゴリの管理', 'shape', '/categories')}
-          {navItem('働き先と給料日', 'briefcase', '/employers')}
+          {navItem('収入元と入金日', 'briefcase', '/employers')}
           {navItem('定期支払い', 'autorenew', '/recurring')}
           <ListRow
             title="自動入力のルール"

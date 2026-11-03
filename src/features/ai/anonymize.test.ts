@@ -50,7 +50,7 @@ describe('anonymize', () => {
   const aliases = buildAliases(source);
   const context = buildContext(source, aliases);
 
-  it('口座・相手・勤務先・内容・メモの中身は材料に出さない', () => {
+  it('口座・相手・収入元・内容・メモの中身は材料に出さない', () => {
     for (const secret of ['サンプル銀行', '健太', '父', 'acmeworks', 'セブンイレブン', '健太と行った']) {
       expect(context).not.toContain(secret);
     }
@@ -60,10 +60,10 @@ describe('anonymize', () => {
     expect(context).toContain('銀行A（銀行・実質残高に含む）: 31,000円');
     expect(context).toContain('相手A');
     expect(context).toContain('相手B');
-    expect(context).toContain('勤務先A');
+    expect(context).toContain('収入元A');
     expect(context).toContain('メモあり');
     expect(context.match(/内容1/g)?.length).toBe(2);
-    expect(context).toContain('予定・収入元 勤務先A');
+    expect(context).toContain('予定・収入元 収入元A');
   });
 
   it('質問の中の名前を置き換え、返事の中の名前を元に戻す', () => {

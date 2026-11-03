@@ -1,10 +1,17 @@
 import { SALARY_CATEGORY } from '@/features/transactions/salary';
+import { addDays } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 
 import type { Employer } from './api';
-import { monthsLater, pendingSalaryDates, SALARY_AHEAD_MONTHS } from './salarySchedule';
+import {
+  monthsLater,
+  pendingSalaryDates,
+  SALARY_AHEAD_MONTHS,
+  SALARY_MATCH_DAYS,
+  uncoveredDates,
+} from './salarySchedule';
 
-/** 目安と入金先が入っていて、非表示でない働き先だけ予定を入れる */
+/** 目安と入金先が入っていて、非表示でない収入元だけ予定を入れる */
 const canPlan = (e: Employer) => !e.is_archived && !!e.salary_amount && !!e.salary_account_id;
 
 async function salaryCategoryId(): Promise<string | null> {
@@ -19,7 +26,7 @@ async function salaryCategoryId(): Promise<string | null> {
   return data[0]?.id ?? null;
 }
 
-/** 1つの働き先の、まだ入れていない給料日の予定を入れる。手で入れた給料（同じ日・同じ働き先の収入）がある日は入れない */
+/** 1つの収入元の、まだ入れていない入金日の予定を入れる。そばに収入がもう入っている日は入れない（uncoveredDates） */
 async function planFor(employer: Employer, today: string, categoryId: string | null): Promise<number> {
   const through = monthsLater(today, SALARY_AHEAD_MONTHS);
   const dates = pendingSalaryDates(employer, today);
@@ -27,26 +34,23 @@ async function planFor(employer: Employer, today: string, categoryId: string | n
   if (dates.length > 0) {
     const existing = await supabase
       .from('transactions')
-      .select('date')
+      .select('date, amount, employer_id, to_account_id')
       .eq('type', 'income')
-      .eq('employer_id', employer.id)
-      .in('date', dates);
+      .gte('date', addDays(dates[0], -SALARY_MATCH_DAYS))
+      .lte('date', addDays(dates[dates.length - 1], SALARY_MATCH_DAYS));
     if (existing.error) throw existing.error;
-    const taken = new Set(existing.data.map((t) => t.date));
-    const rows = dates
-      .filter((date) => !taken.has(date))
-      .map((date) => ({
-        type: 'income' as const,
-        amount: employer.salary_amount!,
-        to_account_id: employer.salary_account_id!,
-        category_id: categoryId,
-        employer_id: employer.id,
-        payee: employer.name,
-        date,
-        // 実際の額で確かめてもらうため、日付が来たら「未確認」になる
-        is_confirmed: false,
-        auto_salary: true,
-      }));
+    const rows = uncoveredDates(dates, employer, existing.data).map((date) => ({
+      type: 'income' as const,
+      amount: employer.salary_amount!,
+      to_account_id: employer.salary_account_id!,
+      category_id: categoryId,
+      employer_id: employer.id,
+      payee: employer.name,
+      date,
+      // 実際の額で確かめてもらうため、日付が来たら「未確認」になる
+      is_confirmed: false,
+      auto_salary: true,
+    }));
     if (rows.length > 0) {
       const { error } = await supabase.from('transactions').insert(rows);
       if (error) throw error;

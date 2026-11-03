@@ -54,8 +54,8 @@ function RootNavigator() {
         <Stack.Screen name="transaction/[id]" options={{ headerShown: true, title: '記録' }} />
         <Stack.Screen name="categories/index" options={{ headerShown: true, title: 'カテゴリの管理' }} />
         <Stack.Screen name="categories/[id]" options={{ headerShown: true, title: 'カテゴリ' }} />
-        <Stack.Screen name="employers/index" options={{ headerShown: true, title: '働き先と給料日' }} />
-        <Stack.Screen name="employers/[id]" options={{ headerShown: true, title: '働き先' }} />
+        <Stack.Screen name="employers/index" options={{ headerShown: true, title: '収入元と入金日' }} />
+        <Stack.Screen name="employers/[id]" options={{ headerShown: true, title: '収入元' }} />
         <Stack.Screen name="account-history/[id]" options={{ headerShown: true, title: '口座' }} />
         <Stack.Screen name="card-settings/[id]" options={{ headerShown: true, title: 'カードの設定' }} />
         <Stack.Screen name="recurring/index" options={{ headerShown: true, title: '定期支払い' }} />

@@ -26,14 +26,14 @@ export default function EmployersScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Stack.Screen options={{ title: '働き先と給料日' }} />
+      <Stack.Screen options={{ title: '収入元と入金日' }} />
       {!data ? (
         <QueryState isLoading={isLoading} error={error} onRetry={refetch} />
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {active.length === 0 ? (
             <Text style={styles.empty} variant="bodyMedium">
-              働き先がありません
+              収入元がありません
             </Text>
           ) : (
             <SectionCard>
@@ -52,7 +52,7 @@ export default function EmployersScreen() {
             </SectionCard>
           )}
           {archived.length > 0 && (
-            <SectionCard title="非表示にした働き先">
+            <SectionCard title="非表示にした収入元">
               {archived.map((e) => (
                 <ListRow
                   key={e.id}
@@ -67,7 +67,7 @@ export default function EmployersScreen() {
           )}
         </ScrollView>
       )}
-      <AddFab label="働き先を追加" onPress={() => openEmployer('new')} />
+      <AddFab label="収入元を追加" onPress={() => openEmployer('new')} />
     </View>
   );
 }

@@ -19,17 +19,23 @@ import { AccountPicker } from '@/features/transactions/components/AccountPicker'
 import { formatDay, toTokyoDateString } from '@/lib/date';
 import { parseNonNegativeYen } from '@/lib/money';
 
-const schema = z.object({
-  name: z.string().trim().min(1, '名前を入力してください').max(30, '30文字以内にしてください'),
-  payday: z
-    .string()
-    .refine((v) => /^\d{1,2}$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= 31, '1〜31の数字で入力してください'),
-  paydayShift: z.enum(['before', 'after']),
-  salaryAmount: z
-    .string()
-    .refine((v) => v.trim() === '' || (parseNonNegativeYen(v) ?? 0) > 0, '1円以上の整数（円）で入力してください'),
-  salaryAccountId: z.string().nullable(),
-});
+const schema = z
+  .object({
+    name: z.string().trim().min(1, '名前を入力してください').max(30, '30文字以内にしてください'),
+    payday: z
+      .string()
+      .refine((v) => /^\d{1,2}$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= 31, '1〜31の数字で入力してください'),
+    paydayShift: z.enum(['before', 'after']),
+    salaryAmount: z
+      .string()
+      .refine((v) => v.trim() === '' || (parseNonNegativeYen(v) ?? 0) > 0, '1円以上の整数（円）で入力してください'),
+    salaryAccountId: z.string().nullable(),
+  })
+  .refine((v) => v.salaryAmount.trim() === '' || v.salaryAccountId !== null, {
+    // 入金先がないと予定を入れられない（2026-11-03: 目安だけ入れて保存し、仕送りの予定が入っていなかった）
+    message: '金額の目安を入れたときは、入金先を選んでください',
+    path: ['salaryAccountId'],
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -114,7 +120,7 @@ export default function EmployerEditScreen() {
     }
   };
 
-  const title = isNew ? '働き先を追加' : '働き先を編集';
+  const title = isNew ? '収入元を追加' : '収入元を編集';
   if (!employers.data || (!isNew && !employer)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -143,7 +149,7 @@ export default function EmployerEditScreen() {
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
               mode="outlined"
-              label="働き先の名前"
+              label="名前"
               autoFocus={isNew}
               value={value}
               onChangeText={onChange}
@@ -163,7 +169,7 @@ export default function EmployerEditScreen() {
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
                 mode="outlined"
-                label="給料日"
+                label="入金日"
                 keyboardType="number-pad"
                 value={value}
                 onChangeText={onChange}
@@ -179,7 +185,7 @@ export default function EmployerEditScreen() {
           {errors.payday?.message}
         </HelperText>
 
-        <List.Subheader style={styles.subheader}>給料日が土日祝・年末年始のとき</List.Subheader>
+        <List.Subheader style={styles.subheader}>入金日が土日祝・年末年始のとき</List.Subheader>
         <Controller
           control={control}
           name="paydayShift"
@@ -202,7 +208,7 @@ export default function EmployerEditScreen() {
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
               mode="outlined"
-              label="給料の目安（任意）"
+              label="金額の目安（任意）"
               keyboardType="number-pad"
               value={value}
               onChangeText={onChange}
@@ -231,10 +237,13 @@ export default function EmployerEditScreen() {
             )}
           />
         )}
+        <HelperText type="error" visible={!!errors.salaryAccountId}>
+          {errors.salaryAccountId?.message}
+        </HelperText>
 
         {preview.length > 0 && (
           <View style={styles.preview}>
-            <Text variant="labelLarge">これからの給料日</Text>
+            <Text variant="labelLarge">これからの入金日</Text>
             {preview.map((date) => (
               <Text key={date} variant="bodyMedium">
                 {formatDay(date)}

@@ -10,7 +10,7 @@ import { formatYen } from '@/lib/money';
 /**
  * AI（Gemini）に渡す材料を作る。個人情報になりうる名前は、送る前に置き換える
  * - 口座の名前 → 「銀行A」「クレジットカードA」、貸し借りの相手 → 「相手A」
- * - 働き先 → 「勤務先A」
+ * - 収入元（働き先・仕送りなど）→ 「収入元A」
  * - 記録の内容・定期支払いの名前 → 「内容1」
  * - メモ → 中身は送らず「メモあり」だけ
  * AI の返事に出てきた置き換え後の名前は、画面に出す前に restoreText で元に戻す
@@ -103,7 +103,7 @@ export function buildAliases(source: AiSource): Aliases {
 
   const employerAlias = new Map<string, string>();
   source.employers.forEach((e, i) => {
-    const alias = `勤務先${letters(i)}`;
+    const alias = `収入元${letters(i)}`;
     employerAlias.set(e.id, alias);
     remember(e.name, alias);
   });
@@ -156,7 +156,7 @@ export function buildContext(source: AiSource, aliases: Aliases): string {
 
   const employers = source.employers.filter((e) => !e.is_archived);
   if (employers.length > 0) {
-    lines.push('', '## 勤務先（給料日）');
+    lines.push('', '## 収入元（入金日）');
     for (const e of employers) lines.push(`- ${aliases.employer(e.id)}: ${paydayLabel(e)}`);
   }
 
@@ -200,7 +200,7 @@ export function buildContext(source: AiSource, aliases: Aliases): string {
 
 export const SYSTEM_PROMPT = `あなたは個人の家計の相談相手です。ユーザーの家計簿アプリのデータ（下の「家計の材料」）をもとに、日本語で、具体的な数字を挙げて答えてください。
 - 金額は「12,300円」のように書く
-- プライバシーのため、口座・相手・勤務先・記録の内容の名前は「銀行A」「相手A」「勤務先A」「内容1」のように置き換えてある。答えでもその名前のまま書く（推測して本当の名前を書かない）
+- プライバシーのため、口座・相手・収入元・記録の内容の名前は「銀行A」「相手A」「収入元A」「内容1」のように置き換えてある。答えでもその名前のまま書く（推測して本当の名前を書かない）
 - データから分からないことは、分からないと言う。断定しすぎない
 - 答えは短めに。スマホの縦長で幅の狭いフキダシに表示するので、Markdown を次の形で使う（2026-10-24 ユーザーの要望）
   - 最初の1〜2行で結論を書く。そのあとに「### 見出し」で区切って、理由・内訳・次にすることを書く
