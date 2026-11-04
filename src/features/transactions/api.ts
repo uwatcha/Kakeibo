@@ -33,6 +33,13 @@ export async function fetchMonthTransactions(month: string): Promise<Transaction
   return (data as Transaction[]).map(sortItems);
 }
 
+/** from〜to（両端を含む）の記録と内訳（集計の食費のカード用） */
+export async function fetchTransactionsBetween(from: string, to: string): Promise<Transaction[]> {
+  const { data, error } = await supabase.from('transactions').select(WITH_ITEMS).gte('date', from).lte('date', to);
+  if (error) throw error;
+  return (data as Transaction[]).map(sortItems);
+}
+
 /** その口座から出た・入った記録（新しい順）。口座の利用履歴用 */
 export async function fetchAccountTransactions(accountId: string): Promise<Transaction[]> {
   const { data, error } = await supabase

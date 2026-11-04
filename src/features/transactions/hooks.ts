@@ -16,6 +16,7 @@ import {
   fetchUnconfirmed,
   fetchPayeeHistory,
   fetchMonthTransactions,
+  fetchTransactionsBetween,
   fetchTransaction,
   searchTransactions,
   type TransactionInsert,
@@ -28,6 +29,7 @@ import { hasFilters, type SearchFilters } from './search';
 export const transactionKeys = {
   all: ['transactions'] as const,
   month: (month: string) => [...transactionKeys.all, 'month', month] as const,
+  between: (from: string, to: string) => [...transactionKeys.all, 'between', from, to] as const,
   detail: (id: string) => [...transactionKeys.all, 'detail', id] as const,
   search: (filter: string) => [...transactionKeys.all, 'search', filter] as const,
   account: (accountId: string) => [...transactionKeys.all, 'account', accountId] as const,
@@ -40,6 +42,15 @@ export const transactionKeys = {
 
 export function useMonthTransactions(month: string) {
   return useQuery({ queryKey: transactionKeys.month(month), queryFn: () => fetchMonthTransactions(month) });
+}
+
+/** from〜to の記録（内訳つき）。from が決まるまでは読まない */
+export function useTransactionsBetween(from: string | undefined, to: string | undefined) {
+  return useQuery({
+    queryKey: transactionKeys.between(from ?? '', to ?? ''),
+    queryFn: () => fetchTransactionsBetween(from!, to!),
+    enabled: !!from && !!to,
+  });
 }
 
 /** filter が null のあいだは検索しない */

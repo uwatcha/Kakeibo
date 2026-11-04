@@ -11,6 +11,7 @@ import { SectionCard } from '@/components/SectionCard';
 import { useAvailableAccountIds } from '@/features/accounts/hooks';
 import { useCategories } from '@/features/categories/hooks';
 import { buildBreakdown, type Comparison, compare, toDonutSlices } from '@/features/reports/breakdown';
+import { MealCard } from '@/features/reports/components/MealCard';
 import { SincePaydayChart } from '@/features/reports/components/SincePaydayChart';
 import { sliceColor } from '@/features/reports/palette';
 import type { Transaction } from '@/features/transactions/api';
@@ -215,6 +216,8 @@ export default function ReportsScreen() {
           })}
         </SectionCard>
       )}
+
+      <MealCard month={month} today={toTokyoDateString()} categories={categories.data} accountIds={availableIds} />
     </ScrollView>
   );
 }
