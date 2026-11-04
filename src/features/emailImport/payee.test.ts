@@ -1,3 +1,6 @@
+import { SAMPLE } from '@/testing/samples';
+
+import { MAIL_DEBIT_NAME_IN_BANK } from '../../../supabase/functions/_shared/personal';
 import {
   addDays,
   buildPayeePrompt,
@@ -26,14 +29,14 @@ describe('payeeQuestions', () => {
     const rows = [
       { kind: 'debit_mail' as const, raw_payee: 'ソバヤ' },
       { kind: 'card_detail' as const, raw_payee: 'ソバヤ' },
-      { kind: 'bank_in' as const, raw_payee: 'ヤマダ タロウ' },
-      { kind: 'bank_out' as const, raw_payee: 'サンプルデビット' },
+      { kind: 'bank_in' as const, raw_payee: SAMPLE.remitter },
+      { kind: 'bank_out' as const, raw_payee: MAIL_DEBIT_NAME_IN_BANK },
       { kind: 'card_quick' as const, raw_payee: null },
       { kind: 'debit_mail' as const, raw_payee: 'セブンイレブン' },
     ];
     expect(payeeQuestions(rows, new Set(['セブンイレブン']))).toEqual([
       { raw: 'ソバヤ', kind: 'expense' },
-      { raw: 'ヤマダ タロウ', kind: 'income' },
+      { raw: SAMPLE.remitter, kind: 'income' },
     ]);
   });
 });
@@ -53,13 +56,13 @@ describe('buildPayeePrompt', () => {
 describe('readPayeeAnswers', () => {
   const questions = [
     { raw: 'ソバヤ', kind: 'expense' as const },
-    { raw: 'ヤマダ タロウ', kind: 'income' as const },
+    { raw: SAMPLE.remitter, kind: 'income' as const },
   ];
 
   it('raw で照らし合わせ、カテゴリの名前を id に戻す', () => {
     const answers = readPayeeAnswers(
       JSON.stringify([
-        { raw: 'ヤマダ タロウ', payee: 'ヤマダ タロウ', category: '仕送り', known: true },
+        { raw: SAMPLE.remitter, payee: SAMPLE.remitter, category: '仕送り', known: true },
         { raw: 'ソバヤ', payee: 'そば屋', category: '食費 / 外食', known: true },
       ]),
       questions,
@@ -67,7 +70,7 @@ describe('readPayeeAnswers', () => {
     );
     expect(answers).toEqual([
       { raw: 'ソバヤ', payee: 'そば屋', categoryId: 'eatout', known: true },
-      { raw: 'ヤマダ タロウ', payee: 'ヤマダ タロウ', categoryId: 'gift', known: true },
+      { raw: SAMPLE.remitter, payee: SAMPLE.remitter, categoryId: 'gift', known: true },
     ]);
   });
 

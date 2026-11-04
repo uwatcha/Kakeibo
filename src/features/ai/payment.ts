@@ -1,4 +1,5 @@
 import type { AccountKind } from '@/features/accounts/accountKinds';
+import { STORE_ACCOUNT_RULES } from '@/lib/personal';
 
 type AccountLike = { id: string; name: string; kind: AccountKind; is_archived: boolean; is_reserved?: boolean };
 
@@ -37,10 +38,16 @@ export function defaultCashAccount(accounts: readonly AccountLike[]): string | n
   return forAuto(accounts).find((a) => a.kind === 'cash')?.id ?? null;
 }
 
-/** お店ごとの決まり: サンプル店（サンプル店）での支払いは、サンプル電子マネーで払う（2026-10-28 改善要望） */
-const STORE_RULES: { store: RegExp; account: RegExp }[] = [{ store: /サンプル店|emoneya|サンプル店/, account: /サンプル店|emoneya/ }];
+/**
+ * お店ごとの決まり: あるお店での支払いは、そのお店の電子マネーで払う（2026-10-28 改善要望）。
+ * お店と口座の名前は使う人ごとに違うので、環境変数から読む（src/lib/personal.ts の STORE_ACCOUNT_RULES）
+ */
+const STORE_RULES: { store: RegExp; account: RegExp }[] = STORE_ACCOUNT_RULES.map((r) => ({
+  store: new RegExp(r.store, 'i'),
+  account: new RegExp(r.account, 'i'),
+}));
 
-/** お店の名前から、払った口座を決める（決まりがなければ null）。名前に「サンプル店」を含む口座をサンプル電子マネーとみなす */
+/** お店の名前から、払った口座を決める（決まりがなければ null） */
 export function matchStoreAccount(payee: string | null, accounts: readonly AccountLike[]): string | null {
   if (!payee?.trim()) return null;
   const text = normalize(payee);
@@ -50,7 +57,7 @@ export function matchStoreAccount(payee: string | null, accounts: readonly Accou
 }
 
 /**
- * レシートなどに書かれた支払い方法（例: 「現金」「サンプルカード」「交通系IC Suica」）から、払った口座を決める。
+ * レシートなどに書かれた支払い方法（例: 「現金」「◯◯カード」「交通系IC Suica」）から、払った口座を決める。
  * 口座の名前が書かれていればその口座、現金なら現金の口座、電子マネーの名前ならその名前の口座、
  * クレジットとだけ書かれていてクレカの口座が1つならそれ。決められなければ null（AI には口座の名前を渡さず、ここで照らし合わせる）
  */

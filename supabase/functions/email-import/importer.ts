@@ -3,6 +3,7 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 import { type Bill, type EmailKind, isAtm, isDebitCardName, parseMail, SOURCE_OF, topUpTarget } from '../_shared/emailParse.ts';
+import { MAIL_DEBIT_NAME } from '../_shared/personal.ts';
 import {
   addDays,
   buildPayeePrompt,
@@ -465,7 +466,7 @@ export class Importer {
             return;
           }
           if (await duplicate('from_account_id', true)) return;
-          await this.insert(row, { type: 'expense', from_account_id: account, payee: 'サンプルデビット' });
+          await this.insert(row, { type: 'expense', from_account_id: account, payee: MAIL_DEBIT_NAME });
           return;
         }
         // ATM の引き出しは、銀行 → 現金の振替

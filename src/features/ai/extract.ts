@@ -25,7 +25,7 @@ export type ImportDraft = {
   duplicate: boolean;
   /** 何から読み取ったか。receipt = レシート、screen = セルフレジなどの決済完了の画面、price = 自販機などの値段の表示 */
   source: PhotoSource;
-  /** 書かれていた支払い方法（例: 「現金」「サンプルカード」「Suica」）。なければ null */
+  /** 書かれていた支払い方法（例: 「現金」「◯◯カード」「Suica」）。なければ null */
   payment: string | null;
   /** 口座をどう決めたか（確認の一覧に出す） */
   note: string | null;
@@ -69,7 +69,7 @@ export function extractPrompt(
     '- 返金・キャンセルなど符号がマイナスの行は、記録にしない',
     '- 口座が分からなければ null',
     '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
-    '- payment: レシートや画面に書かれている支払い方法をそのまま（例: 「現金」「クレジット」「サンプルカード」「交通系IC Suica」「PayPay」）。現金のレシートでお預り・お釣りが書かれていれば「現金」。書かれていなければ null',
+    '- payment: レシートや画面に書かれている支払い方法をそのまま（例: 「現金」「クレジット」「◯◯カード」「交通系IC Suica」「PayPay」）。現金のレシートでお預り・お釣りが書かれていれば「現金」。書かれていなければ null',
     '- 自販機などの値段の表示は、買った商品の値段を金額にし、内容は「自販機（商品名）」のようにする。日付は写真から分からなければ今日',
     // 普段使わない口座は、AI に選ばせない（2026-10-28 改善要望: 自動入力で使われることが多かった）
     `口座: ${accounts
@@ -182,7 +182,7 @@ export function assignPaymentAccounts(
   drafts: readonly ImportDraft[],
   match: (payment: string | null) => string | null,
   cashAccountId: string | null,
-  /** お店ごとの決まり（サンプル店ならサンプル電子マネー）。AI が選んだ口座より優先する */
+  /** お店ごとの決まり（src/lib/personal.ts の STORE_ACCOUNT_RULES）。AI が選んだ口座より優先する */
   byStore: (payee: string | null) => string | null = () => null,
 ): ImportDraft[] {
   return drafts.map((d) => {

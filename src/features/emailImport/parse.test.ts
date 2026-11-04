@@ -1,14 +1,23 @@
-// 本文は実際のメールの形をまねたもの（名前などは置き換えてある）
+// 本文は実際のメールの形をまねたもの。送信元・銀行やカードの名前・人の名前は .env.local の値（なければ仮の値）を使う
+import { SAMPLE } from '@/testing/samples';
+
 import { isAtm, isDebitCardName, MAIL_SENDERS, topUpTarget, normalizeText, parseMail } from '../../../supabase/functions/_shared/emailParse';
+import {
+  MAIL_BANK_NAME,
+  MAIL_DEBIT_NAME,
+  MAIL_DEBIT_NAME_IN_BANK,
+  MAIL_SENDER,
+  TOPUP_ALIASES_EXTRA,
+} from '../../../supabase/functions/_shared/personal';
 import { EMAIL_SENDERS } from './appsScript';
 
 const debitMail = {
-  from: 'Debit Mail <debit@example.com>',
+  from: `Debit Mail <${MAIL_SENDER.debit}>`,
   subject: 'デビットカードご利用のお知らせ',
   date: '2026-10-19T00:00:31Z',
   body: [
     '**** 様',
-    'カード名称 ： サンプルデビット',
+    `カード名称 ： ${MAIL_DEBIT_NAME}`,
     '【ご利用日時(日本時間)】　2026年10月19日 09:00',
     '【ご利用金額】　1,000円',
     '【ご利用先】　ジエイア−ルヒガシニホンモバイルスイカ',
@@ -17,7 +26,7 @@ const debitMail = {
 };
 
 describe('parseMail', () => {
-  it('サンプルデビット', () => {
+  it('デビットカードの利用', () => {
     expect(parseMail(debitMail)).toEqual({
       type: 'items',
       items: [
@@ -26,42 +35,45 @@ describe('parseMail', () => {
     });
   });
 
-  it('デビットカード の取り消しは知らせるだけ', () => {
+  it('デビットカードの取り消しは知らせるだけ', () => {
     expect(parseMail({ ...debitMail, subject: 'デビットカードご利用取消のお知らせ' }).type).toBe('notice');
   });
 
-  it('連携サービス の出金・入金。年は受信日から決める', () => {
+  it('銀行の出金・入金。年は受信日から決める', () => {
     const bankMail = (subject: string, body: string, date = '2026-10-17T08:40:52Z') => ({
-      from: 'Bank Mail <bank@example.com>',
+      from: `Bank Mail <${MAIL_SENDER.bank}>`,
       subject,
       date,
       body,
     });
     expect(
       parseMail(
-        bankMail('サンプル銀行にて出金がありました（サンプルデビット）', '連携サービス\n新着の出金\n10 月 16 日（金）\n￥ 350\nサンプル銀行'),
+        bankMail(
+          `${MAIL_BANK_NAME}にて出金がありました（${MAIL_DEBIT_NAME_IN_BANK}）`,
+          `新着の出金\n10 月 16 日（金）\n￥ 350\n${MAIL_BANK_NAME}`,
+        ),
       ),
     ).toEqual({
       type: 'items',
-      items: [{ kind: 'bank_out', date: '2026-10-16', amount: 350, rawPayee: 'サンプルデビット' }],
+      items: [{ kind: 'bank_out', date: '2026-10-16', amount: 350, rawPayee: normalizeText(MAIL_DEBIT_NAME_IN_BANK) }],
     });
     // 年をまたぐ: 1月に届いた 12/30 の入金は前の年
     const income = parseMail(
       bankMail(
-        'サンプル銀行にて入金がありました（ヤマダ タロウ）',
+        `${MAIL_BANK_NAME}にて入金がありました（${SAMPLE.remitter}）`,
         '新着の入金 12 月 30 日（水） ￥ 200,000',
         '2027-01-02T00:00:00Z',
       ),
     );
     expect(income).toEqual({
       type: 'items',
-      items: [{ kind: 'bank_in', date: '2026-12-30', amount: 200000, rawPayee: 'ヤマダ タロウ' }],
+      items: [{ kind: 'bank_in', date: '2026-12-30', amount: 200000, rawPayee: normalizeText(SAMPLE.remitter) }],
     });
   });
 
-  it('サンプルカードの詳細は複数件・半角カナは全角に、速報は店名なし', () => {
+  it('クレジットカードの詳細は複数件・半角カナは全角に、速報は店名なし', () => {
     const cardMail = (subject: string, body: string) => ({
-      from: 'サンプルカード株式会社 <card@example.com>',
+      from: `Card Mail <${MAIL_SENDER.card}>`,
       subject,
       date: '2026-10-09T04:50:55Z',
       body,
@@ -94,7 +106,7 @@ describe('parseMail', () => {
   it('家族の利用分・ほかの送信元は対象外、形が違えば読み取れない', () => {
     expect(
       parseMail({
-        from: 'card@example.com',
+        from: MAIL_SENDER.card,
         subject: 'カード利用のお知らせ(家族ご利用分)',
         date: '',
         body: '',
@@ -108,15 +120,15 @@ describe('parseMail', () => {
 describe('normalizeText / isDebitCardName', () => {
   it('全角英数字と半角カナをそろえる', () => {
     expect(normalizeText('ｾﾌﾞﾝｲﾚﾌﾞﾝ　ＡＢＣ店')).toBe('セブンイレブン ABC店');
-    expect(isDebitCardName('サンプルデビット')).toBe(true);
+    expect(isDebitCardName(MAIL_DEBIT_NAME_IN_BANK)).toBe(true);
     expect(isDebitCardName('ｻﾝﾌﾟﾙｶｰﾄﾞ')).toBe(false);
   });
 });
 
 describe('電気・ガスの請求のお知らせ', () => {
   const electricity = {
-    from: '電力会社お客さま相談センター <electricity@example.com>',
-    subject: '【電力会社】電力会社のサイト≪電気料金等の請求のお知らせ≫',
+    from: `電力会社お客さま相談センター <${MAIL_SENDER.electricity}>`,
+    subject: '【電力会社】≪電気料金等の請求のお知らせ≫',
     date: '2026-10-23T04:05:29Z',
     body: [
       'ご使用量とご請求額のお知らせ',
@@ -133,7 +145,7 @@ describe('電気・ガスの請求のお知らせ', () => {
     ].join('\n'),
   };
   const gas = {
-    from: 'gas@example.com',
+    from: MAIL_SENDER.gas,
     subject: 'ガス会社より請求金額確定のお知らせ',
     date: '2026-10-23T09:05:58Z',
     body: ' ガス会社からのお知らせ \n 今月のご利用金額が更新されました。 \n 2026年10月のご利用料金が更新されました。 確認される方はこちらをクリックもしくはタップしてください。 \n 金額を確認する ',
@@ -164,7 +176,7 @@ describe('電気・ガスの請求のお知らせ', () => {
 });
 
 describe('isAtm', () => {
-  it('連携サービス の ATM の引き出し・預け入れ', () => {
+  it('銀行の ATM の引き出し・預け入れ', () => {
     expect(isAtm('ATM から現金引出')).toBe(true);
     expect(isAtm('ＡＴＭから現金預入')).toBe(true);
     expect(isAtm('アクメワークス')).toBe(false);
@@ -173,21 +185,23 @@ describe('isAtm', () => {
 });
 
 describe('topUpTarget（電子マネーへの入金）', () => {
+  // 環境変数で足した電子マネー（名前の一部とカタカナの読み）の1つ目
+  const [aliasName, aliasKana] = Object.entries(TOPUP_ALIASES_EXTRA)[0];
   const accounts = [
-    { id: 'bank', name: 'サンプル銀行', kind: 'bank', is_archived: false },
-    { id: 'emoneya', name: 'サンプル電子マネー', kind: 'emoney', is_archived: false },
+    { id: 'bank', name: MAIL_BANK_NAME, kind: 'bank', is_archived: false },
+    { id: 'extra', name: `${aliasName}電子マネー`, kind: 'emoney', is_archived: false },
     { id: 'majica', name: 'majica', kind: 'cash', is_archived: false },
     { id: 'suica', name: 'Suica', kind: 'emoney', is_archived: false },
     { id: 'wallet', name: '財布', kind: 'cash', is_archived: false },
   ];
   it('実際のメールの名目から、入金先の口座を決める', () => {
-    expect(topUpTarget('サンプルデンシマネーデンシマネーニユウキンサイト', accounts, 'bank')).toBe('emoneya');
+    expect(topUpTarget(`ダイガク${aliasKana[0]}デンシマネーニユウキンサイト`, accounts, 'bank')).toBe('extra');
     expect(topUpTarget('JD /MAJICA', accounts, 'bank')).toBe('majica');
     expect(topUpTarget('ジエイアールヒガシニホンモバイルスイカ', accounts, 'bank')).toBe('suica');
   });
   it('お店での支払いは入金にしない', () => {
     expect(topUpTarget('ラクテンペイ フアミリーマート', accounts, 'bank')).toBeNull();
-    expect(topUpTarget('サンプルデビット', accounts, 'bank')).toBeNull();
+    expect(topUpTarget(MAIL_DEBIT_NAME_IN_BANK, accounts, 'bank')).toBeNull();
     expect(topUpTarget(null, accounts, 'bank')).toBeNull();
   });
 });

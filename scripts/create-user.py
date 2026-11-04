@@ -11,7 +11,24 @@ import sys
 import urllib.error
 import urllib.request
 
-PROJECT_REF = "xxxxxxxxxxxxxxxxxxxx"
+import os
+import re
+from pathlib import Path
+
+
+def project_ref() -> str:
+    """Supabase のプロジェクトの ref。環境変数 SUPABASE_PROJECT_REF か、.env.local の EXPO_PUBLIC_SUPABASE_URL から読む"""
+    if os.environ.get("SUPABASE_PROJECT_REF"):
+        return os.environ["SUPABASE_PROJECT_REF"]
+    env = Path(__file__).resolve().parent.parent / ".env.local"
+    if env.exists():
+        m = re.search(r"^EXPO_PUBLIC_SUPABASE_URL=https://([a-z0-9]+)\.supabase\.co", env.read_text(), re.M)
+        if m:
+            return m.group(1)
+    sys.exit("SUPABASE_PROJECT_REF を設定するか、.env.local に EXPO_PUBLIC_SUPABASE_URL を書いてください")
+
+
+PROJECT_REF = project_ref()
 MIN_PASSWORD_LENGTH = 8
 
 

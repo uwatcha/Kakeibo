@@ -1,3 +1,5 @@
+import { MAIL_NAMES } from '@/lib/personal';
+import { SAMPLE } from '@/testing/samples';
 import type { Category } from '@/features/categories/api';
 
 import { type AiSource, buildAliases, buildContext, maskText, restoreText } from './anonymize';
@@ -22,14 +24,14 @@ const tx = (over: Partial<AiSource['transactions'][number]>) => ({
 const source: AiSource = {
   today: '2026-10-20',
   accounts: [
-    { id: 'bank', name: 'サンプル銀行', kind: 'bank', balance: 31000, includeInAvailable: true },
-    { id: 'kenta', name: '健太', kind: 'receivable', balance: 9000, includeInAvailable: true },
+    { id: 'bank', name: MAIL_NAMES.bank, kind: 'bank', balance: 31000, includeInAvailable: true },
+    { id: 'kenta', name: SAMPLE.friend, kind: 'receivable', balance: 9000, includeInAvailable: true },
     { id: 'father', name: '父', kind: 'payable', balance: -50000, includeInAvailable: true },
   ],
   categories: [category('food', '食費'), category('salary', '給与・アルバイト', 'income')],
-  employers: [{ id: 'emp', name: 'acmeworks', payday: 25, payday_shift: 'before', is_archived: false }],
+  employers: [{ id: 'emp', name: SAMPLE.employer, payday: 25, payday_shift: 'before', is_archived: false }],
   transactions: [
-    tx({ payee: 'セブンイレブン', memo: '健太と行った' }),
+    tx({ payee: 'セブンイレブン', memo: `${SAMPLE.friend}と行った` }),
     tx({
       date: '2026-10-23',
       type: 'income',
@@ -37,7 +39,7 @@ const source: AiSource = {
       from_account_id: null,
       to_account_id: 'bank',
       category_id: 'salary',
-      payee: 'acmeworks',
+      payee: SAMPLE.employer,
       employer_id: 'emp',
       is_confirmed: false,
     }),
@@ -51,7 +53,7 @@ describe('anonymize', () => {
   const context = buildContext(source, aliases);
 
   it('口座・相手・収入元・内容・メモの中身は材料に出さない', () => {
-    for (const secret of ['サンプル銀行', '健太', '父', 'acmeworks', 'セブンイレブン', '健太と行った']) {
+    for (const secret of [MAIL_NAMES.bank, SAMPLE.friend, '父', SAMPLE.employer, 'セブンイレブン', `${SAMPLE.friend}と行った`]) {
       expect(context).not.toContain(secret);
     }
   });
@@ -67,10 +69,10 @@ describe('anonymize', () => {
   });
 
   it('質問の中の名前を置き換え、返事の中の名前を元に戻す', () => {
-    const masked = maskText('健太への貸しはいつ返ってくる？サンプル銀行は足りる？', aliases);
+    const masked = maskText(`${SAMPLE.friend}への貸しはいつ返ってくる？${MAIL_NAMES.bank}は足りる？`, aliases);
     expect(masked).toBe('相手Aへの貸しはいつ返ってくる？銀行Aは足りる？');
     expect(restoreText('相手Aから9,000円が戻る予定です。銀行Aは10/27に不足します', aliases)).toBe(
-      '健太から9,000円が戻る予定です。サンプル銀行は10/27に不足します',
+      `${SAMPLE.friend}から9,000円が戻る予定です。${MAIL_NAMES.bank}は10/27に不足します`,
     );
   });
 

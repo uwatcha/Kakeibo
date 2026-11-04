@@ -11,4 +11,5 @@ const transform = Object.fromEntries(
   ),
 );
 
-module.exports = { ...preset, transform };
+// jest.env.js: .env.local の値を読む（使う人ごとに違う値をテストでも使うため）
+module.exports = { ...preset, transform, setupFiles: [...(preset.setupFiles ?? []), '<rootDir>/jest.env.js'] };

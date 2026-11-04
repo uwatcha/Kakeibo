@@ -1,6 +1,8 @@
 // メールからの記録（設計書: デビットカードの利用メールから自動で記録）の、メールの読み取り。
 // Deno（Edge Function email-import）とアプリのテスト（src/features/emailImport/parse.test.ts）の両方から使うので、
-// Deno や React Native の機能は使わない。AI も使わず、決まった形の文から読み取る
+// Deno や React Native の機能は使わない。AI も使わず、決まった形の文から読み取る。
+// 送信元・銀行やカードの名前は使う人ごとに違うので、personal.ts（環境変数）から読む
+import { MAIL_BANK_NAME, MAIL_DEBIT_NAME_IN_BANK, MAIL_SENDER, TOPUP_ALIASES_EXTRA } from './personal.ts';
 
 /** メールの種類 */
 export type EmailKind =
@@ -67,13 +69,10 @@ export type Bill = {
  * 見るメールの送信元（Apps Script はこの一覧をサーバーの返事から受け取って使う。src/features/emailImport/appsScript.ts の
  * EMAIL_SENDERS は、初めて貼るときの一覧で、これと同じにする。テストで確かめる）
  */
-export const MAIL_SENDERS = [
-  'debit@example.com',
-  'bank@example.com',
-  'card@example.com',
-  'electricity@example.com',
-  'gas@example.com',
-];
+export const MAIL_SENDERS = [MAIL_SENDER.debit, MAIL_SENDER.bank, MAIL_SENDER.card, MAIL_SENDER.electricity, MAIL_SENDER.gas];
+
+/** 正規表現の中でそのままの文字として使う */
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const ymd = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
@@ -127,8 +126,9 @@ function parseDebit(mail: MailInput): ParseResult {
 }
 
 function parseBank(mail: MailInput): ParseResult {
-  const subject = mail.subject.match(/サンプル銀行にて(入金|出金)がありました[（(](.*)[）)]\s*$/);
-  if (!subject) return /サンプル銀行/.test(mail.subject) ? { type: 'unreadable' } : { type: 'ignored' };
+  const bank = escapeRegExp(MAIL_BANK_NAME);
+  const subject = mail.subject.match(new RegExp(`${bank}にて(入金|出金)がありました[（(](.*)[）)]\\s*$`));
+  if (!subject) return new RegExp(bank).test(mail.subject) ? { type: 'unreadable' } : { type: 'ignored' };
   const text = mail.body.replace(/\s+/g, ' ');
   const date = text.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
   const amount = text.match(/[￥¥]\s*([\d,]+)/);
@@ -170,15 +170,15 @@ function parseCard(mail: MailInput): ParseResult {
 /** 送信元と件名でメールの種類を見分けて読み取る */
 export function parseMail(mail: MailInput): ParseResult {
   switch (addressOf(mail.from)) {
-    case 'debit@example.com':
+    case MAIL_SENDER.debit:
       return parseDebit(mail);
-    case 'bank@example.com':
+    case MAIL_SENDER.bank:
       return parseBank(mail);
-    case 'card@example.com':
+    case MAIL_SENDER.card:
       return parseCard(mail);
-    case 'electricity@example.com':
+    case MAIL_SENDER.electricity:
       return parseElectricity(mail);
-    case 'gas@example.com':
+    case MAIL_SENDER.gas:
       return parseGas(mail);
     default:
       return { type: 'ignored' };
@@ -234,7 +234,7 @@ const TOPUP_ALIASES: Record<string, string[]> = {
   nanaco: ['ナナコ'],
   waon: ['ワオン'],
   edy: ['エデイ', 'エディ'],
-  サンプル電子マネー: ['サンプルデンシマネー'],
+  ...TOPUP_ALIASES_EXTRA,
 };
 
 type TopUpAccount = { id: string; name: string; kind: string; is_archived: boolean };
@@ -259,4 +259,6 @@ export function topUpTarget(raw: string | null, accounts: readonly TopUpAccount[
 }
 
 /** 連携サービス の出金の名目が サンプルデビットの利用か（「サンプルデビット」） */
-export const isDebitCardName = (name: string | null) => !!name && /^サンプルデビット/i.test(normalizeText(name));
+export const isDebitCardName = (name: string | null) =>
+  !!name &&
+  new RegExp(`^${escapeRegExp(normalizeText(MAIL_DEBIT_NAME_IN_BANK)).replace(/ /g, '\\s*')}`, 'i').test(normalizeText(name));

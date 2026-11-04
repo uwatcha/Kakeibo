@@ -1,4 +1,5 @@
 import { formatYen } from '@/lib/money';
+import { MAIL_NAMES } from '@/lib/personal';
 
 /** 通知に使う、読み取った1件（記録の内容と金額も） */
 export type UnnotifiedImport = {
@@ -12,8 +13,8 @@ export type UnnotifiedImport = {
   transaction: { payee: string | null; amount: number; type: string; needs_payee: boolean } | null;
 };
 
-/** サンプルカードの速報（店名なし）で入れた記録の、通知での呼び名 */
-const UNNAMED: Record<string, string> = { card_quick: 'サンプルカード', photo: '写真の記録' };
+/** クレジットカードの速報（店名なし）で入れた記録の、通知での呼び名 */
+const UNNAMED: Record<string, string> = { card_quick: MAIL_NAMES.card, photo: '写真の記録' };
 
 const BILL_NAMES: Record<string, string> = { electricity_bill: '電気代', gas_bill: 'ガス代' };
 
@@ -41,7 +42,7 @@ function billNotification(i: UnnotifiedImport): { title: string; body: string; d
 
 /**
  * メールからの記録の通知の文と、押したときに開くもの。通知しないものは null。
- * サンプルカードの詳細で速報の記録に店名を入れたときなど（メールどうしの merged）は通知しない
+ * クレジットカードの詳細で速報の記録に店名を入れたときなど（メールどうしの merged）は通知しない
  */
 export function importNotification(
   i: UnnotifiedImport,

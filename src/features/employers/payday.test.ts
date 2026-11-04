@@ -84,10 +84,10 @@ describe('lastPayday / nextPayday', () => {
 
 describe('payPeriodForMonth', () => {
   // 25日払い・休みなら前の平日（2026/10/25 は日曜 → 10/23、9/25 は金曜）
-  const acmeworks = { payday: 25, payday_shift: 'before' as const };
+  const second = { payday: 25, payday_shift: 'before' as const };
 
   it('前の給料日からその月の給料日まで', () => {
-    const period = payPeriodForMonth([acmeworks], '2026-10-01');
+    const period = payPeriodForMonth([second], '2026-10-01');
     expect(period?.start.date).toBe('2026-09-25');
     expect(period?.end.date).toBe('2026-10-23');
   });
@@ -107,7 +107,7 @@ describe('paydaysBetween', () => {
 });
 
 describe('allPaidDays', () => {
-  // 仕送り 22日・acmeworks 25日（どちらも休みなら前の平日）
+  // 収入元A 22日・収入元B 25日（どちらも休みなら前の平日）
   const employers = [
     { payday: 22, payday_shift: 'before' as const },
     { payday: 25, payday_shift: 'before' as const },

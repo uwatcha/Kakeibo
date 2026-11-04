@@ -25,15 +25,16 @@ import {
   useUpdatePayeeRule,
 } from '@/features/emailImport/hooks';
 import { AccountPicker } from '@/features/transactions/components/AccountPicker';
+import { MAIL_NAMES } from '@/lib/personal';
 import { SPACING } from '@/theme';
 
 import type { EmailSource } from '../../supabase/functions/_shared/emailParse';
 import { DEFAULT_SUMMARY_RULES } from '../../supabase/functions/_shared/emailRules';
 
 const SOURCES: { source: EmailSource; label: string; kinds: readonly AccountKind[] }[] = [
-  { source: 'debit_mail', label: 'サンプルデビット', kinds: ASSET_KINDS },
-  { source: 'bank_mail', label: 'サンプル銀行の入出金（連携サービス）', kinds: ASSET_KINDS },
-  { source: 'card_mail', label: 'サンプルカード', kinds: ['credit_card'] },
+  { source: 'debit_mail', label: MAIL_NAMES.debit, kinds: ASSET_KINDS },
+  { source: 'bank_mail', label: `${MAIL_NAMES.bank}の入出金（${MAIL_NAMES.bankService}）`, kinds: ASSET_KINDS },
+  { source: 'card_mail', label: MAIL_NAMES.card, kinds: ['credit_card'] },
 ];
 
 const formatTime = (iso: string) =>

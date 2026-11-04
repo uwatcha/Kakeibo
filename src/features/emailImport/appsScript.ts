@@ -1,16 +1,12 @@
+import { MAIL_SENDERS } from '@/lib/personal';
+
 /**
  * Gmail で動かす Apps Script のコード（設定の「メールからの記録」から共有して、script.google.com に貼る）。
  * 10分ごとに、対象の送信元の未読メールの本文を Edge Function email-import に送り、受け付けられたものを既読にする。
  * 読み取り方と見る送信元はサーバー側にあるので、メールの形が変わっても・送信元を足しても、このコードは貼り直さなくてよい
  * （送信元の一覧をサーバーから受け取るようにしたのは 2026-10-24。それより前に貼ったものは一度だけ貼り直す）
  */
-export const EMAIL_SENDERS = [
-  'debit@example.com',
-  'bank@example.com',
-  'card@example.com',
-  'electricity@example.com',
-  'gas@example.com',
-] as const;
+export const EMAIL_SENDERS = MAIL_SENDERS;
 
 export function buildAppsScript(endpoint: string, token: string): string {
   return `// 家計簿: メールからの記録（10分ごとに動く）

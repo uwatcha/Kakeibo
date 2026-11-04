@@ -1,3 +1,5 @@
+import { MAIL_NAMES } from '@/lib/personal';
+
 import { importNotification } from './notifications';
 
 const base = {
@@ -36,7 +38,7 @@ describe('importNotification', () => {
     expect(importNotification({ ...base, kind: 'card_detail', status: 'merged', transaction })).toBeNull();
   });
 
-  it('サンプルカードの速報は「サンプルカード」、内容が分からなければそう添える', () => {
+  it('クレジットカードの速報はカードの名前、内容が分からなければそう添える', () => {
     const quick = importNotification({
       ...base,
       kind: 'card_quick',
@@ -44,7 +46,7 @@ describe('importNotification', () => {
       status: 'recorded',
       transaction: { payee: null, amount: 2400, type: 'expense', needs_payee: false },
     });
-    expect(quick?.body).toBe('サンプルカード 2,400円');
+    expect(quick?.body).toBe(`${MAIL_NAMES.card} 2,400円`);
     const unknown = importNotification({
       ...base,
       status: 'recorded',

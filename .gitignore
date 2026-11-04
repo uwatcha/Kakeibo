@@ -51,3 +51,6 @@ __pycache__/
 
 # ユーザーから受け取る実データ（CSV など）。git に入れない
 data/
+
+# Claude Code 用のメモ（使っている口座・設計書の URL など個人の事情が入るので、git に入れない）
+CLAUDE.md
