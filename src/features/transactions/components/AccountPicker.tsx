@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Chip, Dialog, HelperText, Portal, Text, TextInput } from 'react-native-paper';
+import { Button, Chip, Dialog, HelperText, Portal, Text } from 'react-native-paper';
 
 import { ChipGroup } from '@/components/ChipGroup';
+import { DialogTextInput } from '@/components/DialogTextInput';
 import { ACCOUNT_KIND_INFO, type AccountKind, PERSON_KINDS } from '@/features/accounts/accountKinds';
 import type { Account } from '@/features/accounts/api';
 import { useCreateAccount } from '@/features/accounts/hooks';
@@ -62,7 +63,7 @@ export function AccountPicker({ label, kinds, accounts, value, onChange, error, 
                 </Chip>
               )}
               {personKind && (
-                <Chip icon="plus" mode="outlined" onPress={() => setAdding(true)}>
+                <Chip icon="plus" mode="outlined" onPress={() => (setName(''), setAdding(true))}>
                   相手を追加
                 </Chip>
               )}
@@ -76,7 +77,8 @@ export function AccountPicker({ label, kinds, accounts, value, onChange, error, 
         <Dialog visible={adding} onDismiss={() => setAdding(false)}>
           <Dialog.Title>{personKind ? ACCOUNT_KIND_INFO[personKind].label : ''}を追加</Dialog.Title>
           <Dialog.Content>
-            <TextInput mode="outlined" label="名前" value={name} onChangeText={setName} autoFocus />
+            {/* 開くたびに空の欄を作り直す */}
+            {adding && <DialogTextInput mode="outlined" label="名前" onChangeText={setName} autoFocus />}
             <HelperText type="error" visible={create.isError}>
               追加できませんでした。通信状態を確認してください
             </HelperText>

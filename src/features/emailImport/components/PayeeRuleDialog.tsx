@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Button, Dialog, TextInput, useTheme } from 'react-native-paper';
+import { Button, Dialog, useTheme } from 'react-native-paper';
 
+import { DialogTextInput } from '@/components/DialogTextInput';
 import type { Category } from '@/features/categories/api';
 import { CategoryPicker } from '@/features/transactions/components/CategoryPicker';
 
@@ -25,7 +26,7 @@ export function PayeeRuleDialog({ rule, categories, onDismiss, onSave, onDelete 
       <Dialog.Title>{rule.raw_payee}</Dialog.Title>
       <Dialog.ScrollArea style={styles.scrollArea}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
-          <TextInput mode="outlined" label="内容" value={payee} onChangeText={setPayee} />
+          <DialogTextInput mode="outlined" label="内容" initialValue={payee} onChangeText={setPayee} />
           <CategoryPicker kind={rule.kind} categories={categories} value={categoryId} onChange={setCategoryId} />
         </ScrollView>
       </Dialog.ScrollArea>
