@@ -34,7 +34,10 @@ import { ItemsField } from '@/features/transactions/form/ItemsField';
 import { PayeeField, SUGGESTION_SPACE } from '@/features/transactions/form/PayeeField';
 import { PointsSection } from '@/features/transactions/form/PointsSection';
 import { useFormAssist } from '@/features/transactions/form/useFormAssist';
+import { isAdvanceItem } from '@/features/transactions/items';
 import {
+  advanceItems,
+  advanceRow,
   emptyFormValues,
   type FormValues,
   itemRows,
@@ -51,6 +54,8 @@ import {
   usePayeeHistory,
   useSaveTransactionItems,
   useSetAdvancesRepaidBy,
+  useSplitAdvances,
+  useSyncSplitAdvances,
   useTransaction,
   useUpdateTransaction,
 } from '@/features/transactions/hooks';
@@ -84,6 +89,8 @@ export default function TransactionEditScreen() {
   const isNew = id === 'new';
 
   const transaction = useTransaction(isNew ? undefined : id);
+  // 内訳の立て替えの行から作った立て替えの記録（支払いを開いたとき、内訳の行に戻す）
+  const splitAdvances = useSplitAdvances(isNew ? undefined : id);
   const accounts = useAccounts();
   const balances = useBalanceMap();
   const categories = useCategories();
@@ -92,6 +99,7 @@ export default function TransactionEditScreen() {
   const remove = useDeleteTransaction();
   const setRepaid = useSetAdvancesRepaidBy();
   const saveItems = useSaveTransactionItems();
+  const syncAdvances = useSyncSplitAdvances();
   const payeeHistory = usePayeeHistory();
   const employers = useEmployers();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -140,8 +148,8 @@ export default function TransactionEditScreen() {
 
   // 編集: 保存済みの記録をフォームに入れる
   useEffect(() => {
-    if (transaction.data) reset(toFormValues(transaction.data));
-  }, [transaction.data, reset]);
+    if (transaction.data && splitAdvances.data) reset(toFormValues(transaction.data, splitAdvances.data));
+  }, [transaction.data, splitAdvances.data, reset]);
   // 貸し金戻りで返してもらった立て替えは立て替えの側に書いてあるので、読み込めたら1回だけ入れる
   const repaidFilled = useRef(false);
   useEffect(() => {
@@ -175,7 +183,14 @@ export default function TransactionEditScreen() {
         savedId = await create.mutateAsync(row);
         await saveLastUsedAccounts(values.type, { fromAccountId: row.from_account_id, toAccountId: row.to_account_id });
       } else {
-        await update.mutateAsync({ id, values: row });
+        // 支払いから分けた立て替えを、ほかの種類に変えたら、元の支払いとのつながりを外す
+        const unsplit = transaction.data?.split_from_id && values.type !== 'advance' ? { split_from_id: null } : {};
+        await update.mutateAsync({ id, values: { ...row, ...unsplit } });
+      }
+      // 内訳の立て替えの行は、別の立て替えの記録にする（支払いでなくなった・行を消したら、作ってあったものを消す）
+      const advances = advanceItems(values).map((a) => ({ id: a.id, ...advanceRow(row, savedId, a) }));
+      if (advances.length > 0 || (splitAdvances.data?.length ?? 0) > 0) {
+        await syncAdvances.mutateAsync({ parentId: savedId, rows: advances });
       }
       // 内訳（支払いだけ。種類を変えた・行を消したら、今ある内訳も消える）
       const rows = itemRows(values);
@@ -214,12 +229,12 @@ export default function TransactionEditScreen() {
   };
 
   const title = isNew ? '記録する' : '記録を編集';
-  const loading = !accounts.data || !categories.data || (!isNew && !transaction.data);
+  const loading = !accounts.data || !categories.data || (!isNew && (!transaction.data || !splitAdvances.data));
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Screen options={{ title }} />
-        <QueriesState queries={[accounts, categories, ...(isNew ? [] : [transaction])]} />
+        <QueriesState queries={[accounts, categories, ...(isNew ? [] : [transaction, splitAdvances])]} />
       </View>
     );
   }
@@ -269,13 +284,24 @@ export default function TransactionEditScreen() {
             定期支払い: {transaction.data.payee ?? ''}
           </Button>
         )}
+        {transaction.data?.split_from_id && (
+          <Button
+            mode="outlined"
+            icon="receipt-text-outline"
+            onPress={() =>
+              router.push({ pathname: '/transaction/[id]', params: { id: transaction.data!.split_from_id! } })
+            }
+          >
+            元の支払い{transaction.data.payee ? `: ${transaction.data.payee}` : ''}
+          </Button>
+        )}
         <SegmentedButtons
           value={PRIMARY_TYPES.includes(type) ? type : OTHER}
           onValueChange={(v) => {
-              // キーボードを閉じて、同じタップで種類を切り替える
-              Keyboard.dismiss();
-              assist.changeType(v === OTHER ? 'advance' : (v as TransactionType));
-            }}
+            // キーボードを閉じて、同じタップで種類を切り替える
+            Keyboard.dismiss();
+            assist.changeType(v === OTHER ? 'advance' : (v as TransactionType));
+          }}
           buttons={[
             ...PRIMARY_TYPES.map((t) => ({ value: t, label: TRANSACTION_RULES[t].label })),
             { value: OTHER, label: 'その他' },
@@ -335,7 +361,7 @@ export default function TransactionEditScreen() {
 
         <AccountFields control={control} errors={errors} type={type} accounts={accountList} balances={balances} />
 
-        {rule.categoryKind && !(type === 'expense' && items.length > 0) && (
+        {rule.categoryKind && !(type === 'expense' && items.some((i) => !isAdvanceItem(i))) && (
           <Controller
             control={control}
             name="categoryId"
@@ -356,7 +382,15 @@ export default function TransactionEditScreen() {
         )}
 
         {/* 支払いの内訳（品目ごとのカテゴリ。最後に割引・調整の行） */}
-        {type === 'expense' && <ItemsField control={control} categories={categories.data!} error={errors.items?.message} />}
+        {type === 'expense' && (
+          <ItemsField
+            control={control}
+            categories={categories.data!}
+            accounts={accountList}
+            balances={balances}
+            error={errors.items?.message}
+          />
+        )}
 
         {/* 給与・アルバイトの収入では、収入元（働き先）を必ず選ぶ */}
         {type === 'income' && isSalary && (
@@ -430,7 +464,10 @@ export default function TransactionEditScreen() {
         <Dialog visible={confirmDelete} onDismiss={() => setConfirmDelete(false)}>
           <Dialog.Title>この記録を削除しますか？</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">削除すると元に戻せません。</Text>
+            <Text variant="bodyMedium">
+              {(splitAdvances.data?.length ?? 0) > 0 ? '内訳の立て替えの記録も一緒に削除します。' : ''}
+              削除すると元に戻せません。
+            </Text>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setConfirmDelete(false)}>キャンセル</Button>
@@ -442,8 +479,22 @@ export default function TransactionEditScreen() {
       </Portal>
 
       <Snackbar
-        visible={create.isError || update.isError || remove.isError || setRepaid.isError || saveItems.isError}
-        onDismiss={() => (create.reset(), update.reset(), remove.reset(), setRepaid.reset(), saveItems.reset())}
+        visible={
+          create.isError ||
+          update.isError ||
+          remove.isError ||
+          setRepaid.isError ||
+          saveItems.isError ||
+          syncAdvances.isError
+        }
+        onDismiss={() => (
+          create.reset(),
+          update.reset(),
+          remove.reset(),
+          setRepaid.reset(),
+          saveItems.reset(),
+          syncAdvances.reset()
+        )}
       >
         保存できませんでした。通信状態を確認してください
       </Snackbar>

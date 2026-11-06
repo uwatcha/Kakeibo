@@ -21,7 +21,14 @@ jest.mock('expo-router', () => {
 });
 const mockAccounts = [
   { id: 'bank', name: 'サンプル銀行', kind: 'bank', is_archived: false, is_reserved: false, default_category_id: null },
-  { id: 'card', name: 'サンプルカード', kind: 'credit_card', is_archived: false, is_reserved: false, default_category_id: null },
+  {
+    id: 'card',
+    name: 'サンプルカード',
+    kind: 'credit_card',
+    is_archived: false,
+    is_reserved: false,
+    default_category_id: null,
+  },
   { id: 'friend', name: '友達', kind: 'receivable', is_archived: false, is_reserved: false, default_category_id: null },
 ];
 const mockCategories = [
@@ -30,6 +37,7 @@ const mockCategories = [
   { id: 'salary', name: '給与・アルバイト', kind: 'income', parent_id: null, is_archived: false, sort_order: 0 },
 ];
 const mockTxn = { current: undefined as unknown };
+const mockSplit = { current: [] as unknown[] };
 const mockQ = (data: unknown) => ({ data, error: null, refetch: jest.fn(), isLoading: false });
 const mockM = () => ({ mutateAsync: jest.fn(), mutate: jest.fn(), isPending: false, isError: false, reset: jest.fn() });
 jest.mock('@/features/accounts/hooks', () => ({
@@ -52,6 +60,8 @@ jest.mock('@/features/transactions/hooks', () => ({
   useAdvancesFor: () => mockQ([]),
   useSetAdvancesRepaidBy: () => mockM(),
   useSaveTransactionItems: () => mockM(),
+  useSplitAdvances: () => mockQ(mockSplit.current),
+  useSyncSplitAdvances: () => mockM(),
 }));
 
 import TransactionEditScreen from '@/app/transaction/[id]';
@@ -110,9 +120,25 @@ describe('記録の入力画面', () => {
         ],
       },
     ],
+    ['内訳から分けた立て替え', { type: 'advance', amount: 5400, to_account_id: 'friend', split_from_id: 'p1' }],
   ])('編集: %s', async (_, values) => {
     mockParams.current = { id: 't1' };
     mockTxn.current = { ...base, ...values };
+    mockSplit.current = [];
+    expect(await renderAndCheck(<TransactionEditScreen />)).toEqual([]);
+  });
+
+  it('編集: 内訳に立て替えの行がある支払い', async () => {
+    mockParams.current = { id: 't1' };
+    mockTxn.current = {
+      ...base,
+      type: 'expense',
+      amount: 3145,
+      items: [{ category_id: 'eat', name: null, amount: 3145, is_adjustment: false }],
+    };
+    mockSplit.current = [
+      { ...base, id: 'a1', type: 'advance', amount: 5400, to_account_id: 'friend', memo: '友達の分' },
+    ];
     expect(await renderAndCheck(<TransactionEditScreen />)).toEqual([]);
   });
 });

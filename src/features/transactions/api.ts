@@ -125,7 +125,10 @@ export async function fetchAdvancesFor(collectId: string): Promise<Transaction[]
 
 /** 貸し金戻りで返してもらった立て替えを advanceIds にする（外したものはつながりを消す） */
 export async function setAdvancesRepaidBy(collectId: string, advanceIds: readonly string[]): Promise<void> {
-  const unlink = supabase.from('transactions').update({ related_transaction_id: null }).eq('related_transaction_id', collectId);
+  const unlink = supabase
+    .from('transactions')
+    .update({ related_transaction_id: null })
+    .eq('related_transaction_id', collectId);
   const { error } = await (advanceIds.length > 0 ? unlink.not('id', 'in', `(${advanceIds.join(',')})`) : unlink);
   if (error) throw error;
   if (advanceIds.length === 0) return;
@@ -192,6 +195,37 @@ export async function saveTransactionItems(transactionId: string, items: readonl
     .from('transaction_items')
     .insert(items.map((item, sort_order) => ({ ...item, transaction_id: transactionId, sort_order })));
   if (insertError) throw insertError;
+}
+
+/** その支払いから内訳で分けた立て替えの記録（split_from_id） */
+export async function fetchSplitAdvances(parentId: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('split_from_id', parentId)
+    .order('created_at');
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * 内訳で分けた立て替えの記録を rows にそろえる: id のあるものは直し、ないものは足し、rows にない今の記録は消す
+ * （直すときは、返してもらった記録とのつながり related_transaction_id はそのまま残る）
+ */
+export async function syncSplitAdvances(
+  parentId: string,
+  rows: readonly ({ id?: string } & Omit<TransactionInsert, 'user_id'>)[],
+): Promise<void> {
+  const keep = rows.flatMap((r) => (r.id ? [r.id] : []));
+  const remove = supabase.from('transactions').delete().eq('split_from_id', parentId);
+  const { error } = await (keep.length > 0 ? remove.not('id', 'in', `(${keep.join(',')})`) : remove);
+  if (error) throw error;
+  for (const { id, ...row } of rows) {
+    const { error: saveError } = id
+      ? await supabase.from('transactions').update(row).eq('id', id).eq('split_from_id', parentId)
+      : await supabase.from('transactions').insert(row);
+    if (saveError) throw saveError;
+  }
 }
 
 export async function updateTransaction(id: string, values: TransactionUpdate): Promise<void> {

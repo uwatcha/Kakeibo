@@ -4,11 +4,14 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Chip, Dialog, HelperText, IconButton, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { Amount } from '@/components/Amount';
+import type { Account } from '@/features/accounts/api';
 import type { Category } from '@/features/categories/api';
 import { categoryLabel } from '@/features/categories/tree';
 import { formatYen, parseYen } from '@/lib/money';
 
-import { ADJUSTMENT_LABEL, adjustmentOf, type ItemDraft } from '../items';
+import { AccountPicker } from '../components/AccountPicker';
+import { ADJUSTMENT_LABEL, adjustmentOf, isAdvanceItem, type ItemDraft, ownAmount } from '../items';
+import { TRANSACTION_RULES } from '../transactionRules';
 import type { FormValues } from './values';
 
 let nextKey = 0;
@@ -17,15 +20,20 @@ const newItem = (): ItemDraft => ({ key: `new-${Date.now()}-${nextKey++}`, name:
 /**
  * 支払いの内訳（2026-11-02 改善要望）。品目の行（品名・金額・カテゴリ）を足していき、最後の「割引・調整」の行は
  * 合計（金額の欄）− 品目の合計 で自動で出す（割引・消費税の端数のずれを吸収する）。内訳があれば記録のカテゴリは
- * いちばん金額の大きい品目のものになる（values.ts の toTransactionRow）
+ * いちばん金額の大きい品目のものになる（values.ts の toTransactionRow）。
+ * 行のカテゴリの代わりに立て替えの相手を選ぶと立て替えの行になり、保存すると別の立て替えの記録になる（2026-11-06 改善要望）
  */
 export function ItemsField({
   control,
   categories,
+  accounts,
+  balances,
   error,
 }: {
   control: Control<FormValues>;
   categories: readonly Category[];
+  accounts: readonly Account[];
+  balances: ReadonlyMap<string, number> | undefined;
   error?: string;
 }) {
   const theme = useTheme();
@@ -46,6 +54,9 @@ export function ItemsField({
           onChange(items.map((i) => (i.key === key ? { ...i, ...patch } : i)));
         const total = parseYen(amount);
         const adjustment = total === null ? null : adjustmentOf(total, items);
+        const hasProducts = items.some((i) => !isAdvanceItem(i));
+        const hasAdvances = items.some(isAdvanceItem);
+        const pickingItem = items.find((i) => i.key === picking);
         return (
           <View style={styles.field}>
             <View style={styles.header}>
@@ -73,8 +84,17 @@ export function ItemsField({
                   onChangeText={(text) => update(item.key, { amount: text })}
                   style={styles.amount}
                 />
-                <Chip compact onPress={() => setPicking(item.key)} style={styles.category}>
-                  {item.categoryId ? (categoryLabel(item.categoryId, categories) ?? 'カテゴリ') : 'カテゴリ'}
+                <Chip
+                  compact
+                  icon={isAdvanceItem(item) ? TRANSACTION_RULES.advance.icon : undefined}
+                  onPress={() => setPicking(item.key)}
+                  style={styles.category}
+                >
+                  {isAdvanceItem(item)
+                    ? (accounts.find((a) => a.id === item.advanceToId)?.name ?? TRANSACTION_RULES.advance.label)
+                    : item.categoryId
+                      ? (categoryLabel(item.categoryId, categories) ?? 'カテゴリ')
+                      : 'カテゴリ'}
                 </Chip>
                 <IconButton
                   icon="close"
@@ -84,7 +104,7 @@ export function ItemsField({
                 />
               </View>
             ))}
-            {items.length > 0 && adjustment !== null && (
+            {hasProducts && adjustment !== null && (
               <View style={styles.adjustment}>
                 <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                   {ADJUSTMENT_LABEL}
@@ -95,6 +115,7 @@ export function ItemsField({
             {items.length > 0 && total !== null && (
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                 合計 {formatYen(total)}
+                {hasAdvances && `　自分の分 ${formatYen(ownAmount(total, items))}`}
               </Text>
             )}
             {error && <HelperText type="error">{error}</HelperText>}
@@ -107,22 +128,36 @@ export function ItemsField({
                     {expense.map((c) => (
                       <Chip
                         key={c.id}
-                        selected={items.find((i) => i.key === picking)?.categoryId === c.id}
+                        selected={!!pickingItem && !isAdvanceItem(pickingItem) && pickingItem.categoryId === c.id}
                         showSelectedOverlay
                         onPress={() => {
-                          if (picking) update(picking, { categoryId: c.id });
+                          if (picking) update(picking, { categoryId: c.id, advanceToId: null });
                           setPicking(null);
                         }}
                       >
                         {c.label}
                       </Chip>
                     ))}
+                    {/* 相手の分は、カテゴリの代わりに立て替えの相手を選ぶ */}
+                    <View style={styles.advance}>
+                      <AccountPicker
+                        label={TRANSACTION_RULES.advance.label}
+                        kinds={TRANSACTION_RULES.advance.to!.kinds}
+                        accounts={accounts}
+                        balances={balances}
+                        value={pickingItem?.advanceToId ?? null}
+                        onChange={(id) => {
+                          if (picking) update(picking, { advanceToId: id, categoryId: null });
+                          setPicking(null);
+                        }}
+                      />
+                    </View>
                   </ScrollView>
                 </Dialog.ScrollArea>
                 <Dialog.Actions>
                   <Button
                     onPress={() => {
-                      if (picking) update(picking, { categoryId: null });
+                      if (picking) update(picking, { categoryId: null, advanceToId: null });
                       setPicking(null);
                     }}
                   >
@@ -150,4 +185,5 @@ const styles = StyleSheet.create({
   dialog: { maxHeight: '80%' },
   area: { paddingHorizontal: 0 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, padding: 16 },
+  advance: { width: '100%', marginTop: 12 },
 });

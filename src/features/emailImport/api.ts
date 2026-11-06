@@ -227,6 +227,8 @@ export async function fetchNotOnStatement(): Promise<Transaction[]> {
     .eq('is_confirmed', true)
     .eq('statement_checked', false)
     .neq('type', 'adjustment')
+    // 支払いの内訳から分けた立て替えは、メールでは元の支払いと合わせた1件で来るので見ない
+    .is('split_from_id', null)
     .gte('date', from)
     .lte('date', through)
     .or(`from_account_id.in.(${ids}),to_account_id.in.(${ids})`)

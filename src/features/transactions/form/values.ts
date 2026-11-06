@@ -13,7 +13,17 @@ import {
   type TransactionType,
   validateDraft,
 } from '../transactionRules';
-import { type ItemDraft, mainCategory, toItemDrafts, toItemRows, type TransactionItem } from '../items';
+import {
+  isAdvanceItem,
+  type ItemDraft,
+  mainCategory,
+  ownAmount,
+  type SplitAdvance,
+  splitAdvances,
+  toItemDrafts,
+  toItemRows,
+  type TransactionItem,
+} from '../items';
 
 /** 記録の入力画面（src/app/transaction/[id].tsx）のフォームの値。金額などは入力中の文字のまま持つ */
 export type FormValues = {
@@ -61,11 +71,15 @@ export function emptyFormValues(today: string): FormValues {
   };
 }
 
-/** 保存済みの記録をフォームの値にする。残高調整は口座を fromAccountId にまとめて持ち、保存時に向きで振り分ける */
-export function toFormValues(t: Transaction): FormValues {
+/**
+ * 保存済みの記録をフォームの値にする。残高調整は口座を fromAccountId にまとめて持ち、保存時に向きで振り分ける。
+ * advances はその支払いから分けた立て替えの記録（split_from_id）で、金額の欄は立て替えを足した合計にする
+ */
+export function toFormValues(t: Transaction, advances: readonly Transaction[] = []): FormValues {
+  const split = t.type === 'expense' ? advances : [];
   return {
     type: t.type,
-    amount: String(t.amount),
+    amount: String(t.amount + split.reduce((sum, a) => sum + a.amount, 0)),
     fromAccountId: t.type === 'adjustment' ? (t.from_account_id ?? t.to_account_id) : t.from_account_id,
     toAccountId: t.type === 'adjustment' ? null : t.to_account_id,
     adjustmentDirection: t.type === 'adjustment' && t.from_account_id ? 'decrease' : 'increase',
@@ -79,7 +93,7 @@ export function toFormValues(t: Transaction): FormValues {
     relatedTransactionId: t.related_transaction_id,
     // 立て替えの側に書いてあるので、画面で読み込んでから入れる
     repaidAdvanceIds: [],
-    items: t.type === 'expense' ? toItemDrafts(t.items) : [],
+    items: t.type === 'expense' ? toItemDrafts(t.items, split) : [],
   };
 }
 
@@ -99,21 +113,52 @@ export function validateForm(
   if (values.type === 'income' && isSalaryCategory(values.categoryId, categories) && !values.employerId) {
     errors.employerId = '収入元を選んでください';
   }
-  if (values.type === 'expense' && values.items.some((i) => i.amount.trim() !== '' && parseSignedYen(i.amount) === null)) {
+  if (
+    values.type === 'expense' &&
+    values.items.some((i) => i.amount.trim() !== '' && parseSignedYen(i.amount) === null)
+  ) {
     errors.items = '内訳の金額は整数（円）で入力してください';
+  } else if (values.type === 'expense' && values.items.some((i) => isAdvanceItem(i) && !(parseYen(i.amount)! > 0))) {
+    errors.items = '立て替えの金額は1円以上で入力してください';
+  } else if (values.type === 'expense' && !errors.amount && ownAmount(parseYen(values.amount)!, values.items) <= 0) {
+    errors.items = '立て替えの合計は金額より少なくしてください';
   }
   return errors;
 }
 
-/** 保存する内訳の行（支払いだけ。合計は金額の欄） */
+/** 保存する内訳の行（支払いだけ。合計は金額の欄から立て替えの行を引いた自分の分） */
 export function itemRows(values: FormValues): TransactionItem[] {
   const total = parseYen(values.amount);
-  return values.type === 'expense' && total !== null ? toItemRows(total, values.items) : [];
+  return values.type === 'expense' && total !== null ? toItemRows(ownAmount(total, values.items), values.items) : [];
+}
+
+/** 内訳の立て替えの行（支払いだけ） */
+export const advanceItems = (values: FormValues): SplitAdvance[] =>
+  values.type === 'expense' ? splitAdvances(values.items) : [];
+
+/**
+ * 内訳の立て替えの行から作る立て替えの記録: 元の支払いと同じ口座・日付・内容・確認の状態で、品名はメモに入れる
+ */
+export function advanceRow(parent: ReturnType<typeof toTransactionRow>, parentId: string, advance: SplitAdvance) {
+  return {
+    type: 'advance',
+    amount: advance.amount,
+    from_account_id: parent.from_account_id,
+    to_account_id: advance.toAccountId,
+    category_id: null,
+    date: parent.date,
+    payee: parent.payee,
+    memo: advance.name,
+    is_confirmed: parent.is_confirmed,
+    split_from_id: parentId,
+  } satisfies Omit<TransactionInsert, 'user_id'>;
 }
 
 /** フォームの値を保存する行にする（validateForm を通ったあとに呼ぶ）。その種類で使わない欄は空にする */
 export function toTransactionRow(values: FormValues, categories: readonly Category[], today: string) {
-  const amount = parseYen(values.amount)!;
+  // 支払いは、内訳の立て替えの行を引いた自分の分（立て替えは別の記録になる）
+  const total = parseYen(values.amount)!;
+  const amount = values.type === 'expense' ? ownAmount(total, values.items) : total;
   const { fromAccountId, toAccountId } = normalizeAccounts({ ...values, amount });
   return {
     type: values.type,

@@ -719,6 +719,7 @@ export type Database = {
           raw_payee: string | null
           recurring_rule_id: string | null
           related_transaction_id: string | null
+          split_from_id: string | null
           statement_checked: boolean
           to_account_id: string | null
           type: Database["public"]["Enums"]["txn_type"]
@@ -745,6 +746,7 @@ export type Database = {
           raw_payee?: string | null
           recurring_rule_id?: string | null
           related_transaction_id?: string | null
+          split_from_id?: string | null
           statement_checked?: boolean
           to_account_id?: string | null
           type: Database["public"]["Enums"]["txn_type"]
@@ -771,6 +773,7 @@ export type Database = {
           raw_payee?: string | null
           recurring_rule_id?: string | null
           related_transaction_id?: string | null
+          split_from_id?: string | null
           statement_checked?: boolean
           to_account_id?: string | null
           type?: Database["public"]["Enums"]["txn_type"]
@@ -795,6 +798,13 @@ export type Database = {
           {
             foreignKeyName: "transactions_related_fk"
             columns: ["user_id", "related_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["user_id", "id"]
+          },
+          {
+            foreignKeyName: "transactions_split_from_fkey"
+            columns: ["user_id", "split_from_id"]
             isOneToOne: false
             referencedRelation: "transactions"
             referencedColumns: ["user_id", "id"]

@@ -30,6 +30,7 @@ describe('transactionsToCsv', () => {
       needs_payee: false,
       raw_payee: null,
       statement_checked: false,
+      split_from_id: null,
     };
     const csv = transactionsToCsv(
       [

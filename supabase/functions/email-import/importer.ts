@@ -326,10 +326,38 @@ export class Importer {
       .gte('date', addDays(row.date!, -DUPLICATE_DAYS))
       .lte('date', addDays(row.date!, DUPLICATE_DAYS))
       .limit(20);
-    const found = (data ?? []).find(
-      (t) => (t.auto_source === null && t[side] === account) || (t.auto_source === 'photo' && side === 'from_account_id'),
-    );
+    const matches = (t: { auto_source: string | null; from_account_id: string | null; to_account_id: string | null }) =>
+      (t.auto_source === null && t[side] === account) || (t.auto_source === 'photo' && side === 'from_account_id');
+    const found = (data ?? []).find(matches) ?? (side === 'from_account_id' ? await this.splitDuplicate(account, row) : undefined);
     return found as { id: string; type: string; auto_source: string | null } | undefined;
+  }
+
+  /**
+   * 内訳の一部を立て替えに分けた支払い（split_from_id。2026-11-06）は、メールでは支払いと立て替えを合わせた額で来るので、
+   * 合わせた額が同じなら、元の支払いを重複の相手にする（口座の見方は manualDuplicate と同じ。写真の記録は口座を見ない）
+   */
+  private async splitDuplicate(account: string, row: ImportRow) {
+    const { data: advances } = await this.db
+      .from('transactions')
+      .select('split_from_id, amount')
+      .eq('user_id', this.userId)
+      .not('split_from_id', 'is', null)
+      .gte('date', addDays(row.date!, -DUPLICATE_DAYS))
+      .lte('date', addDays(row.date!, DUPLICATE_DAYS))
+      .limit(50);
+    const split = new Map<string, number>();
+    for (const a of advances ?? []) split.set(a.split_from_id!, (split.get(a.split_from_id!) ?? 0) + a.amount);
+    if (split.size === 0) return undefined;
+    const { data: parents } = await this.db
+      .from('transactions')
+      .select('id, type, auto_source, amount, from_account_id')
+      .eq('user_id', this.userId)
+      .in('id', [...split.keys()]);
+    return (parents ?? []).find(
+      (p) =>
+        ((p.auto_source === null && p.from_account_id === account) || p.auto_source === 'photo') &&
+        p.amount + split.get(p.id)! === row.amount,
+    );
   }
 
   /**
@@ -350,6 +378,12 @@ export class Importer {
         // 利用先（raw_payee）は入れない（連携サービス の「サンプルデビット」などを対応表に覚えないため）
         .update({ from_account_id: account, date: row.date, is_confirmed: row.date! <= tokyoToday() })
         .eq('id', transactionId)
+        .eq('user_id', this.userId);
+      // 内訳から分けた立て替えも、同じ口座・日付にそろえる
+      await this.db
+        .from('transactions')
+        .update({ from_account_id: account, date: row.date, is_confirmed: row.date! <= tokyoToday() })
+        .eq('split_from_id', transactionId)
         .eq('user_id', this.userId);
     }
     await this.setStatus(row.id, 'merged', { transaction_id: transactionId });

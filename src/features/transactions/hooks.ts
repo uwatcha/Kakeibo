@@ -11,8 +11,10 @@ import {
   fetchAdvancesFor,
   fetchAdvancesTo,
   fetchCollectsFrom,
+  fetchSplitAdvances,
   saveTransactionItems,
   setAdvancesRepaidBy,
+  syncSplitAdvances,
   fetchUnconfirmed,
   fetchPayeeHistory,
   fetchMonthTransactions,
@@ -37,6 +39,7 @@ export const transactionKeys = {
   collectsFrom: (personId: string, since: string) => [...transactionKeys.all, 'collectsFrom', personId, since] as const,
   advancesTo: (personId: string) => [...transactionKeys.all, 'advancesTo', personId] as const,
   advancesFor: (id: string) => [...transactionKeys.all, 'advancesFor', id] as const,
+  splitAdvances: (id: string) => [...transactionKeys.all, 'splitAdvances', id] as const,
   unconfirmed: (today: string) => [...transactionKeys.all, 'unconfirmed', today] as const,
 };
 
@@ -102,6 +105,15 @@ export function useAdvancesFor(collectId: string | undefined) {
   });
 }
 
+/** その支払いから内訳で分けた立て替えの記録 */
+export function useSplitAdvances(parentId: string | undefined) {
+  return useQuery({
+    queryKey: transactionKeys.splitAdvances(parentId ?? ''),
+    queryFn: () => fetchSplitAdvances(parentId!),
+    enabled: !!parentId,
+  });
+}
+
 export function useTransaction(id: string | undefined) {
   return useQuery({
     queryKey: transactionKeys.detail(id ?? ''),
@@ -145,6 +157,16 @@ export function useSaveTransactionItems() {
   return useMutation({
     mutationFn: ({ transactionId, items }: { transactionId: string; items: TransactionItem[] }) =>
       saveTransactionItems(transactionId, items),
+    onSuccess: invalidate,
+  });
+}
+
+/** 内訳で分けた立て替えの記録をそろえる（保存のあと） */
+export function useSyncSplitAdvances() {
+  const invalidate = useInvalidateAfterWrite();
+  return useMutation({
+    mutationFn: ({ parentId, rows }: { parentId: string; rows: Parameters<typeof syncSplitAdvances>[1] }) =>
+      syncSplitAdvances(parentId, rows),
     onSuccess: invalidate,
   });
 }
