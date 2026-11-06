@@ -1,21 +1,15 @@
-The MIT License (MIT)
+Copyright (c) 2026 uwatcha. All rights reserved.
 
-Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)
+このリポジトリのソースコード・文書・画像などの著作権は、作者（uwatcha）にあります。
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+このリポジトリは、作者が個人で使う家計簿アプリを、ポートフォリオとして見てもらうために公開しているものです。
+GitHub の利用規約で認められる範囲の閲覧・フォークを除き、作者の書面での許可なく、全部または一部を
+使う・写す・直す・配る・アプリとして動かす・サービスに組み込むことを禁止します（個人・企業を問いません）。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+このソフトウェアは、速さを優先して AI でコードを書かせながら作っており、十分な検証をしていません。
+また、データは端末の中で完結せず、外部のサーバー・サービスに保存・送信されます。
+そのため、作者はこのソフトウェアについて何の保証もせず、これを使ったこと、または使えなかったことで
+生じたどのような損害（データの消失・漏えい、金銭の損害を含む）についても、一切の責任を負いません。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2026-11-06 より前に MIT ライセンスで公開していた時期があります。この LICENSE は、2026-11-06 以降の
+このリポジトリの内容に適用します。

@@ -1,56 +1,32 @@
-# Welcome to your Expo app 👋
+# Kakeibo（個人用の家計簿アプリ）
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> [!CAUTION]
+> **このアプリは作者が個人で使うためのものです。ほかの人（個人・企業を問いません）が使うことは禁止します。**
+>
+> - このリポジトリを公開しているのは、ポートフォリオとして見てもらうためです。
+> - アプリ・ソースコードを使う・写す・直す・配る・動かすことは、作者の許可なくできません（詳しくは [LICENSE](LICENSE)）。
+> - 利用者の新しい登録は受け付けていません。作者が用意したアカウント以外では使えません。
+> - 仮に使ったとしても、作者は一切の責任を負いません。理由は次のとおりです。
+>   - 速さを優先して、AI でコードを書かせながら作っています（いわゆるバイブコーディング）。十分な検証をしていません。
+>   - データは端末の中で完結せず、外部のサーバー（Supabase）や AI のサービス（Google Gemini・Anthropic Claude）に保存・送信されます。データの消失・漏えいなどについて、作者は責任を持てません。
 
-## Get started
+## どんなアプリか
 
-1. Install dependencies
+Android で使う、自分用の家計簿です。
 
-   ```bash
-   npm install
-   ```
+- すべての記録を「どの口座からどの口座へ」の移動で表します（クレジットカード・貸し借りの相手も口座）
+- ホームに、所持金・実質残高・給料日までに使える額などを、計算式つきで出します
+- 定期支払い・給料の予定を先まで自動で入れ、予定で残高が足りなくなる口座を知らせます
+- カード・銀行の利用メール、レシートの写真から、自動で記録します
+- 1つの支払いを品目ごとの内訳に分けられます（割り勘の相手の分は立て替えに分ける）
+- 集計（カテゴリ別、給料日からの残高の推移、食費の1食あたりなど）
+- AI に家計の相談ができます（口座・相手の名前は置き換えてから送ります）
+- ホーム画面のウィジェットから、アプリを開かずに記録できます
 
-2. Start the app
+## 使っている技術
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Expo（React Native）・Expo Router・TypeScript
+- Supabase（Postgres・Auth・Row Level Security・Edge Functions）
+- React Native Paper・TanStack Query・react-hook-form・zod
+- EAS Build・EAS Update・EAS Hosting
+- Jest（React Compiler を通した画面の描画テストを含む）
