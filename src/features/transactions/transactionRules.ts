@@ -1,4 +1,4 @@
-import { ASSET_KINDS, type AccountKind } from '@/features/accounts/accountKinds';
+import { ASSET_KINDS, type AccountKind, PERSON_KINDS } from '@/features/accounts/accountKinds';
 import type { Database } from '@/types/database';
 
 export type TransactionType = Database['public']['Enums']['txn_type'];
@@ -41,9 +41,10 @@ export const TRANSACTION_RULES: Record<TransactionType, TransactionRule> = {
   transfer: {
     label: '振替',
     icon: 'swap-horizontal',
-    from: { label: '出金元', kinds: ASSET_KINDS },
+    // 貸し借りの相手も選べる（相手のお金で払ってもらった・相手に直接入れた、など。2026-11-06 改善要望）
+    from: { label: '出金元', kinds: [...ASSET_KINDS, ...PERSON_KINDS] },
     // クレカへの振替 = 引き落とし（REQ-33）
-    to: { label: '入金先', kinds: ASSETS_AND_CARD },
+    to: { label: '入金先', kinds: [...ASSETS_AND_CARD, ...PERSON_KINDS] },
     categoryKind: null,
   },
   advance: {

@@ -1,10 +1,14 @@
-import type { AccountKind } from '@/features/accounts/accountKinds';
+import { type AccountKind, PERSON_KINDS } from '@/features/accounts/accountKinds';
 
 import { OTHER_TYPES, PRIMARY_TYPES, TRANSACTION_RULES, type TransactionType } from './transactionRules';
 
-/** 口座の利用履歴から記録するときの最初の種類: その口座を使える種類のうち、画面で前に並ぶもの */
+/**
+ * 口座の利用履歴から記録するときの最初の種類: その口座を使える種類のうち、画面で前に並ぶもの。
+ * 貸し借りの相手は振替でも選べるが、立て替え・借金などの専用の種類を先にする
+ */
 export function defaultTypeForAccount(kind: AccountKind): TransactionType | null {
-  const types = [...PRIMARY_TYPES, ...OTHER_TYPES].filter((t) => t !== 'adjustment');
+  const order = PERSON_KINDS.includes(kind) ? [...OTHER_TYPES, ...PRIMARY_TYPES] : [...PRIMARY_TYPES, ...OTHER_TYPES];
+  const types = order.filter((t) => t !== 'adjustment');
   return types.find((t) => presetSide(t, kind) !== null) ?? null;
 }
 

@@ -38,6 +38,9 @@ describe('validateDraft', () => {
 
   it('銀行 → クレカの振替（引き落とし）は通る', () => {
     expect(validate({ type: 'transfer', fromAccountId: 'bank', toAccountId: 'card' })).toEqual({});
+    // 貸し借りの相手も出金元・入金先にできる（2026-11-06）
+    expect(validate({ type: 'transfer', fromAccountId: 'bank', toAccountId: 'friend' })).toEqual({});
+    expect(validate({ type: 'transfer', fromAccountId: 'friend', toAccountId: 'card' })).toEqual({});
   });
 
   it('クレカから振替はできない', () => {

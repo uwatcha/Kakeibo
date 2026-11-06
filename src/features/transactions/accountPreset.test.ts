@@ -17,5 +17,6 @@ describe('presetSide', () => {
     expect(presetSide('income', 'bank')).toBe('to');
     expect(presetSide('transfer', 'credit_card')).toBe('to');
     expect(presetSide('income', 'credit_card')).toBeNull();
+    expect(presetSide('transfer', 'receivable')).toBe('from');
   });
 });
