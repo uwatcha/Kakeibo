@@ -9,23 +9,13 @@ import { QueryState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
 import type { AiProvider } from '@/features/ai/api';
 import { useAiStatus, useDeleteAiKey, useSaveAiKey, useSetAiModel } from '@/features/ai/hooks';
+import { expiryLabel } from '@/features/ai/keyExpiry';
 import { SPACING } from '@/theme';
 
 const PROVIDERS: Record<AiProvider, { name: string; keyPage: string; keyPageName: string }> = {
   gemini: { name: 'Gemini', keyPage: 'https://aistudio.google.com/apikey', keyPageName: 'Google AI Studio' },
   claude: { name: 'Claude', keyPage: 'https://console.anthropic.com/settings/keys', keyPageName: 'Anthropic Console' },
 };
-
-/** 期限の何日前から赤で出すか（通知も同じ日に出す。claudeKeyReminder.ts） */
-const WARN_DAYS = 3;
-
-function expiryLabel(expiresAt: string | null): { text: string; warn: boolean } | null {
-  if (!expiresAt) return null;
-  const end = new Date(expiresAt);
-  const left = end.getTime() - Date.now();
-  if (left <= 0) return { text: '期限切れ', warn: true };
-  return { text: `${end.getMonth() + 1}/${end.getDate()} まで`, warn: left <= WARN_DAYS * 86_400_000 };
-}
 
 /** 1社分のキー: 連携済みなら状態と解除、まだならキーの入力。Claude は期限があるので、連携済みでも入れ直せる */
 function ProviderSection({

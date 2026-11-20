@@ -9,12 +9,15 @@ import {
   HelperText,
   Portal,
   Snackbar,
+  Text,
   TextInput,
   useTheme,
 } from 'react-native-paper';
 
 import { ListRow } from '@/components/ListRow';
 import { SectionCard } from '@/components/SectionCard';
+import { useAiStatus } from '@/features/ai/hooks';
+import { expiryLabel } from '@/features/ai/keyExpiry';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { exportBackupJson, exportTransactionsCsv } from '@/features/export/exportData';
 import { useDailyLiving, useSaveMonthlyLivingCost } from '@/features/settings/hooks';
@@ -32,6 +35,9 @@ export default function SettingsScreen() {
   const [exportFailed, setExportFailed] = useState(false);
   // 自動入力のルール（メールからの記録・AI入力・写真からの記録の AI に渡す。2026-10-28 改善要望）
   const emailSettings = useEmailImportSettings();
+  // AI 相談の API キー。Claude のキーには期限があるので、ここからも入れ直せるようにする（2026-11-20 改善要望）
+  const aiStatus = useAiStatus();
+  const claudeExpiry = expiryLabel(aiStatus.data?.claudeExpiresAt ?? null);
   // 生活費（ホームの取り置き後に使える額・自由に使える額の計算に使う）。空なら記録から自動で見積もる
   const living = useDailyLiving(toTokyoDateString());
   const saveLiving = useSaveMonthlyLivingCost();
@@ -106,6 +112,22 @@ export default function SettingsScreen() {
             icon="text-box-edit-outline"
             right={chevron}
             onPress={() => router.push('/auto-rules')}
+          />
+          <ListRow
+            title="AI 相談の設定"
+            subtitle={
+              claudeExpiry ? (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: claudeExpiry.warn ? theme.colors.error : theme.colors.onSurfaceVariant }}
+                >
+                  Claude の API キー: {claudeExpiry.text}
+                </Text>
+              ) : undefined
+            }
+            icon="robot-outline"
+            right={chevron}
+            onPress={() => router.push('/ai-settings')}
           />
           {navItem('メールからの記録', 'email-sync-outline', '/email-import')}
           {/* 端末の写真を見る機能なので、Web 版（PC）では出さない */}
