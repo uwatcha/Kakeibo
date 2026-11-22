@@ -33,7 +33,8 @@ export async function generate(apiKey: string, model: string, system: string, me
   });
   if (!res.ok) throw new GeminiError(res.status, await res.text());
   return (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+    promptFeedback?: { blockReason?: string };
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
   };
 }

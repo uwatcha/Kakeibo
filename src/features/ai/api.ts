@@ -1,4 +1,4 @@
-import { FunctionsHttpError } from '@supabase/supabase-js';
+import { FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
 
@@ -30,19 +30,31 @@ export class AiError extends Error {
 /** 混み合い・一時的な障害の状態コード（Edge Function が status に入れて返す。Claude の 529 も 503 にして返す） */
 const TEMPORARY_STATUSES = [500, 502, 503, 504];
 
-/** Edge Function ai-chat を呼ぶ。失敗したら関数が返したメッセージで投げる */
+/** 関数が文を返せなかったとき（時間切れなど）の、HTTP の状態コードごとの文 */
+function statusMessage(status: number): AiError {
+  if (status === 401) return new AiError('ログインの期限が切れました。アプリを開き直すか、ログインし直してください', false);
+  if (status === 504 || status === 546) {
+    return new AiError('AI の返事を待つ時間の上限を過ぎました。質問を短くするか、分けて送ってください', false);
+  }
+  if (status === 413) return new AiError('送る内容が大きすぎます。添付を減らすか小さくしてください', false);
+  return new AiError(`サーバーで処理できませんでした（${status}）。少し待ってから送り直してください`, TEMPORARY_STATUSES.includes(status));
+}
+
+/** Edge Function ai-chat を呼ぶ。失敗したら、何が起きたか・どうすればよいかの文で投げる（文は関数の aiErrors.ts が作る） */
 async function callAi<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('ai-chat', { body });
   if (error) {
     if (error instanceof FunctionsHttpError) {
-      const detail = (await error.context.json().catch(() => null)) as { error?: string; status?: number } | null;
-      throw new AiError(
-        detail?.error ?? '通信できませんでした',
-        detail?.status !== undefined && TEMPORARY_STATUSES.includes(detail.status),
-      );
+      const response = error.context as Response;
+      const detail = (await response.json().catch(() => null)) as { error?: string; status?: number } | null;
+      if (!detail?.error) throw statusMessage(response.status);
+      throw new AiError(detail.error, detail.status !== undefined && TEMPORARY_STATUSES.includes(detail.status));
     }
-    // 関数まで届かなかった（電波が悪いなど）
-    throw new AiError('通信できませんでした', true);
+    if (error instanceof FunctionsRelayError) {
+      throw new AiError('サーバー（Supabase）が一時的に応答していません。少し待ってから送り直してください', true);
+    }
+    // 関数まで届かなかった（電波が悪い・機内モードなど）
+    throw new AiError('インターネットにつながりませんでした。電波の良い所で、もう一度送ってください', true);
   }
   return data as T;
 }

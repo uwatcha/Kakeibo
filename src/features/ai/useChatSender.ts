@@ -120,7 +120,8 @@ export function useChatSender({ conversationId, restoreInput, onSent }: Options)
         retryTimer.current = setTimeout(() => attempt(text, question, history, context, tries + 1), RETRY_INTERVAL_MS);
         return;
       }
-      setError(e instanceof Error ? e.message : '送れませんでした');
+      // AiError 以外は、返事のあとの会話の保存（DB）の失敗
+      setError(e instanceof AiError ? e.message : '返事を保存できませんでした。通信状態を確かめて、もう一度送ってください');
       restoreInput(text);
       finish();
     }

@@ -1,4 +1,5 @@
 // Claude（Anthropic）の呼び出し（ai-chat で使う）。返事は Gemini と同じ形にそろえて返すので、呼ぶ側は分けずに扱える
+import { AI_BLOCKED, AI_EMPTY, AI_TRUNCATED } from './aiErrors.ts';
 import { GeminiError, type Message, sleep } from './gemini.ts';
 
 const ANTHROPIC = 'https://api.anthropic.com/v1/messages';
@@ -12,9 +13,6 @@ export const CLAUDE_DEFAULT_MODEL = 'claude-haiku-5-5';
 
 /** Claude からのエラー（GeminiError と同じく status を持つ。どちらで失敗したかを知らせるために分ける） */
 export class ClaudeError extends GeminiError {}
-
-/** 考える（thinking）だけで上限に届き、返事の文が空だった（2026-11-22: 込み入った相談で「」だけが返った） */
-export const CLAUDE_TRUNCATED = 422;
 
 /**
  * 1回の返事の上限。Haiku 5.5 などは初めから考えるモードで動き、考えた分もここに数えられる
@@ -81,9 +79,11 @@ export async function generateClaude(
     usage?: { input_tokens?: number; output_tokens?: number };
   };
   const text = (body.content ?? []).map((c) => (c.type === 'text' ? (c.text ?? '') : '')).join('');
-  // 空の返事は保存せずにエラーにする（キーの確かめの1トークンの呼び出しは、空で当たり前なので除く）
-  if (text.trim() === '' && body.stop_reason === 'max_tokens' && maxTokens > 1) {
-    throw new ClaudeError(CLAUDE_TRUNCATED, 'max_tokens');
+  // 断られた・空の返事は保存せずにエラーにする（2026-11-22: 考えるだけで上限に届き「」だけが返った）。
+  // キーの確かめの1トークンの呼び出しは、空で当たり前なので除く
+  if (body.stop_reason === 'refusal') throw new ClaudeError(AI_BLOCKED, 'refusal');
+  if (text.trim() === '' && maxTokens > 1) {
+    throw new ClaudeError(body.stop_reason === 'max_tokens' ? AI_TRUNCATED : AI_EMPTY, body.stop_reason ?? '');
   }
   const prompt = body.usage?.input_tokens ?? 0;
   const output = body.usage?.output_tokens ?? 0;

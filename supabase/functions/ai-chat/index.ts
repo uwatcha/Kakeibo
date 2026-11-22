@@ -2,8 +2,8 @@
 // アプリは名前を置き換えた材料（src/features/ai/anonymize.ts）と会話だけを送ってくる
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+import { AI_BLOCKED, AI_EMPTY, AI_TRUNCATED, describeAiError } from '../_shared/aiErrors.ts';
 import {
-  CLAUDE_TRUNCATED,
   checkClaudeKey,
   CLAUDE_DEFAULT_MODEL,
   CLAUDE_MODELS,
@@ -46,10 +46,23 @@ function candidatesFor(settings: Settings, preferred: string | null): string[] {
   );
 }
 
+// 使えない（404）・混み合い・使える量の上限（429。Gemini の無料枠を1日分使い切ったときなど）は、次のモデルを試す
 const canSkip = (e: unknown) =>
   e instanceof ClaudeError
-    ? e.status === 404 || isClaudeTemporary(e.status)
-    : e instanceof GeminiError && (e.status === 404 || isTemporary(e.status));
+    ? e.status === 404 || e.status === 429 || isClaudeTemporary(e.status)
+    : e instanceof GeminiError && (e.status === 404 || e.status === 429 || isTemporary(e.status));
+
+/** Gemini が安全のために断った・上限で止まった・空だったときは、空の返事を返さずにエラーにする（Claude は generateClaude で見る） */
+function checkGeminiReply(out: Awaited<ReturnType<typeof generateWithRetry>>) {
+  const candidate = out.candidates?.[0];
+  const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? '').join('');
+  const reason = candidate?.finishReason ?? '';
+  if (out.promptFeedback?.blockReason || /SAFETY|PROHIBITED|BLOCKLIST|RECITATION|SPII/.test(reason)) {
+    throw new GeminiError(AI_BLOCKED, out.promptFeedback?.blockReason ?? reason);
+  }
+  if (text.trim() === '') throw new GeminiError(reason === 'MAX_TOKENS' ? AI_TRUNCATED : AI_EMPTY, reason);
+  return out;
+}
 
 /** 候補を順に試し、最初に答えられたモデルの返事を返す。使えない（404）・混み合いのときだけ次へ */
 async function generateAny(settings: Settings, candidates: string[], system: string, messages: Message[], asJson = false) {
@@ -58,7 +71,7 @@ async function generateAny(settings: Settings, candidates: string[], system: str
     try {
       const out = isClaudeModel(model)
         ? await generateClaudeWithRetry(settings.anthropic_api_key!, model, system, messages, asJson)
-        : await generateWithRetry(settings.gemini_api_key!, model, system, messages, asJson);
+        : checkGeminiReply(await generateWithRetry(settings.gemini_api_key!, model, system, messages, asJson));
       return { out, model };
     } catch (e) {
       lastError = e;
@@ -314,25 +327,11 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     if (e instanceof GeminiError) {
-      const name = e instanceof ClaudeError ? 'Claude' : 'Gemini';
-      const temporary = e instanceof ClaudeError ? isClaudeTemporary(e.status) : isTemporary(e.status);
-      const message =
-        e.status === 429
-          ? `${name} の利用の上限に達しました。しばらく待ってから送ってください`
-          : temporary
-            ? `${name} が混み合っています。少し待ってから送ってください`
-            : e instanceof ClaudeError && e.status === CLAUDE_TRUNCATED
-              ? '考えることが多く、返事を書く前に上限に届きました。質問を分けるか、もう一度送ってください'
-              : e.status === 404
-              ? 'このモデルは使えなくなりました。設定でほかのモデルを選んでください'
-              : e instanceof ClaudeError && (e.status === 401 || e.status === 403)
-                ? 'Claude に断られました。API キーの期限が切れていないか、設定で確かめてください'
-                : e.status === 400 || e.status === 401 || e.status === 403
-                  ? `${name} に断られました。API キーやモデルを確かめてください`
-                  : `${name} につながりませんでした（${e.status}）`;
-      // アプリは 500〜504 を「混み合い」として送り直すので、Claude の 529 は 503 として返す
+      const { message, temporary } = describeAiError(e instanceof ClaudeError ? 'Claude' : 'Gemini', e.status, e.detail);
+      // アプリは status が 500〜504 なら「混み合い」として送り直すので、一時的なものは 503 として返す
       return json({ error: message, status: temporary ? 503 : e.status }, 502);
     }
-    return json({ error: '処理できませんでした' }, 500);
+    console.error(e);
+    return json({ error: 'サーバーで処理できませんでした（記録の読み書きの失敗など）。少し待ってから送り直してください', status: 500 }, 500);
   }
 });
