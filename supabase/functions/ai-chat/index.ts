@@ -3,6 +3,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 import {
+  CLAUDE_TRUNCATED,
   checkClaudeKey,
   CLAUDE_DEFAULT_MODEL,
   CLAUDE_MODELS,
@@ -320,7 +321,9 @@ Deno.serve(async (req) => {
           ? `${name} の利用の上限に達しました。しばらく待ってから送ってください`
           : temporary
             ? `${name} が混み合っています。少し待ってから送ってください`
-            : e.status === 404
+            : e instanceof ClaudeError && e.status === CLAUDE_TRUNCATED
+              ? '考えることが多く、返事を書く前に上限に届きました。質問を分けるか、もう一度送ってください'
+              : e.status === 404
               ? 'このモデルは使えなくなりました。設定でほかのモデルを選んでください'
               : e instanceof ClaudeError && (e.status === 401 || e.status === 403)
                 ? 'Claude に断られました。API キーの期限が切れていないか、設定で確かめてください'

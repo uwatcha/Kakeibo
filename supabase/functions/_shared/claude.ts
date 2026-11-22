@@ -13,6 +13,15 @@ export const CLAUDE_DEFAULT_MODEL = 'claude-haiku-5-5';
 /** Claude からのエラー（GeminiError と同じく status を持つ。どちらで失敗したかを知らせるために分ける） */
 export class ClaudeError extends GeminiError {}
 
+/** 考える（thinking）だけで上限に届き、返事の文が空だった（2026-11-22: 込み入った相談で「」だけが返った） */
+export const CLAUDE_TRUNCATED = 422;
+
+/**
+ * 1回の返事の上限。Haiku 5.5 などは初めから考えるモードで動き、考えた分もここに数えられる
+ * （4096 では込み入った相談で考えるだけで上限に届いた）。返事を待つ時間が延びすぎないよう 16000 にする
+ */
+const MAX_TOKENS = 16_000;
+
 export const isClaudeModel = (model: string | null | undefined) => !!model && model.startsWith('claude-');
 
 /** Claude の混み合い（529 overloaded）も、Gemini の 503 と同じく一時的なものとして扱う */
@@ -53,7 +62,7 @@ export async function generateClaude(
   system: string,
   messages: Message[],
   asJson = false,
-  maxTokens = 4096,
+  maxTokens = MAX_TOKENS,
 ) {
   const res = await fetch(ANTHROPIC, {
     method: 'POST',
@@ -68,9 +77,14 @@ export async function generateClaude(
   if (!res.ok) throw new ClaudeError(res.status, await res.text());
   const body = (await res.json()) as {
     content?: { type: string; text?: string }[];
+    stop_reason?: string;
     usage?: { input_tokens?: number; output_tokens?: number };
   };
   const text = (body.content ?? []).map((c) => (c.type === 'text' ? (c.text ?? '') : '')).join('');
+  // 空の返事は保存せずにエラーにする（キーの確かめの1トークンの呼び出しは、空で当たり前なので除く）
+  if (text.trim() === '' && body.stop_reason === 'max_tokens' && maxTokens > 1) {
+    throw new ClaudeError(CLAUDE_TRUNCATED, 'max_tokens');
+  }
   const prompt = body.usage?.input_tokens ?? 0;
   const output = body.usage?.output_tokens ?? 0;
   return {
