@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Tabs, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -123,10 +123,24 @@ export default function AiChatScreen() {
     transactions,
     ...(conversationId ? [conversation] : []),
   ];
+  // 相談・入力の切り替えは、読み込みの途中でも出しておく（2026-11-22 改善要望）
+  const modeBar = (
+    <SegmentedButtons
+      value={mode}
+      onValueChange={(v) => setMode(v as 'chat' | 'import')}
+      density="small"
+      style={styles.mode}
+      buttons={[
+        { value: 'chat', label: '相談', icon: 'chat-outline' },
+        { value: 'import', label: '入力', icon: 'text-recognition' },
+      ]}
+    />
+  );
   if (sources.some((q) => !q.data)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Tabs.Screen options={{ headerRight }} />
+        {modeBar}
         <QueriesState queries={sources} />
       </View>
     );
@@ -134,11 +148,14 @@ export default function AiChatScreen() {
 
   if (!status.data!.hasKey) {
     return (
-      <View style={[styles.container, styles.center, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Tabs.Screen options={{ headerRight }} />
-        <Button mode="contained" icon="link" onPress={() => router.push('/ai-settings')}>
-          AI と連携する
-        </Button>
+        {modeBar}
+        <View style={[styles.container, styles.center]}>
+          <Button mode="contained" icon="link" onPress={() => router.push('/ai-settings')}>
+            AI と連携する
+          </Button>
+        </View>
       </View>
     );
   }
@@ -166,6 +183,15 @@ export default function AiChatScreen() {
     sender.send(text, stored, context, maskText(text, aliases));
   };
 
+  // Web 版は Cmd+Enter（Windows などは Ctrl+Enter）でも送る。日本語の変換中の Enter は送らない
+  const onKeyPress = (e: { nativeEvent: unknown; preventDefault: () => void }) => {
+    if (Platform.OS !== 'web') return;
+    const key = e.nativeEvent as KeyboardEvent;
+    if (key.key !== 'Enter' || !(key.metaKey || key.ctrlKey) || key.isComposing || key.keyCode === 229) return;
+    e.preventDefault();
+    send();
+  };
+
   // 画面を閉じたあとも送り直しを待っている、この会話の質問（バックグラウンドで送り直している）
   // （この画面で送っている間は、その質問は送り直しの表示に出ている）
   const waiting = sender.sending
@@ -184,16 +210,7 @@ export default function AiChatScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Tabs.Screen options={{ headerRight }} />
       {conversations.data && <AutoTitler conversations={conversations.data} aliases={aliases} />}
-      <SegmentedButtons
-        value={mode}
-        onValueChange={(v) => setMode(v as 'chat' | 'import')}
-        density="small"
-        style={styles.mode}
-        buttons={[
-          { value: 'chat', label: '相談', icon: 'chat-outline' },
-          { value: 'import', label: '入力', icon: 'text-recognition' },
-        ]}
-      />
+      {modeBar}
       {mode === 'import' ? (
         <AiImport
           today={today}
@@ -234,6 +251,7 @@ export default function AiChatScreen() {
                 placeholder="家計について聞く"
                 value={input}
                 onChangeText={setInput}
+                onKeyPress={onKeyPress}
                 multiline
                 dense
                 style={styles.input}
