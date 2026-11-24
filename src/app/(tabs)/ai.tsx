@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Tabs, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, IconButton, Menu, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QueriesState } from '@/components/QueryState';
@@ -14,7 +15,7 @@ import { buildChatSystem } from '@/features/ai/chatContext';
 import { MAX_IMAGES_PER_MESSAGE } from '@/features/ai/chatHistory';
 import { AiImport } from '@/features/ai/components/AiImport';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
-import { toJpegBase64 } from '@/features/ai/image';
+import { dataUriToJpegBase64, toJpegBase64 } from '@/features/ai/image';
 import { loadImportJob } from '@/features/ai/importJob';
 import { ChatMessages } from '@/features/ai/components/ChatMessages';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
@@ -78,11 +79,57 @@ export default function AiChatScreen() {
   const pendingSends = usePendingSends();
 
   const [input, setInput] = useState('');
+  // 相談（チャット）か、入力（写真・ファイルから記録を読み取る）か
+  const [mode, setMode] = useState<'chat' | 'import'>('chat');
   // 質問に添える画像（横幅 1024px の JPEG の base64。2026-11-24 ユーザーの要望）
   const [images, setImages] = useState<string[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
-  // 相談（チャット）か、入力（写真・ファイルから記録を読み取る）か
-  const [mode, setMode] = useState<'chat' | 'import'>('chat');
+  // スマホの画像のボタンのメニュー（選ぶ・撮る・貼る）
+  const [imageMenu, setImageMenu] = useState(false);
+
+  /** 画像を足す（1回に添えられる数まで） */
+  const appendImages = (added: string[]) => {
+    setImages((list) => {
+      if (list.length + added.length > MAX_IMAGES_PER_MESSAGE) {
+        setImageError(`1回に添えられる画像は${MAX_IMAGES_PER_MESSAGE}枚までです`);
+      }
+      return [...list, ...added].slice(0, MAX_IMAGES_PER_MESSAGE);
+    });
+  };
+
+  // Web 版: コピーした画像を Cmd+V（Ctrl+V）で貼れる（相談を開いているときだけ。文の貼り付けはそのまま。2026-11-24）
+  useEffect(() => {
+    if (Platform.OS !== 'web' || mode !== 'chat') return;
+    const onPaste = (e: ClipboardEvent) => {
+      const files = [...(e.clipboardData?.items ?? [])]
+        .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter((f): f is globalThis.File => !!f);
+      if (files.length === 0) return;
+      e.preventDefault();
+      setImageError(null);
+      Promise.all(
+        files.map(async (file) => {
+          const url = URL.createObjectURL(file);
+          try {
+            const width = await new Promise<number>((resolve, reject) => {
+              const img = new window.Image();
+              img.onload = () => resolve(img.naturalWidth);
+              img.onerror = reject;
+              img.src = url;
+            });
+            return await toJpegBase64(url, width);
+          } finally {
+            URL.revokeObjectURL(url);
+          }
+        }),
+      )
+        .then(appendImages)
+        .catch(() => setImageError('貼り付けた画像を読み込めませんでした'));
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [mode]);
   // AI入力の途中で閉じていたら、入力を開いて続きを出す
   useEffect(() => {
     loadImportJob().then((job) => job && setMode('import'));
@@ -196,6 +243,21 @@ export default function AiChatScreen() {
     setImages([]);
     setImageError(null);
     sender.send(text, stored, context, maskText(text, aliases), images);
+  };
+
+  /** スマホ: コピーした画像を貼る */
+  const pasteImage = async () => {
+    setImageError(null);
+    try {
+      const image = await Clipboard.getImageAsync({ format: 'jpeg' });
+      if (!image) {
+        setImageError('コピーした画像がありません');
+        return;
+      }
+      appendImages([await dataUriToJpegBase64(image.data, image.size.width)]);
+    } catch {
+      setImageError('コピーした画像を読み込めませんでした');
+    }
   };
 
   /** 画像を選ぶ・撮る（Web 版は選ぶだけ） */
@@ -329,22 +391,54 @@ export default function AiChatScreen() {
               </View>
             )}
             <View style={[styles.inputBar, { backgroundColor: theme.colors.surface }]}>
-              <IconButton
-                icon="image-plus"
-                accessibilityLabel="画像を添える"
-                disabled={sender.sending}
-                onPress={() => addImages(false)}
-                style={styles.attachButton}
-              />
-              {/* PC では写真を撮らない（2026-10-28 ユーザーの指示） */}
-              {Platform.OS !== 'web' && (
+              {Platform.OS === 'web' ? (
+                // Web 版は選ぶだけ（コピーした画像は Cmd+V で貼る。PC では写真を撮らない: 2026-10-28 ユーザーの指示）
                 <IconButton
-                  icon="camera"
-                  accessibilityLabel="写真を撮って添える"
+                  icon="image-plus"
+                  accessibilityLabel="画像を添える"
                   disabled={sender.sending}
-                  onPress={() => addImages(true)}
+                  onPress={() => addImages(false)}
                   style={styles.attachButton}
                 />
+              ) : (
+                <Menu
+                  visible={imageMenu}
+                  onDismiss={() => setImageMenu(false)}
+                  anchor={
+                    <IconButton
+                      icon="image-plus"
+                      accessibilityLabel="画像を添える"
+                      disabled={sender.sending}
+                      onPress={() => setImageMenu(true)}
+                      style={styles.attachButton}
+                    />
+                  }
+                >
+                  <Menu.Item
+                    leadingIcon="image-multiple"
+                    title="画像を選ぶ"
+                    onPress={() => {
+                      setImageMenu(false);
+                      addImages(false);
+                    }}
+                  />
+                  <Menu.Item
+                    leadingIcon="camera"
+                    title="写真を撮る"
+                    onPress={() => {
+                      setImageMenu(false);
+                      addImages(true);
+                    }}
+                  />
+                  <Menu.Item
+                    leadingIcon="content-paste"
+                    title="コピーした画像を貼る"
+                    onPress={() => {
+                      setImageMenu(false);
+                      pasteImage();
+                    }}
+                  />
+                </Menu>
               )}
               <TextInput
                 mode="outlined"
