@@ -19,6 +19,74 @@ const ACTIVE_TIMEOUT_MS = 3000;
 const RETRY_MS = [500, 1500];
 /** 前に開いたカメラが片付く（閉じた結果が戻る）のを待つ上限 */
 const PREVIOUS_TIMEOUT_MS = 1500;
+/** カメラを開く操作をしてから、カメラが前に出る（この画面が裏に回る）のを待つ上限 */
+const CAMERA_OPEN_TIMEOUT_MS = 5000;
+/** カメラの許可を求めて返ってくるのを待つ上限 */
+const PERMISSION_TIMEOUT_MS = 8000;
+
+class CameraNotOpened extends Error {}
+
+/** 決まった時間で返ってこなければ失敗にする */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new CameraNotOpened(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+/**
+ * カメラの許可。もう許可されていれば求め直さない（2026-11-24 エミュレーターで確かめた: 前の画面が閉じたあとに
+ * 新しくできた画面で許可を求めると返ってこず、カメラが開かないまま透けた背景だけが残っていた）
+ */
+async function cameraAllowed(): Promise<boolean> {
+  const current = await ImagePicker.getCameraPermissionsAsync().catch(() => null);
+  if (current?.granted) return true;
+  const requested = await withTimeout(
+    ImagePicker.requestCameraPermissionsAsync(),
+    PERMISSION_TIMEOUT_MS,
+    'カメラの許可の確認が終わりませんでした',
+  );
+  return requested.granted;
+}
+
+/**
+ * カメラを1回開く。開く操作をしても、カメラが前に出ない（この画面が裏に回らない）まま CAMERA_OPEN_TIMEOUT_MS たったら、
+ * 開けなかったとして知らせる（返ってこないまま待ち続けて、透けた背景だけが残らないように）
+ */
+function launchOnce(): Promise<ImagePicker.ImagePickerResult> {
+  return new Promise((resolve, reject) => {
+    let opened = false;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') opened = true;
+    });
+    const timer = setTimeout(() => {
+      if (opened) return;
+      subscription.remove();
+      reject(new CameraNotOpened('カメラが開きませんでした'));
+    }, CAMERA_OPEN_TIMEOUT_MS);
+    ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 }).then(
+      (result) => {
+        clearTimeout(timer);
+        subscription.remove();
+        resolve(result);
+      },
+      (e) => {
+        clearTimeout(timer);
+        subscription.remove();
+        reject(e);
+      },
+    );
+  });
+}
 
 /** 画面が前面に出る（AppState が active になる）まで待つ。出なくても ACTIVE_TIMEOUT_MS で進む */
 function waitUntilActive(): Promise<void> {
@@ -44,9 +112,10 @@ async function launchCamera(): Promise<ImagePicker.ImagePickerResult> {
   await waitUntilActive();
   for (const wait of [...RETRY_MS, null]) {
     try {
-      return await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+      return await launchOnce();
     } catch (e) {
-      if (wait === null) throw e;
+      // 開く操作はできたのにカメラが出なかったときは、もう一度開くとカメラが2つ出ることがあるので、やり直さない
+      if (wait === null || e instanceof CameraNotOpened) throw e;
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
@@ -88,8 +157,13 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
     (async () => {
       // 許可の確認も画面に結び付いているので、前面に出てから
       await waitUntilActive();
-      const permission = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
-      if (!permission?.granted) return finish('カメラを使う許可がありません');
+      let allowed: boolean;
+      try {
+        allowed = await cameraAllowed();
+      } catch (e) {
+        return finish(`${e instanceof Error ? e.message : String(e)}。もう一度ウィジェットを押してください`);
+      }
+      if (!allowed) return finish('カメラを使う許可がありません');
       setPhase({ kind: 'camera' });
       let shot: ImagePicker.ImagePickerResult;
       try {
