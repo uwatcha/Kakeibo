@@ -27,6 +27,9 @@ export type ImportDraft = {
   source: PhotoSource;
   /** 書かれていた支払い方法（例: 「現金」「◯◯カード」「Suica」）。なければ null */
   payment: string | null;
+  /** 書かれていた出金元・入金先の名前（AI に渡す口座の名前は置き換えてあるので、端末で本当の名前と照らし合わせる） */
+  fromName?: string | null;
+  toName?: string | null;
   /** 口座をどう決めたか（確認の一覧に出す） */
   note: string | null;
   /** 重なっていそうな、すでにある記録（markDuplicates で入れる） */
@@ -59,7 +62,7 @@ export function extractPrompt(
     'あなたは家計簿の入力係です。添付の写真（レシート・明細・値段の表示など）やファイル（CSV・JSON・テキスト）から、お金の記録を読み取ってください。',
     `今日は ${today} です。年が書かれていない日付は、今日より後にならない一番近い年にしてください。`,
     '次の形の JSON の配列だけを返してください。読み取れる記録がなければ空の配列 [] を返す。',
-    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull","items":[{"name":"品名","amount":整数の円,"category":"カテゴリかnull"}]}]',
+    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull","from_name":"書かれている出金元の名前かnull","to_name":"書かれている入金先の名前かnull","items":[{"name":"品名","amount":整数の円,"category":"カテゴリかnull"}]}]',
     '- expense は支払い（from が払った口座）、income は収入（to が入った口座）、transfer は自分の口座どうしの移動（from と to）',
     '- レシート1枚は合計額（実際に払った額）で1件にする。明細やCSVは1行1件',
     '- レシートに品目が2つ以上書かれていれば、items に品目ごとの内訳を入れる: [{"name":"品名","amount":税込の整数の円,"category":"下の一覧の名前かnull"}]。品目1つずつ、下の「カテゴリの判断基準」に沿って品名からカテゴリを決める（同じレシートでも品目ごとに違ってよい。店の種類やレシート全体で決めない）。品目ごとの割引（「20円引」など）はその品目の金額から引く。合計にかかる割引・ポイント値引き・消費税の端数のずれは items に入れない（合計との差は家計簿の側で「割引・調整」にする）。品目が1つ・読めないなら items は省く',
@@ -68,6 +71,7 @@ export function extractPrompt(
     '- 品名の頭や後ろの印（「*」「※」「軽」など）は取り、略した品名は分かる範囲で読みやすくする（例: 「昔ながらのコロッケ（肉」→「昔ながらのコロッケ（肉）」）',
     '- 返金・キャンセルなど符号がマイナスの行は、記録にしない',
     '- 口座が分からなければ null',
+    '- from_name・to_name: 画像や文に書かれている、お金が出た口座・入った口座やサービスの名前をそのまま（例: 銀行名、電子マネー・ポイントの名前、証券口座、「NISA」）。チャージ・入金・振込の明細なら、明細の口座が出金元、チャージ先・振込先が入金先。下の「口座」の一覧の名前は置き換えた名前なので、ここには書かれている名前を入れる。どちらか分からないとき・候補が2つ以上あるときは null（「AまたはB」のようにしない）',
     '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
     '- payment: レシートや画面に書かれている支払い方法をそのまま（例: 「現金」「クレジット」「◯◯カード」「交通系IC Suica」「PayPay」）。現金のレシートでお預り・お釣りが書かれていれば「現金」。書かれていなければ null',
     '- 自販機などの値段の表示は、買った商品の値段を金額にし、内容は「自販機（商品名）」のようにする。日付は写真から分からなければ今日',
@@ -141,6 +145,8 @@ export function toDrafts(
       duplicate: false,
       source: r.source === 'receipt' || r.source === 'screen' || r.source === 'price' ? r.source : 'other',
       payment: typeof r.payment === 'string' && r.payment.trim() !== '' ? r.payment.trim().slice(0, 50) : null,
+      fromName: typeof r.from_name === 'string' && r.from_name.trim() !== '' ? r.from_name.trim().slice(0, 50) : null,
+      toName: typeof r.to_name === 'string' && r.to_name.trim() !== '' ? r.to_name.trim().slice(0, 50) : null,
       note: null,
     });
   });
@@ -196,6 +202,26 @@ export function assignPaymentAccounts(
       return { ...d, fromAccountId: cashAccountId, note: '現金と判断' };
     }
     return d;
+  });
+}
+
+/**
+ * 振替・収入の口座を決める（AI が選べなかった側。2026-11-24: チャージの明細で口座を手で選ぶことになった）:
+ * 書かれた出金元・入金先の名前を口座の名前と照らし合わせる（matchNamed）。振替の入金先は内容（「◯◯（チャージ）」）からも探す
+ */
+export function assignNamedAccounts(
+  drafts: readonly ImportDraft[],
+  matchNamed: (text: string | null | undefined) => string | null,
+): ImportDraft[] {
+  return drafts.map((d) => {
+    let { fromAccountId, toAccountId } = d;
+    if (d.type !== 'income' && !fromAccountId) fromAccountId = matchNamed(d.fromName);
+    if (d.type !== 'expense' && !toAccountId) {
+      toAccountId = matchNamed(d.toName) ?? (d.type === 'transfer' ? matchNamed(d.payee) : null);
+    }
+    // 振替で同じ口座どうしになったら、入金先は決めない
+    if (d.type === 'transfer' && fromAccountId && fromAccountId === toAccountId) toAccountId = d.toAccountId;
+    return fromAccountId === d.fromAccountId && toAccountId === d.toAccountId ? d : { ...d, fromAccountId, toAccountId };
   });
 }
 

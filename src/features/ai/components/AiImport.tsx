@@ -13,6 +13,7 @@ import { SPACING } from '@/theme';
 import type { Aliases } from '../anonymize';
 import { AiError, extractRecords } from '../api';
 import {
+  assignNamedAccounts,
   assignPaymentAccounts,
   draftToRow,
   extractPrompt,
@@ -23,7 +24,7 @@ import {
   toDrafts,
 } from '../extract';
 import { clearImportJob, type ImportJob, loadImportJob, saveImportJob } from '../importJob';
-import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '../payment';
+import { defaultCashAccount, matchNamedAccount, matchPaymentAccount, matchStoreAccount } from '../payment';
 import { useAttachments } from '../useAttachments';
 import { ImportReview } from './ImportReview';
 
@@ -57,7 +58,12 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
     setReading(true);
     files.setError(null);
     try {
-      const accountLikes = accounts.map((a) => ({ id: a.id, kind: a.kind, isArchived: a.is_archived, isReserved: a.is_reserved }));
+      const accountLikes = accounts.map((a) => ({
+        id: a.id,
+        kind: a.kind,
+        isArchived: a.is_archived,
+        isReserved: a.is_reserved,
+      }));
       const { records } = await extractRecords(
         extractPrompt(job.today, accountLikes, categories, aliases, emailSettings.data?.summary_rules ?? null),
         job.texts,
@@ -74,11 +80,15 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
       const existing = await fetchDateAmountsBetween(addDays(dates[0], -1), addDays(dates[dates.length - 1], 1));
       // 支払いの口座: 書かれた支払い方法から決め、分からないセルフレジの画面・自販機は現金とみなす
       const cash = defaultCashAccount(accounts);
-      const marked = assignPaymentAccounts(
-        markDuplicates(found, existing),
-        (payment) => matchPaymentAccount(payment, accounts),
-        cash,
-        (payee) => matchStoreAccount(payee, accounts),
+      const marked = assignNamedAccounts(
+        assignPaymentAccounts(
+          markDuplicates(found, existing),
+          (payment) => matchPaymentAccount(payment, accounts),
+          cash,
+          (payee) => matchStoreAccount(payee, accounts),
+        ),
+        // 振替・収入の口座: 書かれた出金元・入金先の名前から
+        (name) => matchNamedAccount(name, accounts),
       );
       const picked = marked.filter((d) => !d.duplicate).map((d) => d.key);
       saveImportJob({ ...job, drafts: marked, selected: picked });
@@ -96,10 +106,7 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
   const read = () => {
     const job: ImportJob = {
       today,
-      texts: [
-        ...files.attachments.flatMap((a) => (a.kind === 'text' ? [`# ${a.name}\n${a.text}`] : [])),
-        text.trim(),
-      ]
+      texts: [...files.attachments.flatMap((a) => (a.kind === 'text' ? [`# ${a.name}\n${a.text}`] : [])), text.trim()]
         .filter(Boolean)
         .join('\n\n'),
       binaries: files.attachments.flatMap((a) => (a.kind === 'file' ? [{ mimeType: a.mimeType, data: a.data }] : [])),
@@ -205,6 +212,9 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
             drafts={drafts}
             selected={selected}
             onToggle={toggle}
+            onChangeDraft={(key, patch) =>
+              setDrafts((list) => list?.map((d) => (d.key === key ? { ...d, ...patch } : d)) ?? list)
+            }
             fallback={fallback}
             onFallbackChange={setFallback}
             accounts={accounts}

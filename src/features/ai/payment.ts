@@ -31,7 +31,8 @@ const normalize = (s: string) =>
     .replace(/[\s・\-ー]/g, '');
 
 /** 自動入力で使ってよい口座: 非表示と「普段使わない口座」（is_reserved）は使わない（2026-10-28 改善要望） */
-const forAuto = <T extends AccountLike>(accounts: readonly T[]) => accounts.filter((a) => !a.is_archived && !a.is_reserved);
+const forAuto = <T extends AccountLike>(accounts: readonly T[]) =>
+  accounts.filter((a) => !a.is_archived && !a.is_reserved);
 
 /** 支払い方法が分からないときに使う現金の口座（普段使わないものは除く） */
 export function defaultCashAccount(accounts: readonly AccountLike[]): string | null {
@@ -61,6 +62,22 @@ export function matchStoreAccount(payee: string | null, accounts: readonly Accou
  * 口座の名前が書かれていればその口座、現金なら現金の口座、電子マネーの名前ならその名前の口座、
  * クレジットとだけ書かれていてクレカの口座が1つならそれ。決められなければ null（AI には口座の名前を渡さず、ここで照らし合わせる）
  */
+/**
+ * 書かれた名前に、口座の名前がそのまま入っていればその口座（普段使わない口座でも。名前が書かれているので）。
+ * 違う口座の名前が2つ以上入っていれば（「AまたはB」など）決めない。短い名前が長い名前の一部なら長いほう
+ */
+export function matchNamedAccount(text: string | null | undefined, accounts: readonly AccountLike[]): string | null {
+  if (!text?.trim()) return null;
+  const normalized = normalize(text);
+  const hits = accounts
+    .filter((a) => !a.is_archived && normalize(a.name).length >= 2 && normalized.includes(normalize(a.name)))
+    .sort((a, b) => b.name.length - a.name.length);
+  const distinct = hits.filter(
+    (a, i) => !hits.slice(0, i).some((longer) => normalize(longer.name).includes(normalize(a.name))),
+  );
+  return distinct.length === 1 ? distinct[0].id : null;
+}
+
 export function matchPaymentAccount(payment: string | null, accounts: readonly AccountLike[]): string | null {
   if (!payment?.trim()) return null;
   const text = normalize(payment);
