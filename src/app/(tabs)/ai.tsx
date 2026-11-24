@@ -257,16 +257,27 @@ export default function AiChatScreen() {
       <Tabs.Screen options={{ headerRight }} />
       {conversations.data && <AutoTitler conversations={conversations.data} aliases={aliases} />}
       {modeBar}
-      {mode === 'import' ? (
-        <AiImport
-          today={today}
-          accounts={accounts.data ?? []}
-          categories={categories.data!}
-          aliases={aliases}
-          balances={balanceMap}
-        />
-      ) : (
-        <>
+      <View style={styles.container}>
+        {/* 相談・入力は両方とも置いたままにして、使っていないほうを隠す（切り替えても入力の途中・スクロールの位置が
+            消えないように。2026-11-24 改善要望。外すと作り直しになる） */}
+        <View
+          style={[styles.container, mode !== 'import' && styles.hidden]}
+          pointerEvents={mode === 'import' ? 'auto' : 'none'}
+          aria-hidden={mode !== 'import'}
+        >
+          <AiImport
+            today={today}
+            accounts={accounts.data ?? []}
+            categories={categories.data!}
+            aliases={aliases}
+            balances={balanceMap}
+          />
+        </View>
+        <View
+          style={[styles.container, mode !== 'chat' && styles.hidden]}
+          pointerEvents={mode === 'chat' ? 'auto' : 'none'}
+          aria-hidden={mode !== 'chat'}
+        >
           <View style={[styles.titleBar, { borderBottomColor: theme.colors.outlineVariant }]}>
             <Text variant="titleSmall" numberOfLines={1} style={styles.title}>
               {(conversationId && conversation.data?.conversation.title) || '新しいチャット'}
@@ -354,14 +365,16 @@ export default function AiChatScreen() {
               />
             </View>
           </KeyboardAvoidingView>
-        </>
-      )}
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // 隠しているほう（置いたまま、見えない・押せないようにする）
+  hidden: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0, zIndex: -1 },
   mode: { marginHorizontal: SPACING.screen, marginTop: 8 },
   titleBar: {
     height: TITLE_BAR_HEIGHT,
