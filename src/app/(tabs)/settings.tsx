@@ -132,6 +132,8 @@ export default function SettingsScreen() {
           {navItem('メールからの記録', 'email-sync-outline', '/email-import')}
           {/* 端末の写真を見る機能なので、Web 版（PC）では出さない */}
           {Platform.OS !== 'web' && navItem('写真からの記録', 'image-search-outline', '/photo-import')}
+          {/* 通知は端末で出すので、Web 版（PC）では出さない */}
+          {Platform.OS !== 'web' && navItem('確認の通知', 'bell-ring-outline', '/reminders')}
         </SectionCard>
         <SectionCard title="データ">
           {exportItem('csv', '記録を CSV で書き出す', 'file-delimited')}

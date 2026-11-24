@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 
 import { useAuth } from '@/features/auth/AuthProvider';
 import { moveWaitingPhotos } from '@/features/photoImport/album';
+import { scheduleReminders } from '@/features/reminders/reminders';
 
 import { ensureBackgroundTask, handleNotificationAction, runBackgroundJobs } from './backgroundTask';
 
@@ -27,6 +28,8 @@ export function BackgroundRunner() {
         .then(() => moveWaitingPhotos())
         .catch(() => undefined);
     ensureBackgroundTask();
+    // 確認の通知は先の数回だけ予約してあるので、開くたびに予約し直す
+    scheduleReminders();
     run();
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') run();
@@ -54,6 +57,10 @@ export function BackgroundRunner() {
       router.push({ pathname: '/unconfirmed', params: { tab: data.tab } });
     } else if (data.screen === 'ai-settings') {
       router.push('/ai-settings');
+    } else if (data.screen === 'home') {
+      router.navigate('/');
+    } else if (data.screen === 'accounts') {
+      router.push('/accounts');
     }
     Notifications.clearLastNotificationResponse();
   }, [session, response, queryClient]);
