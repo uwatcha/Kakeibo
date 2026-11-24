@@ -16,6 +16,20 @@ export type UnnotifiedImport = {
 /** クレジットカードの速報（店名なし）で入れた記録の、通知での呼び名 */
 const UNNAMED: Record<string, string> = { card_quick: MAIL_NAMES.card, photo: '写真の記録' };
 
+/**
+ * 内容（店名・名目）が分からなかった記録の通知（2026-11-24 改善要望。海外での利用など、メールに店名がないことがある）。
+ * クレジットカードの速報は店名がないのが当たり前で、あとから届く詳細で入るので、ここには来ない
+ */
+function unnamedNotification(i: UnnotifiedImport, what: string, transactionId: string) {
+  const source = i.kind === 'photo' ? '写真' : 'メール';
+  const raw = i.raw_payee?.trim();
+  return {
+    title: i.transaction?.type === 'income' ? '内容が分からない収入を記録しました' : '内容が分からない支払いを記録しました',
+    body: `${what}。${source}から店名・名目を読み取れませんでした${raw ? `（${source}の名目: ${raw}）` : ''}。押して内容を入れてください`,
+    data: { transactionId },
+  };
+}
+
 const BILL_NAMES: Record<string, string> = { electricity_bill: '電気代', gas_bill: 'ガス代' };
 
 /**
@@ -57,14 +71,19 @@ export function importNotification(
   switch (i.status) {
     case 'recorded':
       if (!i.transaction_id) return null;
+      if (i.transaction?.needs_payee && i.kind !== 'card_quick') return unnamedNotification(i, what, i.transaction_id);
       return {
         title: i.transaction?.type === 'income' ? '収入を記録しました' : '支払いを記録しました',
-        body: i.transaction?.needs_payee ? `${what}（内容を入れてください）` : what,
+        body: what,
         data: { transactionId: i.transaction_id },
         // 通知の「確認」ボタンで、アプリを開かずに確認済みにできる（内容が分からないものは開いて入れてもらう）
         confirmable: !i.transaction?.needs_payee,
       };
     case 'merged':
+      // デビットカード・クレジットカードの詳細のメールで店名を入れようとして、分からなかったとき
+      if (i.transaction_id && i.transaction?.needs_payee && (i.kind === 'debit_mail' || i.kind === 'card_detail')) {
+        return unnamedNotification(i, what, i.transaction_id);
+      }
       // 写真の内容を、メールで先に入った記録にまとめたとき（メールどうしをまとめたときは通知しない）
       return i.kind === 'photo' && i.transaction_id
         ? { title: 'レシートの内容を記録に入れました', body: what, data: { transactionId: i.transaction_id } }

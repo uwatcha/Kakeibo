@@ -528,7 +528,14 @@ export class Importer {
             return;
           }
           if (await duplicate('from_account_id', true)) return;
-          await this.insert(row, { type: 'expense', from_account_id: account, payee: MAIL_DEBIT_NAME });
+          // 銀行のメールには店名がない（デビットカードのメールが届いていない）ので、内容の入力に出して通知する
+          await this.insert(row, {
+            type: 'expense',
+            from_account_id: account,
+            payee: MAIL_DEBIT_NAME,
+            raw_payee: row.raw_payee,
+            needs_payee: true,
+          });
           return;
         }
         // ATM の引き出しは、銀行 → 現金の振替

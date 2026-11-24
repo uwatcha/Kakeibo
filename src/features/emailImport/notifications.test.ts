@@ -47,12 +47,48 @@ describe('importNotification', () => {
       transaction: { payee: null, amount: 2400, type: 'expense', needs_payee: false },
     });
     expect(quick?.body).toBe(`${MAIL_NAMES.card} 2,400円`);
+  });
+
+  it('店名・名目が分からなかったら、そう知らせて押すと記録を開く（2026-11-24）', () => {
     const unknown = importNotification({
       ...base,
+      raw_payee: 'ご利用分(海外利用分)',
       status: 'recorded',
-      transaction: { payee: 'ナゾノミセ', amount: 580, type: 'expense', needs_payee: true },
+      transaction: { payee: 'デビット', amount: 580, type: 'expense', needs_payee: true },
     });
-    expect(unknown?.body).toBe('ナゾノミセ 580円（内容を入れてください）');
+    expect(unknown).toEqual({
+      title: '内容が分からない支払いを記録しました',
+      body: 'デビット 580円。メールから店名・名目を読み取れませんでした（メールの名目: ご利用分(海外利用分)）。押して内容を入れてください',
+      data: { transactionId: 't' },
+    });
+    // 写真から店名が読めなかったとき
+    const photo = importNotification({
+      ...base,
+      kind: 'photo',
+      raw_payee: null,
+      status: 'recorded',
+      transaction: { payee: null, amount: 580, type: 'expense', needs_payee: true },
+    });
+    expect(photo?.body).toBe('写真の記録 580円。写真から店名・名目を読み取れませんでした。押して内容を入れてください');
+    // 詳細のメールで店名を入れようとして分からなかったとき
+    const detail = importNotification({
+      ...base,
+      kind: 'card_detail',
+      status: 'merged',
+      transaction: { payee: null, amount: 580, type: 'expense', needs_payee: true },
+    });
+    expect(detail?.title).toBe('内容が分からない支払いを記録しました');
+  });
+
+  it('クレジットカードの速報は、店名がなくても「分からない」とは知らせない', () => {
+    const quick = importNotification({
+      ...base,
+      kind: 'card_quick',
+      raw_payee: null,
+      status: 'recorded',
+      transaction: { payee: null, amount: 2400, type: 'expense', needs_payee: true },
+    });
+    expect(quick?.title).toBe('支払いを記録しました');
   });
 
   it('重複は確認の画面のタブを開き、同じ利用として重ねたものは通知しない', () => {

@@ -146,7 +146,12 @@ export async function recordPhoto(
       // メールの記録に、写真の店名・カテゴリ・内訳を入れる（口座・金額・日付はメールのまま）
       const { error } = await supabase
         .from('transactions')
-        .update({ payee: draft.payee, category_id: draft.categoryId, needs_payee: false })
+        // 写真から店名が読めなかったときは、メールの内容を残す
+        .update(
+          draft.payee?.trim()
+            ? { payee: draft.payee, category_id: draft.categoryId, needs_payee: false }
+            : { category_id: draft.categoryId },
+        )
         .eq('id', target);
       if (error) throw error;
       if (draft.items?.length) await saveTransactionItems(target, draft.items);
@@ -163,6 +168,8 @@ export async function recordPhoto(
           payee: draft.payee,
           category_id: draft.categoryId,
           from_account_id: draft.fromAccountId,
+          // 店名が読めなかったら「内容の入力」に出し、通知で知らせる（2026-11-24 改善要望）
+          needs_payee: !draft.payee?.trim(),
           auto_source: 'photo',
           auto_reviewed: false,
           is_confirmed: isConfirmedOnSave(draft.date, today),
