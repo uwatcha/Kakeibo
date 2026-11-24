@@ -59,6 +59,8 @@ export function BackgroundRunner() {
       router.push('/ai-settings');
     } else if (data.screen === 'home') {
       router.navigate('/');
+    } else if (data.screen === 'account' && typeof data.accountId === 'string') {
+      router.push({ pathname: '/accounts/[id]', params: { id: data.accountId } });
     } else if (data.screen === 'accounts') {
       router.push('/accounts');
     }

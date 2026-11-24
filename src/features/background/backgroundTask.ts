@@ -1,8 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 
+import { fetchAccountBalances } from '@/features/accounts/api';
+import { negativeToNotify, type NotifiedNegatives } from '@/features/accounts/negativeBalance';
 import { loadPending, trySend } from '@/features/ai/pendingSend';
 import { fetchEmailImportSettings, fetchUnnotified, markNotified, markReviewed } from '@/features/emailImport/api';
 import { importNotification } from '@/features/emailImport/notifications';
@@ -124,6 +127,30 @@ async function usesPhotoImport(): Promise<boolean> {
 }
 
 /** 今やることを全部やる（アプリを開いたときにも呼ぶ）。どの仕事もなければ定期の実行をやめる */
+const NEGATIVE_KEY = 'kakeibo:negativeNotified';
+
+/**
+ * マイナスにならないはずの口座（現金・銀行など）の残高がマイナスになったら、残高のズレを直すよう知らせる
+ * （2026-11-24 改善要望）。押すとその口座の編集画面（残高を書き換えると差額を残高調整として記録する）
+ */
+export async function notifyNegativeBalances(): Promise<void> {
+  let notified: NotifiedNegatives = {};
+  try {
+    notified = JSON.parse((await AsyncStorage.getItem(NEGATIVE_KEY)) ?? '{}') as NotifiedNegatives;
+  } catch {
+    // 読めなければ、もう一度知らせる
+  }
+  const { notify: targets, next } = negativeToNotify(await fetchAccountBalances(), notified);
+  for (const a of targets) {
+    await notify(
+      `${a.name}の残高がマイナスです`,
+      `${a.name}の残高が −${(-a.balance).toLocaleString('ja-JP')}円 になっています。記録の入れ忘れ・入れ間違いを確かめるか、押して今の残高に直してください`,
+      { screen: 'account', accountId: a.id },
+    );
+  }
+  await AsyncStorage.setItem(NEGATIVE_KEY, JSON.stringify(next));
+}
+
 export async function runBackgroundJobs(): Promise<void> {
   await processPendingSends().catch(() => undefined);
   const photo = await usesPhotoImport();
@@ -133,6 +160,8 @@ export async function runBackgroundJobs(): Promise<void> {
   if (queued) await notifyPhotoOutcomes(await processPhotoQueue().catch(() => []));
   const email = await usesEmailImport();
   if (email || photo || queued) await notifyEmailImports().catch(() => undefined);
+  // 記録が入ったあとの残高で確かめる
+  await notifyNegativeBalances().catch(() => undefined);
   if (!email && !photo && (await loadPhotoQueue()).length === 0 && (await loadPending()).length === 0) {
     await stopBackgroundTask();
   }

@@ -1,16 +1,17 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { Button, IconButton, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { AddFab } from '@/components/AddFab';
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
 import { QueriesState } from '@/components/QueryState';
 import { SectionCard } from '@/components/SectionCard';
-import { ACCOUNT_KIND_INFO, isLiability } from '@/features/accounts/accountKinds';
+import { ACCOUNT_KIND_INFO, isLiability, PERSON_KINDS } from '@/features/accounts/accountKinds';
 import { cardStatements } from '@/features/accounts/cardStatements';
 import { useAccountBalance, useAccounts, useCardSettings } from '@/features/accounts/hooks';
+import { settleTransfer } from '@/features/accounts/settle';
 import { useCategories } from '@/features/categories/hooks';
 import { TransactionDayList } from '@/features/transactions/components/TransactionDayList';
 import { useAccountTransactions } from '@/features/transactions/hooks';
@@ -59,6 +60,12 @@ export default function AccountHistoryScreen() {
         )
       : null;
 
+  // 貸し借りの相手の残高を 0 にする振替（相手と、その相手との記録でよく使う口座を入れて記録の画面を開く）
+  const settle =
+    PERSON_KINDS.includes(account.kind) && !account.is_archived
+      ? settleTransfer(id, balance.data, transactions.data, accounts.data!)
+      : null;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Stack.Screen options={{ title: account.name, headerRight }} />
@@ -73,6 +80,22 @@ export default function AccountHistoryScreen() {
           variant="headlineMedium"
           style={styles.balance}
         />
+        {settle && (
+          <Button
+            mode="contained-tonal"
+            icon="scale-balance"
+            compact
+            style={styles.settle}
+            onPress={() =>
+              router.push({
+                pathname: '/transaction/[id]',
+                params: { id: 'new', transferFrom: settle.from, transferTo: settle.to, amount: String(settle.amount) },
+              })
+            }
+          >
+            0円にする
+          </Button>
+        )}
         {account.memo && (
           <Text variant="bodyMedium" style={[styles.memo, { color: theme.colors.onSurfaceVariant }]}>
             {account.memo}
@@ -152,6 +175,7 @@ const styles = StyleSheet.create({
   number: { fontVariant: ['tabular-nums'] },
   balance: { fontWeight: '800', marginTop: 2 },
   memo: { marginTop: 6 },
+  settle: { alignSelf: 'flex-start', marginTop: 8 },
   segment: { marginHorizontal: SPACING.screen, marginTop: SPACING.gap, borderRadius: RADIUS.tile },
   statements: { padding: SPACING.screen, paddingBottom: 96 },
 });

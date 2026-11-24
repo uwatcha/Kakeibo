@@ -6,6 +6,7 @@ export const NOTIFICATION_CHANNEL = 'ai-replies';
 export async function processPendingSends(): Promise<void> {}
 export async function notifyEmailImports(): Promise<void> {}
 export async function processQuickPhotos(): Promise<void> {}
+export async function notifyNegativeBalances(): Promise<void> {}
 export async function runBackgroundJobs(): Promise<void> {}
 export async function prepareNotifications(): Promise<void> {}
 export async function startBackgroundTask(): Promise<void> {}
