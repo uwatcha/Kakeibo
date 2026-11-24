@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { startBackgroundTask } from '@/features/background/backgroundTask';
 
 import { type Aliases, restoreText } from './anonymize';
-import { AiError, appendExchange, createConversation, fetchConversation, sendAiChat } from './api';
+import { AiError, appendExchange, createConversation, fetchConversation, type Question, sendAiChat } from './api';
+import { toAiMessages } from './chatHistory';
 import { aiKeys } from './hooks';
 import { addPending, takePending } from './pendingSend';
 import { titleFrom } from './retention';
@@ -21,6 +22,8 @@ export type ChatItem = {
   shown: string;
   /** AI に送る・AI から来た文（置き換え後の名前） */
   sent: string;
+  /** 質問に添えた画像（JPEG の base64） */
+  images?: string[] | null;
 };
 
 /** 送るときの材料。送るたびに今の記録から作り直す（名前は置き換え済み） */
@@ -29,7 +32,7 @@ export type ChatContext = { aliases: Aliases; system: string; model: string | nu
 type Options = {
   conversationId: string | undefined;
   /** 送れなかった質問を入力欄に戻す */
-  restoreInput: (text: string) => void;
+  restoreInput: (text: string, images?: string[]) => void;
   /** 送れたあと（今日の使用量を読み直すなど） */
   onSent: () => void;
 };
@@ -44,7 +47,7 @@ export function useChatSender({ conversationId, restoreInput, onSent }: Options)
   const [pending, setPending] = useState<ChatItem | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [retry, setRetry] = useState<{ count: number; text: string } | null>(null);
+  const [retry, setRetry] = useState<{ count: number; text: string; images?: string[] } | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 送り直し待ちとして端末に置いた質問の id
   const pendingId = useRef<string | null>(null);
@@ -65,13 +68,13 @@ export function useChatSender({ conversationId, restoreInput, onSent }: Options)
 
   const attempt = async (
     text: string,
-    question: { shown: string; sent: string },
+    question: Question,
     history: ChatItem[],
     context: () => ChatContext,
     tries: number,
   ) => {
     const { aliases, system, model } = context();
-    const messages = history.map((m) => ({ role: m.role, text: m.sent }));
+    const messages = toAiMessages(history);
     try {
       const reply = await sendAiChat(system, messages);
       // 送り直し待ちにしていた質問を、バックグラウンドですでに送っていたら保存しない（その会話を開き直す）
@@ -81,7 +84,7 @@ export function useChatSender({ conversationId, restoreInput, onSent }: Options)
         return;
       }
       // 質問と返事を保存する。初めての質問なら会話を作る
-      const id = conversationId ?? (await createConversation(titleFrom(text)));
+      const id = conversationId ?? (await createConversation(titleFrom(text || '画像について')));
       await appendExchange(
         id,
         question,
@@ -116,21 +119,29 @@ export function useChatSender({ conversationId, restoreInput, onSent }: Options)
         return;
       }
       if (temporary) {
-        setRetry({ count: tries + 1, text });
+        setRetry({ count: tries + 1, text, images: question.images });
         retryTimer.current = setTimeout(() => attempt(text, question, history, context, tries + 1), RETRY_INTERVAL_MS);
         return;
       }
       // AiError 以外は、返事のあとの会話の保存（DB）の失敗
-      setError(e instanceof AiError ? e.message : '返事を保存できませんでした。通信状態を確かめて、もう一度送ってください');
-      restoreInput(text);
+      setError(
+        e instanceof AiError ? e.message : '返事を保存できませんでした。通信状態を確かめて、もう一度送ってください',
+      );
+      restoreInput(text, question.images);
       finish();
     }
   };
 
-  /** 送る。stored はこの会話の保存済みのやりとり */
-  const send = (text: string, stored: readonly ChatItem[], context: () => ChatContext, maskedText: string) => {
-    if (text === '' || sending) return;
-    const question = { shown: text, sent: maskedText };
+  /** 送る。stored はこの会話の保存済みのやりとり。images は添えた画像（JPEG の base64） */
+  const send = (
+    text: string,
+    stored: readonly ChatItem[],
+    context: () => ChatContext,
+    maskedText: string,
+    images: string[] = [],
+  ) => {
+    if ((text === '' && images.length === 0) || sending) return;
+    const question: Question = { shown: text, sent: maskedText, ...(images.length > 0 && { images }) };
     const item: ChatItem = { id: 'pending', role: 'user', ...question };
     setPending(item);
     setError(null);
@@ -141,7 +152,7 @@ export function useChatSender({ conversationId, restoreInput, onSent }: Options)
   /** 画面での送り直しをやめ、質問を入力欄に戻す（端末の送り直し待ちからも外す） */
   const cancelRetry = () => {
     if (retryTimer.current) clearTimeout(retryTimer.current);
-    if (retry) restoreInput(retry.text);
+    if (retry) restoreInput(retry.text, retry.images);
     if (pendingId.current) takePending(pendingId.current);
     finish();
   };

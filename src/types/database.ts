@@ -130,6 +130,7 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: number
+          images: string[] | null
           role: string
           sent: string
           shown: string
@@ -139,6 +140,7 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: never
+          images?: string[] | null
           role: string
           sent: string
           shown: string
@@ -148,6 +150,7 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: never
+          images?: string[] | null
           role?: string
           sent?: string
           shown?: string

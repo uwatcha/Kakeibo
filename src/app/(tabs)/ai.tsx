@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
 import { router, Tabs, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Image, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Button, IconButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,8 +11,10 @@ import { QueriesState } from '@/components/QueryState';
 import { useAccountBalances, useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { buildAliases, maskText } from '@/features/ai/anonymize';
 import { buildChatSystem } from '@/features/ai/chatContext';
+import { MAX_IMAGES_PER_MESSAGE } from '@/features/ai/chatHistory';
 import { AiImport } from '@/features/ai/components/AiImport';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
+import { toJpegBase64 } from '@/features/ai/image';
 import { loadImportJob } from '@/features/ai/importJob';
 import { ChatMessages } from '@/features/ai/components/ChatMessages';
 import { TokenGauge } from '@/features/ai/components/TokenGauge';
@@ -75,6 +78,9 @@ export default function AiChatScreen() {
   const pendingSends = usePendingSends();
 
   const [input, setInput] = useState('');
+  // 質問に添える画像（横幅 1024px の JPEG の base64。2026-11-24 ユーザーの要望）
+  const [images, setImages] = useState<string[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
   // 相談（チャット）か、入力（写真・ファイルから記録を読み取る）か
   const [mode, setMode] = useState<'chat' | 'import'>('chat');
   // AI入力の途中で閉じていたら、入力を開いて続きを出す
@@ -82,7 +88,14 @@ export default function AiChatScreen() {
     loadImportJob().then((job) => job && setMode('import'));
   }, []);
   useRestoreConversation(conversationId, conversations.data);
-  const sender = useChatSender({ conversationId, restoreInput: setInput, onSent: () => usage.refetch() });
+  const sender = useChatSender({
+    conversationId,
+    restoreInput: (text, restored) => {
+      setInput(text);
+      setImages(restored ?? []);
+    },
+    onSent: () => usage.refetch(),
+  });
 
   const stored: ChatItem[] = conversationId ? (conversation.data?.messages ?? []) : [];
   const items = sender.pending ? [...stored, sender.pending] : stored;
@@ -178,9 +191,42 @@ export default function AiChatScreen() {
 
   const send = () => {
     const text = input.trim();
-    if (text === '' || sender.sending) return;
+    if ((text === '' && images.length === 0) || sender.sending) return;
     setInput('');
-    sender.send(text, stored, context, maskText(text, aliases));
+    setImages([]);
+    setImageError(null);
+    sender.send(text, stored, context, maskText(text, aliases), images);
+  };
+
+  /** 画像を選ぶ・撮る（Web 版は選ぶだけ） */
+  const addImages = async (camera: boolean) => {
+    setImageError(null);
+    try {
+      if (camera && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+        setImageError('カメラを使う許可がありません');
+        return;
+      }
+      const room = MAX_IMAGES_PER_MESSAGE - images.length;
+      if (room <= 0) {
+        setImageError(`1回に添えられる画像は${MAX_IMAGES_PER_MESSAGE}枚までです`);
+        return;
+      }
+      const result = camera
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.8,
+            allowsMultipleSelection: true,
+            selectionLimit: room,
+            orderedSelection: true,
+          });
+      if (result.canceled || !result.assets?.length) return;
+      const picked = await Promise.all(result.assets.slice(0, room).map((a) => toJpegBase64(a.uri, a.width)));
+      setImages((list) => [...list, ...picked].slice(0, MAX_IMAGES_PER_MESSAGE));
+      if (result.assets.length > room) setImageError(`1回に添えられる画像は${MAX_IMAGES_PER_MESSAGE}枚までです`);
+    } catch {
+      setImageError('画像を読み込めませんでした');
+    }
   };
 
   // Web 版は Cmd+Enter（Windows などは Ctrl+Enter）でも送る。日本語の変換中の Enter は送らない
@@ -245,7 +291,50 @@ export default function AiChatScreen() {
               }}
               error={sender.error}
             />
+            {(images.length > 0 || imageError) && (
+              <View style={{ backgroundColor: theme.colors.surface }}>
+                {images.length > 0 && (
+                  <ScrollView horizontal style={styles.attachBar} contentContainerStyle={styles.attachments}>
+                    {images.map((data, i) => (
+                      <View key={i}>
+                        <Image source={{ uri: `data:image/jpeg;base64,${data}` }} style={styles.attachment} />
+                        <IconButton
+                          icon="close"
+                          size={14}
+                          mode="contained"
+                          accessibilityLabel={`画像${i + 1}を外す`}
+                          onPress={() => setImages((list) => list.filter((_, j) => j !== i))}
+                          style={styles.removeImage}
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+                {imageError && (
+                  <Text variant="bodySmall" style={[styles.imageError, { color: theme.colors.error }]}>
+                    {imageError}
+                  </Text>
+                )}
+              </View>
+            )}
             <View style={[styles.inputBar, { backgroundColor: theme.colors.surface }]}>
+              <IconButton
+                icon="image-plus"
+                accessibilityLabel="画像を添える"
+                disabled={sender.sending}
+                onPress={() => addImages(false)}
+                style={styles.attachButton}
+              />
+              {/* PC では写真を撮らない（2026-10-28 ユーザーの指示） */}
+              {Platform.OS !== 'web' && (
+                <IconButton
+                  icon="camera"
+                  accessibilityLabel="写真を撮って添える"
+                  disabled={sender.sending}
+                  onPress={() => addImages(true)}
+                  style={styles.attachButton}
+                />
+              )}
               <TextInput
                 mode="outlined"
                 placeholder="家計について聞く"
@@ -260,7 +349,7 @@ export default function AiChatScreen() {
                 icon="send"
                 mode="contained"
                 accessibilityLabel="送る"
-                disabled={input.trim() === '' || sender.sending}
+                disabled={(input.trim() === '' && images.length === 0) || sender.sending}
                 onPress={send}
               />
             </View>
@@ -285,4 +374,11 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 8, gap: 4 },
   input: { flex: 1, maxHeight: 120 },
+  attachButton: { margin: 0 },
+  // 横にスクロールする欄は高さを中身に合わせて固定する（DESIGN.md）
+  attachBar: { flexGrow: 0, flexShrink: 0 },
+  attachments: { paddingHorizontal: 12, paddingTop: 8, gap: 8, alignItems: 'center' },
+  attachment: { width: 64, height: 64, borderRadius: 8 },
+  removeImage: { position: 'absolute', top: -6, right: -6, margin: 0 },
+  imageError: { paddingHorizontal: 16, paddingTop: 4 },
 });

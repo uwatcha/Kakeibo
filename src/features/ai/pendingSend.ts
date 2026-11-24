@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { restoreText } from './anonymize';
-import { AiError, type AiMessage, appendExchange, createConversation, sendAiChat } from './api';
+import { AiError, type AiMessage, appendExchange, createConversation, sendAiChat, type Question } from './api';
 import { titleFrom } from './retention';
 
 /**
@@ -12,7 +12,7 @@ export type PendingSend = {
   id: string;
   /** 続きを送る会話。新しいチャットなら null（送れたら会話を作る） */
   conversationId: string | null;
-  question: { shown: string; sent: string };
+  question: Question;
   system: string;
   messages: AiMessage[];
   /** 置き換え後 → 元の名前 */
@@ -63,7 +63,7 @@ export async function trySend(item: PendingSend, now: number): Promise<SendOutco
     // 画面の送り直しと同時に送れていたら、二重に保存しない
     if (!(await takePending(item.id))) return { kind: 'waiting' };
     const shown = restoreText(reply.text, { toReal: new Map(item.toReal) });
-    const id = item.conversationId ?? (await createConversation(titleFrom(item.question.shown)));
+    const id = item.conversationId ?? (await createConversation(titleFrom(item.question.shown || '画像について')));
     await appendExchange(id, item.question, { shown, sent: reply.text }, reply.usage.total);
     return {
       kind: 'sent',

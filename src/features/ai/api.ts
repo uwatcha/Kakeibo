@@ -14,7 +14,7 @@ export type AiStatus = {
   models: AiModel[];
 };
 export type AiProvider = 'gemini' | 'claude';
-export type AiMessage = { role: 'user' | 'model'; text: string };
+export type AiMessage = { role: 'user' | 'model'; text: string; files?: { mimeType: string; data: string }[] };
 export type AiReply = { text: string; usage: { prompt: number; output: number; total: number }; model: string };
 
 /** AI 相談の失敗。temporary は混み合い・通信の失敗など、少し待てば通るかもしれないもの */
@@ -32,12 +32,16 @@ const TEMPORARY_STATUSES = [500, 502, 503, 504];
 
 /** 関数が文を返せなかったとき（時間切れなど）の、HTTP の状態コードごとの文 */
 function statusMessage(status: number): AiError {
-  if (status === 401) return new AiError('ログインの期限が切れました。アプリを開き直すか、ログインし直してください', false);
+  if (status === 401)
+    return new AiError('ログインの期限が切れました。アプリを開き直すか、ログインし直してください', false);
   if (status === 504 || status === 546) {
     return new AiError('AI の返事を待つ時間の上限を過ぎました。質問を短くするか、分けて送ってください', false);
   }
   if (status === 413) return new AiError('送る内容が大きすぎます。添付を減らすか小さくしてください', false);
-  return new AiError(`サーバーで処理できませんでした（${status}）。少し待ってから送り直してください`, TEMPORARY_STATUSES.includes(status));
+  return new AiError(
+    `サーバーで処理できませんでした（${status}）。少し待ってから送り直してください`,
+    TEMPORARY_STATUSES.includes(status),
+  );
 }
 
 /** Edge Function ai-chat を呼ぶ。失敗したら、何が起きたか・どうすればよいかの文で投げる（文は関数の aiErrors.ts が作る） */
@@ -86,7 +90,15 @@ export type Conversation = {
   updated_at: string;
   title_generated_at: string | null;
 };
-export type StoredMessage = { id: number; role: 'user' | 'model'; shown: string; sent: string };
+export type StoredMessage = {
+  id: number;
+  role: 'user' | 'model';
+  shown: string;
+  sent: string;
+  images: string[] | null;
+};
+/** 質問（画像は横幅 1024px の JPEG の base64） */
+export type Question = { shown: string; sent: string; images?: string[] };
 
 /** 会話の一覧（ピン留めが先、そのあと新しい順）。先に、期限が過ぎたピン留めなしの会話を消す */
 export async function fetchConversations(cutoff: string): Promise<Conversation[]> {
@@ -110,7 +122,7 @@ export async function fetchConversation(
       .select('id, title, pinned, last_total_tokens, created_at, updated_at, title_generated_at')
       .eq('id', id)
       .single(),
-    supabase.from('ai_messages').select('id, role, shown, sent').eq('conversation_id', id).order('id'),
+    supabase.from('ai_messages').select('id, role, shown, sent, images').eq('conversation_id', id).order('id'),
   ]);
   if (c.error) throw c.error;
   if (m.error) throw m.error;
@@ -127,7 +139,7 @@ export async function createConversation(title: string): Promise<string> {
 /** 質問と返事を保存し、会話の最後のやりとりの時刻と使ったトークンを更新する */
 export async function appendExchange(
   conversationId: string,
-  question: { shown: string; sent: string },
+  question: Question,
   answer: { shown: string; sent: string },
   totalTokens: number,
 ): Promise<void> {
