@@ -11,6 +11,8 @@ const GROCERIES = '食料品';
 const READY_MEAL = '中食';
 const EATING_OUT = '外食';
 const SNACK = '間食';
+/** 学校・職場の食堂や購買の食事（2026-11-24 改善要望で足した小分類）。中食・外食と同じく、買った食事に数える */
+const CAFETERIA = '食堂・購買（食事）';
 
 export type MealStats = {
   /** 数えた日数（期間の初めから、今日か期間の終わりまで） */
@@ -85,7 +87,7 @@ export function computeMealStats(
       }
       mealTotal += piece.amount;
       if (kind === GROCERIES) groceries += piece.amount;
-      if (kind === READY_MEAL) ready = true;
+      if (kind === READY_MEAL || kind === CAFETERIA) ready = true;
       if (kind === EATING_OUT) eatOut += piece.amount;
     }
     if (ready) readyMeals += 1;
