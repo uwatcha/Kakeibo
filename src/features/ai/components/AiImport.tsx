@@ -17,7 +17,6 @@ import {
   assignPaymentAccounts,
   draftToRow,
   extractPrompt,
-  type FallbackAccounts,
   type ImportDraft,
   isDraftReady,
   markDuplicates,
@@ -36,6 +35,9 @@ type Props = {
   balances: ReadonlyMap<string, number> | undefined;
 };
 
+/** 口座は確認の画面で1件ずつ選ぶので、まとめて選ぶ口座は使わない */
+const NO_FALLBACK = { payFrom: null, payTo: null };
+
 /**
  * AI入力: レシート・明細の写真や CSV・JSON などのファイルから、AI が記録を読み取る。
  * 読み取った記録は一覧（ImportReview）で確かめてから保存する（同じ日・同じ金額の記録があれば重複として最初は外す）。
@@ -49,7 +51,6 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
   const [reading, setReading] = useState(false);
   const [drafts, setDrafts] = useState<ImportDraft[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [fallback, setFallback] = useState<FallbackAccounts>({ payFrom: null, payTo: null });
   const create = useCreateTransactions();
   const [saved, setSaved] = useState<number | null>(null);
 
@@ -134,19 +135,41 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const save = async () => {
-    const rows = (drafts ?? []).filter((d) => selected.has(d.key) && isDraftReady(d, fallback));
+  /** 保存した記録を一覧から外す。残りがなければ最初の画面に戻す */
+  const afterSave = (keys: readonly string[]) => {
+    setSaved(keys.length);
+    const rest = (drafts ?? []).filter((d) => !keys.includes(d.key));
+    if (rest.length > 0) {
+      setDrafts(rest);
+      return;
+    }
+    clearImportJob();
+    setDrafts(null);
+    files.clear();
+    setText('');
+  };
+
+  /** keys の記録を保存する（口座が決まっていないものは除く） */
+  const saveDrafts = async (keys: readonly string[]) => {
+    const rows = (drafts ?? []).filter((d) => keys.includes(d.key) && isDraftReady(d, NO_FALLBACK));
+    if (rows.length === 0) return;
     try {
-      await create.mutateAsync(rows.map((d) => draftToRow(d, fallback, today)));
-      setSaved(rows.length);
-      clearImportJob();
-      setDrafts(null);
-      files.clear();
-      setText('');
+      await create.mutateAsync(rows.map((d) => draftToRow(d, NO_FALLBACK, today)));
+      afterSave(rows.map((d) => d.key));
     } catch {
       // Snackbar で知らせる
     }
   };
+
+  // 一覧で直したもの・保存して減ったものも端末に置き直す（開き直したときに、保存した記録がまた出ないように）。
+  // 送った写真も同じファイルに入っていて大きいので、入力が止まってから書く
+  useEffect(() => {
+    if (!drafts) return;
+    const timer = setTimeout(() => {
+      loadImportJob().then((job) => job?.drafts && saveImportJob({ ...job, drafts, selected: [...selected] }));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [drafts, selected]);
 
   const toggle = (key: string) =>
     setSelected((current) => {
@@ -215,13 +238,12 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
             onChangeDraft={(key, patch) =>
               setDrafts((list) => list?.map((d) => (d.key === key ? { ...d, ...patch } : d)) ?? list)
             }
-            fallback={fallback}
-            onFallbackChange={setFallback}
             accounts={accounts}
             categories={categories}
             balances={balances}
             saving={create.isPending}
-            onSave={save}
+            onSave={() => saveDrafts([...selected])}
+            onSaveOne={(key) => saveDrafts([key])}
             onBack={() => {
               clearImportJob();
               setDrafts(null);

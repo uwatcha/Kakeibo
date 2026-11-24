@@ -32,6 +32,8 @@ export type ImportDraft = {
   toName?: string | null;
   /** 口座をどう決めたか（確認の一覧に出す） */
   note: string | null;
+  /** 確認の画面で入れたメモ */
+  memo?: string | null;
   /** 重なっていそうな、すでにある記録（markDuplicates で入れる） */
   duplicateOf?: string | null;
   /** レシートの品目の内訳（支払いで2品目以上のときだけ。調整の行は保存のときに合計との差で作る。2026-11-02） */
@@ -70,6 +72,7 @@ export function extractPrompt(
     '- レジ袋（有料のレジ袋代）は品目に入れない。国が有料にしたもので、買い物として買ったものではないので、合計との差として家計簿の側で「割引・調整」に入る（2026-11-02 ユーザーの指定）',
     '- 品名の頭や後ろの印（「*」「※」「軽」など）は取り、略した品名は分かる範囲で読みやすくする（例: 「昔ながらのコロッケ（肉」→「昔ながらのコロッケ（肉）」）',
     '- 返金・キャンセルなど符号がマイナスの行は、記録にしない',
+    '- 文や表に「内容」「摘要」などとして書かれていれば、payee はその文字をそのまま使う（言い換えたり、口座の名前を足したりしない）',
     '- 口座が分からなければ null',
     '- from_name・to_name: 画像や文に書かれている、お金が出た口座・入った口座やサービスの名前をそのまま（例: 銀行名、電子マネー・ポイントの名前、証券口座、「NISA」）。チャージ・入金・振込の明細なら、明細の口座が出金元、チャージ先・振込先が入金先。下の「口座」の一覧の名前は置き換えた名前なので、ここには書かれている名前を入れる。どちらか分からないとき・候補が2つ以上あるときは null（「AまたはB」のようにしない）',
     '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
@@ -250,6 +253,7 @@ export function draftToRow(d: ImportDraft, fallback: FallbackAccounts, today: st
     amount: d.amount,
     date: d.date,
     payee: d.payee,
+    memo: d.memo?.trim() || null,
     category_id: d.categoryId,
     from_account_id: fromAccountId,
     to_account_id: toAccountId,

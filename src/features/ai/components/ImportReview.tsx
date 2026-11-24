@@ -5,157 +5,130 @@ import { Button, Checkbox, Text, useTheme } from 'react-native-paper';
 import { Amount } from '@/components/Amount';
 import { ListRow } from '@/components/ListRow';
 import { SectionCard } from '@/components/SectionCard';
-import { ASSET_KINDS } from '@/features/accounts/accountKinds';
 import type { Account } from '@/features/accounts/api';
 import type { Category } from '@/features/categories/api';
 import { categoryLabel } from '@/features/categories/tree';
-import { AccountPicker } from '@/features/transactions/components/AccountPicker';
 import { amountKindOf, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay } from '@/lib/date';
 
 import { draftAccounts, type FallbackAccounts, type ImportDraft, isDraftReady } from '../extract';
+import { type DraftPatch, ImportDraftEditor } from './ImportDraftEditor';
+
+/** 口座はこの画面で1件ずつ選ぶので、一覧の上でまとめて選ぶ口座は使わない */
+const NO_FALLBACK: FallbackAccounts = { payFrom: null, payTo: null };
 
 type Props = {
   drafts: readonly ImportDraft[];
   selected: ReadonlySet<string>;
   onToggle: (key: string) => void;
-  /** 行の口座を選んだとき（口座が決まらなかった行を押して選ぶ） */
-  onChangeDraft: (key: string, patch: Pick<ImportDraft, 'fromAccountId' | 'toAccountId'>) => void;
-  fallback: FallbackAccounts;
-  onFallbackChange: (next: FallbackAccounts) => void;
+  onChangeDraft: (key: string, patch: DraftPatch) => void;
   accounts: readonly Account[];
   categories: readonly Category[];
   balances: ReadonlyMap<string, number> | undefined;
   saving: boolean;
+  /** チェックした記録をまとめて保存する */
   onSave: () => void;
+  /** 1件だけ保存する */
+  onSaveOne: (key: string) => void;
   onBack: () => void;
 };
 
 /**
- * AI入力で読み取った記録の確認。チェックした行だけを記録する。
- * AI が口座を選べなかった行があれば、上で「支払いの口座」「入金の口座」を選ぶ（口座が決まらない行は選べない）
+ * AI入力で読み取った記録の確認。チェックした記録をまとめて保存する。
+ * 口座が決まらなかった記録は、上の欄（ImportDraftEditor）で1件ずつ入れる（「< 項目名 >」で切り替え。2026-11-24
+ * ユーザーの要望）。一覧の行を押すと、その記録も上の欄で直せる。入れ終わった記録は、1件ずつでもまとめてでも保存できる
  */
 export function ImportReview({
   drafts,
   selected,
   onToggle,
   onChangeDraft,
-  fallback,
-  onFallbackChange,
   accounts,
   categories,
   balances,
   saving,
   onSave,
+  onSaveOne,
   onBack,
 }: Props) {
   const theme = useTheme();
   const accountName = (id: string | null) => accounts.find((a) => a.id === id)?.name;
-  const count = drafts.filter((d) => selected.has(d.key) && isDraftReady(d, fallback)).length;
-  // 口座を選んでいる行（口座が決まらなかった行を押すと開く。2026-11-24: 押せずに何もできなくなっていた）
-  const [editing, setEditing] = useState<string | null>(null);
+  const ready = (d: ImportDraft) => isDraftReady(d, NO_FALLBACK);
+  const count = drafts.filter((d) => selected.has(d.key) && ready(d)).length;
+
+  // 上の欄で直す記録: 最初に口座が決まらなかったもの（入れ終わっても残す）と、一覧で押したもの
+  const [targets, setTargets] = useState<string[]>(() => drafts.filter((d) => !ready(d)).map((d) => d.key));
+  const [current, setCurrent] = useState<string | null>(targets[0] ?? null);
+  // 保存して一覧から消えた記録は除く
+  const editable = targets.filter((key) => drafts.some((d) => d.key === key));
+  const currentKey = current && editable.includes(current) ? current : (editable[0] ?? null);
+  const currentDraft = drafts.find((d) => d.key === currentKey) ?? null;
+  const position = currentKey ? editable.indexOf(currentKey) : -1;
+
+  const open = (key: string) => {
+    if (!targets.includes(key)) setTargets([...targets, key]);
+    setCurrent(key);
+  };
 
   return (
     <>
-      {drafts.some((d) => d.type === 'expense' && !d.fromAccountId) && (
-        <AccountPicker
-          label="支払いの口座"
-          kinds={TRANSACTION_RULES.expense.from!.kinds}
+      {currentDraft && (
+        <ImportDraftEditor
+          // 記録を切り替えたら欄を作り直す（その記録の値で入れ直す）
+          key={currentDraft.key}
+          draft={currentDraft}
+          index={position}
+          total={editable.length}
+          onMove={(step) => setCurrent(editable[(position + step + editable.length) % editable.length])}
+          onChange={(patch) => onChangeDraft(currentDraft.key, patch)}
+          ready={ready(currentDraft)}
+          saving={saving}
+          onSave={() => onSaveOne(currentDraft.key)}
           accounts={accounts}
-          value={fallback.payFrom}
-          onChange={(payFrom) => onFallbackChange({ ...fallback, payFrom })}
           balances={balances}
-          rows={2}
-        />
-      )}
-      {drafts.some((d) => d.type === 'income' && !d.toAccountId) && (
-        <AccountPicker
-          label="入金の口座"
-          kinds={ASSET_KINDS}
-          accounts={accounts}
-          value={fallback.payTo}
-          onChange={(payTo) => onFallbackChange({ ...fallback, payTo })}
-          balances={balances}
-          rows={2}
         />
       )}
       <SectionCard title={`読み取った記録（${drafts.length}件）`}>
         {drafts.map((d) => {
-          const { fromAccountId, toAccountId } = draftAccounts(d, fallback);
+          const { fromAccountId, toAccountId } = draftAccounts(d, NO_FALLBACK);
           const where = [accountName(fromAccountId), accountName(toAccountId)].filter(Boolean).join(' → ');
-          const ready = isDraftReady(d, fallback);
-          const rule = TRANSACTION_RULES[d.type];
-          // 口座が決まらない行は、出金元・入金先を選ぶ欄を出す（選び終わっても、行を押すまで開いておく）
-          const open = editing === d.key || !ready;
+          const isReady = ready(d);
           return (
-            <View key={d.key}>
-              <ListRow
-                key={d.key}
-                title={d.payee ?? TRANSACTION_RULES[d.type].label}
-                subtitle={
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                    {[
-                      formatDay(d.date),
-                      // 内訳があれば品目の数（保存すると品目ごとのカテゴリと割引・調整の行になる）
-                      d.items?.length
-                        ? `内訳 ${d.items.filter((i) => !i.is_adjustment).length}品目`
-                        : categoryLabel(d.categoryId, categories),
-                      where || '口座なし',
-                      d.note,
-                    ]
-                      .filter(Boolean)
-                      .join('・')}
-                    {d.duplicate && <Text style={{ color: theme.colors.error }}>・重複の可能性</Text>}
-                  </Text>
-                }
-                icon={TRANSACTION_RULES[d.type].icon}
-                onPress={() => {
-                  if (!ready) return setEditing(d.key);
-                  if (editing === d.key) return setEditing(null);
-                  onToggle(d.key);
-                }}
-                right={
-                  <View style={styles.right}>
-                    <Amount value={d.amount} kind={amountKindOf(d.type)} variant="bodyLarge" />
-                    <Checkbox
-                      status={selected.has(d.key) && ready ? 'checked' : 'unchecked'}
-                      disabled={!ready}
-                      onPress={() => onToggle(d.key)}
-                    />
-                  </View>
-                }
-              />
-              {open && d.type !== 'expense' && d.type !== 'income' && (
-                <View style={styles.pickers}>
-                  {rule.from && (
-                    <AccountPicker
-                      label={rule.from.label}
-                      kinds={rule.from.kinds}
-                      accounts={accounts}
-                      value={fromAccountId}
-                      onChange={(id) => {
-                        setEditing(d.key);
-                        onChangeDraft(d.key, { fromAccountId: id, toAccountId: d.toAccountId });
-                      }}
-                      balances={balances}
-                    />
-                  )}
-                  {rule.to && (
-                    <AccountPicker
-                      label={rule.to.label}
-                      kinds={rule.to.kinds}
-                      accounts={accounts}
-                      value={toAccountId}
-                      onChange={(id) => {
-                        setEditing(d.key);
-                        onChangeDraft(d.key, { fromAccountId: d.fromAccountId, toAccountId: id });
-                      }}
-                      balances={balances}
-                    />
-                  )}
+            <ListRow
+              key={d.key}
+              title={d.payee ?? TRANSACTION_RULES[d.type].label}
+              subtitle={
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {[
+                    formatDay(d.date),
+                    // 内訳があれば品目の数（保存すると品目ごとのカテゴリと割引・調整の行になる）
+                    d.items?.length
+                      ? `内訳 ${d.items.filter((i) => !i.is_adjustment).length}品目`
+                      : categoryLabel(d.categoryId, categories),
+                    where,
+                    d.note,
+                  ]
+                    .filter(Boolean)
+                    .join('・')}
+                  {!isReady && <Text style={{ color: theme.colors.error }}>・口座を選んでください</Text>}
+                  {d.duplicate && <Text style={{ color: theme.colors.error }}>・重複の可能性</Text>}
+                </Text>
+              }
+              icon={TRANSACTION_RULES[d.type].icon}
+              // 押すと上の欄で直す。保存するかどうかは右のチェックで選ぶ
+              onPress={() => open(d.key)}
+              right={
+                <View style={styles.right}>
+                  <Amount value={d.amount} kind={amountKindOf(d.type)} variant="bodyLarge" />
+                  <Checkbox
+                    status={selected.has(d.key) && isReady ? 'checked' : 'unchecked'}
+                    disabled={!isReady}
+                    onPress={() => onToggle(d.key)}
+                  />
                 </View>
-              )}
-            </View>
+              }
+              style={d.key === currentKey ? { backgroundColor: theme.colors.secondaryContainer } : undefined}
+            />
           );
         })}
       </SectionCard>
@@ -171,5 +144,4 @@ export function ImportReview({
 
 const styles = StyleSheet.create({
   right: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  pickers: { paddingHorizontal: 12, paddingBottom: 8, gap: 8 },
 });
