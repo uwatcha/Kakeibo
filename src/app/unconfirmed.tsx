@@ -302,9 +302,11 @@ export default function ReviewScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  tabBar: { flexGrow: 0 },
-  tabs: { paddingHorizontal: SPACING.screen, paddingVertical: 8 },
-  tab: { minWidth: 112 },
+  // 横にスクロールするタブの欄は、高さを中身に合わせて固定する（伸び縮みさせると、スマホで縦に長く伸びたり、
+  // PC で下の一覧に押されて見切れたりした。2026-11-24）
+  tabBar: { flexGrow: 0, flexShrink: 0 },
+  tabs: { paddingHorizontal: SPACING.screen, paddingVertical: 8, alignItems: 'center' },
+  tab: { minWidth: 128 },
   content: { padding: SPACING.screen, paddingTop: 4, gap: SPACING.gap, paddingBottom: 48 },
   empty: { padding: 24, textAlign: 'center' },
   right: { flexDirection: 'row', alignItems: 'center' },

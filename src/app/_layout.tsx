@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { PaperProvider, useTheme } from 'react-native-paper';
+import { IconButton, PaperProvider, useTheme } from 'react-native-paper';
 
 // バックグラウンドのタスク（AI 相談の送り直し・メールからの記録の通知）は、起動したらすぐ（画面より先に）定義しておく
 import '@/features/background/backgroundTask';
@@ -37,7 +37,18 @@ function RootNavigator() {
 
   return (
     <Stack
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
+        // Web 版は、ページを読み込み直したときなど戻る先の履歴がないと戻るボタンが出ないので、いつも出す
+        // （戻れなければホームへ。2026-11-24 改善要望: 記録の確認の画面に戻るボタンがなかった）
+        ...(Platform.OS === 'web' && {
+          headerLeft: () => (
+            <IconButton
+              icon="arrow-left"
+              accessibilityLabel="戻る"
+              onPress={() => (navigation.canGoBack() ? navigation.goBack() : router.replace('/'))}
+            />
+          ),
+        }),
         headerShown: false,
         // ヘッダーは画面の背景と同じ色にして境目の線を消す
         headerStyle: { backgroundColor: theme.colors.background },
@@ -45,7 +56,7 @@ function RootNavigator() {
         headerTintColor: theme.colors.onSurface,
         headerTitleStyle: { fontWeight: '700' },
         contentStyle: { backgroundColor: theme.colors.background },
-      }}
+      })}
     >
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="(tabs)" />

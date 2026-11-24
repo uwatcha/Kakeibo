@@ -151,6 +151,7 @@ export function SearchFiltersBar({
         horizontal
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        style={styles.scroll}
         contentContainerStyle={styles.bar}
       >
         {items.map((item) => (
@@ -268,7 +269,9 @@ export function SearchFiltersBar({
 }
 
 const styles = StyleSheet.create({
-  bar: { gap: 6, paddingHorizontal: 16, paddingBottom: 6 },
+  // 下の一覧に押されて縮んだり、縦に伸びたりしないよう、高さは中身に合わせる（記録の確認のタブと同じ）
+  scroll: { flexGrow: 0, flexShrink: 0 },
+  bar: { gap: 6, paddingHorizontal: 16, paddingBottom: 6, alignItems: 'center' },
   dialog: { maxHeight: '80%' },
   area: { paddingHorizontal: 0 },
   areaContent: { padding: 16 },
