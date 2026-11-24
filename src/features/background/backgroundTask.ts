@@ -107,7 +107,8 @@ async function notifyPhotoOutcomes(outcomes: QueueOutcome[]): Promise<void> {
 /** ウィジェットの写真の画面で失敗したとき（画面はすぐ閉じるので、通知にも残す） */
 export async function notifyQuickPhotoFailure(message: string): Promise<void> {
   try {
-    await prepareNotifications();
+    // 画面はすぐ閉じるので、許可は求めない（prepareNotifications）
+    await prepareNotifications({ ask: false });
     await notify('写真から記録できませんでした', message, {});
   } catch {
     // 通知できなくても画面には出ている
@@ -119,7 +120,8 @@ export async function notifyQuickPhotoFailure(message: string): Promise<void> {
  * 途中でアプリが止められても、写真は読み取り待ちに残り、定期の実行で続きから読む
  */
 export async function processQuickPhotos(): Promise<void> {
-  await startBackgroundTask().catch(() => undefined);
+  // ウィジェットの画面はもう閉じているので、許可は求めない（prepareNotifications）
+  await startBackgroundTask({ askPermission: false }).catch(() => undefined);
   await notifyPhotoOutcomes(
     await processPhotoQueue().catch((e: unknown) => [
       {
@@ -196,21 +198,33 @@ TaskManager.defineTask(TASK, async () => {
   }
 });
 
-/** 通知のチャンネルを作り、許可を求める（Android 13 以降は、チャンネルがあるときだけ許可を求められる） */
-export async function prepareNotifications(): Promise<void> {
+/**
+ * 通知のチャンネルを作り、許可がなければ求める（Android 13 以降は、チャンネルがあるときだけ許可を求められる）。
+ * ask: false なら求めない（ウィジェットの画面を閉じたあとなど、画面が前にないとき）。
+ * 許可を求めると、許可済みでも画面に問い合わせが出る。閉じかけの画面に出すと返事が戻らず、それ以降の許可の確認が
+ * 全部待たされる（2026-11-24 エミュレーターと実機で確かめた: ウィジェットで写真を撮ったあと、次はカメラが開かなかった。
+ * カメラを開くときも中で許可を確かめるので、その後ろで待ち続けていた）。なので許可済みなら求めない
+ */
+export async function prepareNotifications({ ask = true }: { ask?: boolean } = {}): Promise<void> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {
       name: 'AI 相談の返事・メールと写真からの記録',
       importance: Notifications.AndroidImportance.DEFAULT,
     });
   }
+  if (!ask) return;
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted || !current.canAskAgain) return;
   await Notifications.requestPermissionsAsync();
 }
 
-/** 仕事ができたら呼ぶ（AI の送り直し待ち・メールからの記録を使うとき）。通知の許可を求め、定期の実行を始める */
-export async function startBackgroundTask(): Promise<void> {
+/**
+ * 仕事ができたら呼ぶ（AI の送り直し待ち・メールからの記録を使うとき）。通知の許可を求め、定期の実行を始める。
+ * askPermission: false なら許可は求めない（prepareNotifications）
+ */
+export async function startBackgroundTask({ askPermission = true }: { askPermission?: boolean } = {}): Promise<void> {
   try {
-    await prepareNotifications();
+    await prepareNotifications({ ask: askPermission });
     if (!(await TaskManager.isTaskRegisteredAsync(TASK))) {
       await BackgroundTask.registerTaskAsync(TASK, { minimumInterval: 15 });
     }

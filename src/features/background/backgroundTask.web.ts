@@ -9,6 +9,6 @@ export async function processQuickPhotos(): Promise<void> {}
 export async function notifyQuickPhotoFailure(): Promise<void> {}
 export async function notifyNegativeBalances(): Promise<void> {}
 export async function runBackgroundJobs(): Promise<void> {}
-export async function prepareNotifications(): Promise<void> {}
-export async function startBackgroundTask(): Promise<void> {}
+export async function prepareNotifications(_options?: { ask?: boolean }): Promise<void> {}
+export async function startBackgroundTask(_options?: { askPermission?: boolean }): Promise<void> {}
 export async function ensureBackgroundTask(): Promise<void> {}
