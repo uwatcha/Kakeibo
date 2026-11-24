@@ -11,7 +11,7 @@ import {
   toDrafts,
 } from '@/features/ai/extract';
 import { toJpegBase64 } from '@/features/ai/image';
-import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
+import { matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
 import { fetchCategories } from '@/features/categories/api';
 import { fetchEmailImportSettings } from '@/features/emailImport/api';
 import { fetchDateAmountsBetween, saveTransactionItems } from '@/features/transactions/api';
@@ -77,8 +77,7 @@ export async function loadPhotoContext() {
     aliases,
     settings?.summary_rules ?? null,
   )}\n${PHOTO_PROMPT_EXTRA}`;
-  const cash = defaultCashAccount(accounts);
-  return { today, accounts, categories, aliases, prompt, cash };
+  return { today, accounts, categories, aliases, prompt };
 }
 
 export type PhotoRecordResult = {
@@ -130,7 +129,7 @@ export async function recordPhoto(
   sourceKey: string,
   takenAt: number,
 ): Promise<PhotoRecordResult> {
-  const { today, accounts, categories, aliases, prompt, cash } = context;
+  const { today, accounts, categories, aliases, prompt } = context;
   const result: PhotoRecordResult = { recorded: 0, merged: 0, duplicates: 0, first: null };
   const { records } = await extractRecords(prompt, '', [{ mimeType: 'image/jpeg', data }]);
   const found = toDrafts(records, accounts, categories, aliases);
@@ -140,10 +139,11 @@ export async function recordPhoto(
   const drafts = assignPaymentAccounts(
     markDuplicates(found, existing),
     (payment) => matchPaymentAccount(payment, accounts),
-    cash,
+    // 支払い方法が分からなければ口座は空のまま（現金とみなさない。未確認で記録する）
+    null,
     (payee) => matchStoreAccount(payee, accounts),
   );
-  for (const [index, plan] of planPhotoRecords(drafts, cash).entries()) {
+  for (const [index, plan] of planPhotoRecords(drafts).entries()) {
     const { draft } = plan;
     let status: 'recorded' | 'merged' | 'duplicate' = plan.status;
     let transactionId: string | null = null;
@@ -178,11 +178,11 @@ export async function recordPhoto(
           from_account_id: draft.fromAccountId,
           // 店名が読めなかったら「内容の入力」に出し、通知で知らせる（2026-11-24 改善要望）
           needs_payee: !draft.payee?.trim(),
-          // 支払い方法が分からず現金にしたものは、記録の確認で「口座を確かめてください」と出す（2026-11-24 改善要望）
-          account_guessed: draft.note === '現金と判断',
+          // 支払い方法が分からなければ口座を空にして未確認で入れる（残高に入らない。確認するときに口座を選ぶ。2026-11-24）
+          account_guessed: !draft.fromAccountId,
           auto_source: 'photo',
           auto_reviewed: false,
-          is_confirmed: isConfirmedOnSave(draft.date, today),
+          is_confirmed: !!draft.fromAccountId && isConfirmedOnSave(draft.date, today),
         })
         .select('id')
         .single();

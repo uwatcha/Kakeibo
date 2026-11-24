@@ -15,6 +15,8 @@ export type PendingSend = {
   question: Question;
   system: string;
   messages: AiMessage[];
+  /** 強いモデルで答えさせるか（strongModel.ts） */
+  strong?: boolean;
   /** 置き換え後 → 元の名前 */
   toReal: [string, string][];
   createdAt: number;
@@ -59,7 +61,7 @@ export type SendOutcome =
 /** 1件を送ってみる。送れたら質問と返事を保存する（新しいチャットなら会話を作る） */
 export async function trySend(item: PendingSend, now: number): Promise<SendOutcome> {
   try {
-    const reply = await sendAiChat(item.system, item.messages);
+    const reply = await sendAiChat(item.system, item.messages, item.strong ?? false);
     // 画面の送り直しと同時に送れていたら、二重に保存しない
     if (!(await takePending(item.id))) return { kind: 'waiting' };
     const shown = restoreText(reply.text, { toReal: new Map(item.toReal) });

@@ -11,16 +11,13 @@ export type PhotoRecordPlan = { draft: ImportDraft; status: 'recorded' | 'duplic
 
 /**
  * 写真から読み取った行のうち、記録にするもの: 支払いで、レシート・決済画面・値段の表示から読んだもの。
- * 口座が決まらない行は現金で払ったとみなす。重複の可能性のある行（メールで記録済みも）は記録せず「重複」に回す
+ * 口座が決まらない行は、口座を空にして未確認で記録する（2026-11-24 ユーザーの指定。前は現金とみなしていて、財布の
+ * 残高がずれた。未確認の記録は残高に入らず、確認するときに口座を選ぶ）。重複の可能性のある行（メールで記録済みも）は
+ * 記録せず「重複」に回す
  */
-export function planPhotoRecords(drafts: readonly ImportDraft[], cashAccountId: string | null): PhotoRecordPlan[] {
+export function planPhotoRecords(drafts: readonly ImportDraft[]): PhotoRecordPlan[] {
   return drafts
     .filter((d) => d.type === 'expense' && d.source !== 'other')
-    .map((d) => ({
-      ...d,
-      fromAccountId: d.fromAccountId ?? cashAccountId,
-      note: d.fromAccountId ? d.note : '現金と判断',
-    }))
-    .filter((d) => d.fromAccountId)
+    .map((d) => (d.fromAccountId ? d : { ...d, note: '口座が分からない' }))
     .map((draft) => ({ draft, status: draft.duplicate ? 'duplicate' : 'recorded' }));
 }

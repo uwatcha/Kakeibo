@@ -110,14 +110,9 @@ export function ImportDraftEditor({
           onChangeText={(value) => setValue('memo', value)}
           multiline
         />
-        <Button
-          mode="contained-tonal"
-          icon="content-save"
-          onPress={onSave}
-          loading={saving}
-          disabled={!ready || saving}
-        >
-          この記録を保存
+        <Button mode="contained-tonal" icon="content-save" onPress={onSave} loading={saving} disabled={saving}>
+          {/* 口座が決まっていなければ、口座を空にして未確認で保存する */}
+          {ready ? 'この記録を保存' : '口座なしで保存（未確認）'}
         </Button>
       </View>
     </SectionCard>

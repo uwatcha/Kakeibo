@@ -54,7 +54,7 @@ export function ImportReview({
   const theme = useTheme();
   const accountName = (id: string | null) => accounts.find((a) => a.id === id)?.name;
   const ready = (d: ImportDraft) => isDraftReady(d, NO_FALLBACK);
-  const count = drafts.filter((d) => selected.has(d.key) && ready(d)).length;
+  const count = drafts.filter((d) => selected.has(d.key)).length;
 
   // 上の欄で直す記録: 最初に口座が決まらなかったもの（入れ終わっても残す）と、一覧で押したもの
   const [targets, setTargets] = useState<string[]>(() => drafts.filter((d) => !ready(d)).map((d) => d.key));
@@ -110,7 +110,11 @@ export function ImportReview({
                   ]
                     .filter(Boolean)
                     .join('・')}
-                  {!isReady && <Text style={{ color: theme.colors.error }}>・口座を選んでください</Text>}
+                  {!isReady && (
+                    <Text style={{ color: theme.colors.error }}>
+                      ・口座を選んでください（このまま保存すると未確認）
+                    </Text>
+                  )}
                   {d.duplicate && <Text style={{ color: theme.colors.error }}>・重複の可能性</Text>}
                 </Text>
               }
@@ -120,11 +124,8 @@ export function ImportReview({
               right={
                 <View style={styles.right}>
                   <Amount value={d.amount} kind={amountKindOf(d.type)} variant="bodyLarge" />
-                  <Checkbox
-                    status={selected.has(d.key) && isReady ? 'checked' : 'unchecked'}
-                    disabled={!isReady}
-                    onPress={() => onToggle(d.key)}
-                  />
+                  {/* 口座が決まっていなくても保存できる（口座を空にして未確認で入れる） */}
+                  <Checkbox status={selected.has(d.key) ? 'checked' : 'unchecked'} onPress={() => onToggle(d.key)} />
                 </View>
               }
               style={d.key === currentKey ? { backgroundColor: theme.colors.secondaryContainer } : undefined}

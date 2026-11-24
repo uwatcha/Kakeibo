@@ -272,7 +272,8 @@ export function draftToRow(d: ImportDraft, fallback: FallbackAccounts, today: st
     category_id: d.categoryId,
     from_account_id: fromAccountId,
     to_account_id: toAccountId,
-    is_confirmed: isConfirmedOnSave(d.date, today),
+    // 口座が決まっていなければ、口座を空にして未確認で保存する（未確認の記録は残高に入らない。2026-11-24 ユーザーの指定）
+    is_confirmed: isDraftReady(d, fallback) && isConfirmedOnSave(d.date, today),
     list_price: d.listPrice ?? null,
     points_used: d.pointsUsed ?? null,
     ...(d.type === 'expense' && d.items?.length ? { items: d.items } : {}),

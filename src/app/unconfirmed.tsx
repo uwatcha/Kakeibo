@@ -20,6 +20,7 @@ import {
 } from '@/features/emailImport/hooks';
 import { DuplicateCandidates } from '@/features/emailImport/components/DuplicateCandidates';
 import type { Transaction } from '@/features/transactions/api';
+import { needsAccount } from '@/features/transactions/confirmation';
 import { useConfirmTransactions, useUnconfirmed } from '@/features/transactions/hooks';
 import { amountKindOf, describeAccounts, TRANSACTION_RULES } from '@/features/transactions/transactionRules';
 import { formatDay, toTokyoDateString } from '@/lib/date';
@@ -97,8 +98,11 @@ export default function ReviewScreen() {
         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
           {`${formatDay(t.date)}・${describeAccounts(t, accounts.data!)}`}
           {/* 写真で支払い方法が分からず現金にしたもの */}
-          {t.account_guessed && !t.auto_reviewed && (
-            <Text style={{ color: theme.colors.error }}>・口座を確かめてください</Text>
+          {needsAccount(t) ? (
+            <Text style={{ color: theme.colors.error }}>・口座を選んでください</Text>
+          ) : (
+            t.account_guessed &&
+            !t.auto_reviewed && <Text style={{ color: theme.colors.error }}>・口座を確かめてください</Text>
           )}
         </Text>
       }
@@ -140,7 +144,10 @@ export default function ReviewScreen() {
             {items.map((t) =>
               row(
                 t,
-                rowAction('check-circle-outline', '確認した', () => confirm.mutate([t.id])),
+                // 口座が空の記録は、記録の画面で口座を選んで確認する
+                needsAccount(t)
+                  ? rowAction('pencil-outline', '口座を選ぶ', () => openTransaction(t.id))
+                  : rowAction('check-circle-outline', '確認した', () => confirm.mutate([t.id])),
               ),
             )}
           </SectionCard>
@@ -285,14 +292,16 @@ export default function ReviewScreen() {
           <Dialog.Title>すべて確認した</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
-              {counts.unconfirmed}件をそのままの金額で確認済みにし、残高と集計に入れます。
+              {unconfirmed.data!.filter((t) => !needsAccount(t)).length}
+              件をそのままの金額で確認済みにし、残高と集計に入れます（口座が空の記録は除きます）。
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setConfirmAll(false)}>キャンセル</Button>
             <Button
               onPress={() => {
-                confirm.mutate(unconfirmed.data!.map((t) => t.id));
+                // 口座が空の記録は確認できないので除く（記録の画面で口座を選ぶ）
+                confirm.mutate(unconfirmed.data!.filter((t) => !needsAccount(t)).map((t) => t.id));
                 setConfirmAll(false);
               }}
             >

@@ -10,6 +10,8 @@ export const CLAUDE_MODELS = [
   { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', inputTokenLimit: 200_000 },
 ];
 export const CLAUDE_DEFAULT_MODEL = 'claude-haiku-5-5';
+/** 難しい質問（照らし合わせ・画像・計算など）で使う強いモデル */
+export const CLAUDE_STRONG_MODEL = 'claude-sonnet-5-5';
 
 /** Claude からのエラー（GeminiError と同じく status を持つ。どちらで失敗したかを知らせるために分ける） */
 export class ClaudeError extends GeminiError {}

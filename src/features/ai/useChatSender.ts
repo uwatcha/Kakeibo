@@ -10,6 +10,7 @@ import { remaskHistory, toAiMessages } from './chatHistory';
 import { aiKeys } from './hooks';
 import { addPending, takePending } from './pendingSend';
 import { titleFrom } from './retention';
+import { needsStrongModel } from './strongModel';
 
 /** 混み合いで送れなかったときに送り直す間隔と回数（30秒ごと・最大20回 = 10分） */
 const RETRY_INTERVAL_MS = 30_000;
@@ -78,8 +79,14 @@ export function useChatSender({ conversationId, restoreInput, onSent, onReply }:
     const { aliases, system, model } = context();
     // 前のやりとりも今の置き換えにそろえる（材料の口座の名前とずれないように）
     const messages = toAiMessages(remaskHistory(history, aliases));
+    // 画像が付いた・照らし合わせなどの難しい質問は、強いモデルで答えさせる
+    const strong = needsStrongModel(
+      question.shown,
+      // 前の質問の画像だけなら軽いモデルのまま（会話に画像があるとずっと強いモデルになるので、今の質問の画像だけ見る）
+      question.images?.length ?? 0,
+    );
     try {
-      const reply = await sendAiChat(system, messages);
+      const reply = await sendAiChat(system, messages, strong);
       // 送り直し待ちにしていた質問を、バックグラウンドですでに送っていたら保存しない（その会話を開き直す）
       if (pendingId.current && !(await takePending(pendingId.current))) {
         queryClient.invalidateQueries({ queryKey: aiKeys.all });
@@ -112,6 +119,7 @@ export function useChatSender({ conversationId, restoreInput, onSent, onReply }:
           question,
           system,
           messages,
+          strong,
           toReal: [...aliases.toReal],
         });
         startBackgroundTask();

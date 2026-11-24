@@ -81,11 +81,11 @@ export function importNotification(
     case 'recorded':
       if (!i.transaction_id) return null;
       if (i.transaction?.needs_payee && i.kind !== 'card_quick') return unnamedNotification(i, what, i.transaction_id);
-      // 支払い方法が分からず現金にした記録は、開いて口座を確かめてもらう（2026-11-24 改善要望）
+      // 支払い方法が分からず口座を空にした記録（未確認）は、開いて口座を選んでもらう（2026-11-24）
       if (i.transaction?.account_guessed) {
         return {
-          title: '支払いを記録しました（口座を確かめてください）',
-          body: `${what}・支払い方法が分からないので現金にしました`,
+          title: '支払いを記録しました（口座を選んでください）',
+          body: `${what}・支払い方法が分からないので、口座を空にして未確認にしました`,
           data: { transactionId: i.transaction_id },
         };
       }

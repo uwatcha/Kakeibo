@@ -68,8 +68,9 @@ export const saveAiKey = ({ provider, key }: { provider: AiProvider; key: string
   callAi<AiStatus>({ action: 'save_key', provider, key });
 export const deleteAiKey = (provider: AiProvider) => callAi<AiStatus>({ action: 'delete_key', provider });
 export const setAiModel = (model: string) => callAi<{ ok: true }>({ action: 'set_model', model });
-export const sendAiChat = (system: string, messages: AiMessage[]) =>
-  callAi<AiReply>({ action: 'chat', system, messages });
+/** strong: 難しい質問（strongModel.ts）。Claude のキーがあれば強いモデルで答える */
+export const sendAiChat = (system: string, messages: AiMessage[], strong = false) =>
+  callAi<AiReply>({ action: 'chat', system, messages, strong });
 
 /** 今日（日本時間）の相談の回数とトークン数 */
 export async function fetchAiUsageToday(today: string): Promise<{ count: number; tokens: number }> {

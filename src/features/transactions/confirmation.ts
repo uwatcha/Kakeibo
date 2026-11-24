@@ -15,3 +15,18 @@ export function recordStatus(t: { date: string; is_confirmed: boolean }, today: 
 export function isConfirmedOnSave(date: string, today: string): boolean {
   return date <= today;
 }
+
+/**
+ * 口座が空のままの記録（未確認の記録だけ口座を空にできる。2026-11-24 ユーザーの指定）。
+ * 確認するときは、先に記録の画面で口座を選ぶ
+ */
+export function needsAccount(t: {
+  type: string;
+  from_account_id: string | null;
+  to_account_id: string | null;
+}): boolean {
+  if (t.type === 'adjustment') return false;
+  if (t.type === 'expense') return t.from_account_id === null;
+  if (t.type === 'income') return t.to_account_id === null;
+  return t.from_account_id === null || t.to_account_id === null;
+}

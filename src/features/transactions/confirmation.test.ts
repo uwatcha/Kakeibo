@@ -1,4 +1,4 @@
-import { isConfirmedOnSave, recordStatus } from './confirmation';
+import { isConfirmedOnSave, needsAccount, recordStatus } from './confirmation';
 
 const today = '2026-10-20';
 
@@ -21,5 +21,15 @@ describe('isConfirmedOnSave', () => {
     expect(isConfirmedOnSave(today, today)).toBe(true);
     expect(isConfirmedOnSave('2026-10-19', today)).toBe(true);
     expect(isConfirmedOnSave('2026-10-21', today)).toBe(false);
+  });
+});
+
+describe('needsAccount', () => {
+  it('種類ごとに要る口座が空なら true', () => {
+    expect(needsAccount({ type: 'expense', from_account_id: null, to_account_id: null })).toBe(true);
+    expect(needsAccount({ type: 'expense', from_account_id: 'a', to_account_id: null })).toBe(false);
+    expect(needsAccount({ type: 'income', from_account_id: null, to_account_id: null })).toBe(true);
+    expect(needsAccount({ type: 'transfer', from_account_id: 'a', to_account_id: null })).toBe(true);
+    expect(needsAccount({ type: 'adjustment', from_account_id: null, to_account_id: 'a' })).toBe(false);
   });
 });

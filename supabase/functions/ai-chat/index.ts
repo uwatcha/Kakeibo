@@ -7,6 +7,7 @@ import {
   checkClaudeKey,
   CLAUDE_DEFAULT_MODEL,
   CLAUDE_MODELS,
+  CLAUDE_STRONG_MODEL,
   ClaudeError,
   generateClaudeWithRetry,
   isClaudeModel,
@@ -231,8 +232,11 @@ Deno.serve(async (req) => {
         const messages = (body.messages ?? []) as { role: 'user' | 'model'; text: string }[];
         const system = String(body.system ?? '');
         // 選んだモデル → 同じ会社の軽いモデル → もう一方の会社の順に試す（candidatesFor）。
-        // 混み合い（503・529 など）は少し待って送り直し、使えないモデル（404）はすぐ次へ
-        const candidates = candidatesFor(settings, settings.model);
+        // 混み合い（503・529 など）は少し待って送り直し、使えないモデル（404）はすぐ次へ。
+        // 照らし合わせ・画像・計算などの難しい質問（アプリが strong で知らせる）は、Claude のキーがあれば強いモデルで答える
+        // （2026-11-24 ユーザーの指定。軽いモデルで照らし合わせを間違えた）。設定のモデルは変えない
+        const preferred = body.strong === true && settings.anthropic_api_key ? CLAUDE_STRONG_MODEL : settings.model;
+        const candidates = candidatesFor(settings, preferred);
         const { out, model } = await generateAny(settings, candidates, system, messages);
         // 選んでいたモデルが使えなくなっていたら（404）、答えたモデルを設定にする（混み合いで切り替えただけなら変えない）
         if (model !== settings.model) {

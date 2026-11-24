@@ -18,7 +18,6 @@ import {
   draftToRow,
   extractPrompt,
   type ImportDraft,
-  isDraftReady,
   markDuplicates,
   toDrafts,
 } from '../extract';
@@ -171,7 +170,7 @@ export function AiImport({ today, accounts, categories, aliases, balances, reque
 
   /** keys の記録を保存する（口座が決まっていないものは除く） */
   const saveDrafts = async (keys: readonly string[]) => {
-    const rows = (drafts ?? []).filter((d) => keys.includes(d.key) && isDraftReady(d, NO_FALLBACK));
+    const rows = (drafts ?? []).filter((d) => keys.includes(d.key));
     if (rows.length === 0) return;
     try {
       await create.mutateAsync(rows.map((d) => draftToRow(d, NO_FALLBACK, today)));

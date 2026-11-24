@@ -10,6 +10,8 @@ type Movement = { from_account_id: string | null; to_account_id: string | null }
  * 支払いは払った口座、収入は入った口座で決まる。振替などはどちらかが含まれていれば対象。
  */
 export function touchesAccounts(t: Movement, accountIds: ReadonlySet<string>): boolean {
+  // 口座が空の記録（未確認で口座を決めていないもの）は、見落とさないよう出す
+  if (t.from_account_id === null && t.to_account_id === null) return true;
   return (
     (t.from_account_id !== null && accountIds.has(t.from_account_id)) ||
     (t.to_account_id !== null && accountIds.has(t.to_account_id))
