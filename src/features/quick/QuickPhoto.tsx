@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Text, useTheme } from 'react-native-paper';
 
-import { processQuickPhotos } from '@/features/background/backgroundTask';
+import { notifyQuickPhotoFailure, processQuickPhotos } from '@/features/background/backgroundTask';
 import { queuePhoto } from '@/features/photoImport/queue';
 import { toJpegBase64 } from '@/features/ai/image';
 import { RADIUS, SPACING } from '@/theme';
@@ -68,8 +68,10 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
     if (started.current === nonce) return;
     started.current = nonce;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // 画面は少しで閉じるので、失敗は通知にも残す（2026-11-24 ユーザーの要望）
     const finish = (message: string) => {
       setPhase({ kind: 'done', message });
+      notifyQuickPhotoFailure(message);
       timer = setTimeout(closeQuick, CLOSE_AFTER_MS);
     };
     (async () => {
@@ -81,7 +83,9 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
       try {
         shot = await launchCamera();
       } catch (e) {
-        return finish(`カメラを開けませんでした。もう一度ウィジェットを押してください（${e instanceof Error ? e.message : String(e)}）`);
+        return finish(
+          `カメラを開けませんでした。もう一度ウィジェットを押してください（${e instanceof Error ? e.message : String(e)}）`,
+        );
       }
       const asset = shot.assets?.[0];
       if (shot.canceled || !asset) return closeQuick();
@@ -90,8 +94,10 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
       const takenAt = Date.now();
       try {
         await queuePhoto({ key: `widget:${takenAt}`, data: await toJpegBase64(asset.uri, asset.width), takenAt });
-      } catch {
-        return finish('写真を保存できませんでした');
+      } catch (e) {
+        return finish(
+          `写真を保存できませんでした。もう一度撮ってください（${e instanceof Error ? e.message : String(e)}）`,
+        );
       }
       closeQuick();
       // 画面を閉じても、アプリが止められるまでは読み取りを続ける（結果は通知）

@@ -94,11 +94,23 @@ export async function notifyEmailImports(): Promise<void> {
 /** ウィジェットから撮った写真で、記録しなかったもの（記録・重複はメールと同じく email_imports から通知する） */
 async function notifyPhotoOutcomes(outcomes: QueueOutcome[]): Promise<void> {
   for (const o of outcomes) {
-    await notify(
-      o.kind === 'empty' ? '写真から記録できる内容がありませんでした' : '写真を読み取れませんでした',
-      'レシート・決済の画面・値段の表示を撮ってください',
-      {},
-    );
+    if (o.kind === 'empty') {
+      await notify('写真から記録できる内容がありませんでした', 'レシート・決済の画面・値段の表示を撮ってください', {});
+    } else if (o.kind === 'failed') {
+      await notify('写真から記録できませんでした', o.message, {});
+    } else {
+      await notify('写真の記録を待っています', `${o.message}。写真は残してあり、あとで自動で続きから記録します`, {});
+    }
+  }
+}
+
+/** ウィジェットの写真の画面で失敗したとき（画面はすぐ閉じるので、通知にも残す） */
+export async function notifyQuickPhotoFailure(message: string): Promise<void> {
+  try {
+    await prepareNotifications();
+    await notify('写真から記録できませんでした', message, {});
+  } catch {
+    // 通知できなくても画面には出ている
   }
 }
 
@@ -107,8 +119,16 @@ async function notifyPhotoOutcomes(outcomes: QueueOutcome[]): Promise<void> {
  * 途中でアプリが止められても、写真は読み取り待ちに残り、定期の実行で続きから読む
  */
 export async function processQuickPhotos(): Promise<void> {
-  await startBackgroundTask();
-  await notifyPhotoOutcomes(await processPhotoQueue().catch(() => []));
+  await startBackgroundTask().catch(() => undefined);
+  await notifyPhotoOutcomes(
+    await processPhotoQueue().catch((e: unknown) => [
+      {
+        key: '',
+        kind: 'waiting' as const,
+        message: `読み取りを始められませんでした（${e instanceof Error ? e.message : String(e)}）`,
+      },
+    ]),
+  );
   await notifyEmailImports().catch(() => undefined);
 }
 
