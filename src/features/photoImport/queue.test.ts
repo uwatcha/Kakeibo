@@ -41,12 +41,32 @@ describe('ウィジェットの写真の読み取り待ち', () => {
     expect(mockRecord.mock.calls.map((c) => c[2])).toEqual(['a', 'b']);
   });
 
-  it('混み合いならそこで止めて残し、記録できる内容がなければ知らせる', async () => {
+  it('混み合いならそこで止めて残し、最初の1回だけ知らせる。記録できる内容がなければ知らせる', async () => {
     mockRecord.mockResolvedValueOnce({ recorded: 0, duplicates: 0, first: null });
-    mockRecord.mockRejectedValueOnce(new AiError('混み合っています', true));
+    mockRecord.mockRejectedValue(new AiError('混み合っています', true));
     await queuePhoto(photo('a'));
     await queuePhoto(photo('b'));
-    expect(await processPhotoQueue()).toEqual([{ key: 'a', kind: 'empty' }]);
+    expect(await processPhotoQueue()).toEqual([
+      { key: 'a', kind: 'empty' },
+      { key: 'b', kind: 'waiting', message: '混み合っています' },
+    ]);
     expect((await loadPhotoQueue()).map((q) => q.key)).toEqual(['b']);
+    // 2回目の確認でも混み合っていれば、もう知らせない
+    expect(await processPhotoQueue()).toEqual([]);
+  });
+
+  it('AI に断られたら理由を知らせて捨てる。通信・保存の失敗は残して読み直し、5回で諦める', async () => {
+    mockRecord.mockRejectedValueOnce(new AiError('キーが使えません', false));
+    await queuePhoto(photo('a'));
+    expect(await processPhotoQueue()).toEqual([{ key: 'a', kind: 'failed', message: 'キーが使えません' }]);
+    expect(await loadPhotoQueue()).toEqual([]);
+
+    mockRecord.mockRejectedValue(new Error('Network request failed'));
+    await queuePhoto(photo('b'));
+    const first = await processPhotoQueue();
+    expect(first).toEqual([{ key: 'b', kind: 'waiting', message: expect.stringContaining('Network request failed') }]);
+    for (let i = 0; i < 3; i++) expect(await processPhotoQueue()).toEqual([]);
+    expect(await processPhotoQueue()).toEqual([{ key: 'b', kind: 'failed', message: expect.stringContaining('5回') }]);
+    expect(await loadPhotoQueue()).toEqual([]);
   });
 });
