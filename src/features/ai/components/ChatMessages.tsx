@@ -1,6 +1,7 @@
+import * as Clipboard from 'expo-clipboard';
 import { useRef, useState } from 'react';
 import { FlatList, Image, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, IconButton, Text, useTheme } from 'react-native-paper';
 
 import { RADIUS, SPACING } from '@/theme';
 
@@ -68,6 +69,26 @@ function Thumbnails({ images, onOpen }: { images: readonly string[]; onOpen: (da
   );
 }
 
+/** 吹き出しの文をまるごとコピーするボタン（2026-11-24 ユーザーの要望）。押すと少しの間チェックの印になる */
+function CopyButton({ text, role }: { text: string; role: 'user' | 'model' }) {
+  const theme = useTheme();
+  const [copied, setCopied] = useState(false);
+  return (
+    <IconButton
+      icon={copied ? 'check' : 'content-copy'}
+      size={16}
+      iconColor={theme.colors.onSurfaceVariant}
+      accessibilityLabel={role === 'user' ? '質問をコピー' : '返事をコピー'}
+      style={[styles.copy, role === 'user' ? styles.copyUser : styles.copyModel]}
+      onPress={async () => {
+        await Clipboard.setStringAsync(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    />
+  );
+}
+
 /** AI 相談のやりとりの一覧。追加されたら一番下までスクロールする */
 export function ChatMessages({
   items,
@@ -97,21 +118,24 @@ export function ChatMessages({
         }
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         renderItem={({ item }) => (
-          <Bubble role={item.role}>
-            {item.role === 'model' ? (
-              // AI の返事は Markdown（見出し・太字・箇条書き・表）として表示する
-              <MarkdownText>{item.shown}</MarkdownText>
-            ) : (
-              <>
-                {!!item.images?.length && <Thumbnails images={item.images} onOpen={setViewing} />}
-                {item.shown !== '' && (
-                  <Text variant="bodyMedium" selectable>
-                    {item.shown}
-                  </Text>
-                )}
-              </>
-            )}
-          </Bubble>
+          <View>
+            <Bubble role={item.role}>
+              {item.role === 'model' ? (
+                // AI の返事は Markdown（見出し・太字・箇条書き・表）として表示する
+                <MarkdownText>{item.shown}</MarkdownText>
+              ) : (
+                <>
+                  {!!item.images?.length && <Thumbnails images={item.images} onOpen={setViewing} />}
+                  {item.shown !== '' && (
+                    <Text variant="bodyMedium" selectable>
+                      {item.shown}
+                    </Text>
+                  )}
+                </>
+              )}
+            </Bubble>
+            {item.shown !== '' && item.id !== 'pending' && <CopyButton text={item.shown} role={item.role} />}
+          </View>
         )}
         ListFooterComponent={
           <>
@@ -146,6 +170,9 @@ export function ChatMessages({
 }
 
 const styles = StyleSheet.create({
+  copy: { margin: 0, marginTop: 2 },
+  copyUser: { alignSelf: 'flex-end' },
+  copyModel: { alignSelf: 'flex-start' },
   thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   thumb: { width: 96, height: 96, borderRadius: 8 },
   viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center' },
