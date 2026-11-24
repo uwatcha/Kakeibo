@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Text, useTheme } from 'react-native-paper';
 
 import { processQuickPhotos } from '@/features/background/backgroundTask';
@@ -12,6 +12,44 @@ import { closeQuick } from './QuickEntrySheet';
 
 /** 結果を出してから閉じるまで（許可がない・置けなかったときだけ） */
 const CLOSE_AFTER_MS = 2500;
+
+/** 画面が前面に出たのを待つ上限 */
+const ACTIVE_TIMEOUT_MS = 3000;
+/** カメラを開けなかったときに、やり直すまでの間 */
+const RETRY_MS = [500, 1500];
+
+/** 画面が前面に出る（AppState が active になる）まで待つ。出なくても ACTIVE_TIMEOUT_MS で進む */
+function waitUntilActive(): Promise<void> {
+  if (AppState.currentState === 'active') return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ACTIVE_TIMEOUT_MS);
+    const subscription = AppState.addEventListener('change', (state) => state === 'active' && done());
+    function done() {
+      clearTimeout(timer);
+      subscription.remove();
+      resolve();
+    }
+  });
+}
+
+/**
+ * カメラを開く。2回目以降は、カメラの結果を受け取る仕組み（expo-modules-core の ActivityResult の登録）が、
+ * 前に閉じた画面と一緒に外れていて、この画面が前面に出たとき（onHostResume）に付け直される。
+ * その前に開くと「登録されていない」で失敗し、透けた背景だけが残っていた（2026-11-24）ので、前面に出るのを待ち、
+ * 失敗したら少し待ってやり直す
+ */
+async function launchCamera(): Promise<ImagePicker.ImagePickerResult> {
+  await waitUntilActive();
+  for (const wait of [...RETRY_MS, null]) {
+    try {
+      return await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+    } catch (e) {
+      if (wait === null) throw e;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+  throw new Error('unreachable');
+}
 
 type Phase = { kind: 'camera' } | { kind: 'reading' } | { kind: 'done'; message: string };
 
@@ -35,9 +73,16 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
       timer = setTimeout(closeQuick, CLOSE_AFTER_MS);
     };
     (async () => {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) return finish('カメラを使う許可がありません');
-      const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+      // 許可の確認も画面に結び付いているので、前面に出てから
+      await waitUntilActive();
+      const permission = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
+      if (!permission?.granted) return finish('カメラを使う許可がありません');
+      let shot: ImagePicker.ImagePickerResult;
+      try {
+        shot = await launchCamera();
+      } catch (e) {
+        return finish(`カメラを開けませんでした。もう一度ウィジェットを押してください（${e instanceof Error ? e.message : String(e)}）`);
+      }
       const asset = shot.assets?.[0];
       if (shot.canceled || !asset) return closeQuick();
       // 小さくして置くまでの1〜2秒だけ出す
