@@ -33,6 +33,8 @@ type Props = {
   categories: readonly Category[];
   aliases: Aliases;
   balances: ReadonlyMap<string, number> | undefined;
+  /** AI 相談で記録を頼まれたときの文（決まった形。features/ai/recordRequest.ts）。来たら文の欄に入れて読み取る */
+  request?: { id: number; text: string } | null;
 };
 
 /** 口座は確認の画面で1件ずつ選ぶので、まとめて選ぶ口座は使わない */
@@ -43,7 +45,7 @@ const NO_FALLBACK = { payFrom: null, payTo: null };
  * 読み取った記録は一覧（ImportReview）で確かめてから保存する（同じ日・同じ金額の記録があれば重複として最初は外す）。
  * 途中でアプリを閉じても、次に開いたときに続きから読み取る・一覧を出す（importJob.ts）
  */
-export function AiImport({ today, accounts, categories, aliases, balances }: Props) {
+export function AiImport({ today, accounts, categories, aliases, balances, request }: Props) {
   const files = useAttachments();
   // 設定の「自動入力のルール」（自分で書いたもの）も AI に渡す
   const emailSettings = useEmailImportSettings();
@@ -104,18 +106,36 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
     }
   };
 
-  const read = () => {
+  /** 読み取る。override は AI 相談から渡された文（添付は使わず、その文だけを読む） */
+  const read = (override?: string) => {
     const job: ImportJob = {
       today,
-      texts: [...files.attachments.flatMap((a) => (a.kind === 'text' ? [`# ${a.name}\n${a.text}`] : [])), text.trim()]
-        .filter(Boolean)
-        .join('\n\n'),
-      binaries: files.attachments.flatMap((a) => (a.kind === 'file' ? [{ mimeType: a.mimeType, data: a.data }] : [])),
+      texts:
+        override ??
+        [...files.attachments.flatMap((a) => (a.kind === 'text' ? [`# ${a.name}\n${a.text}`] : [])), text.trim()]
+          .filter(Boolean)
+          .join('\n\n'),
+      binaries:
+        override !== undefined
+          ? []
+          : files.attachments.flatMap((a) => (a.kind === 'file' ? [{ mimeType: a.mimeType, data: a.data }] : [])),
       savedAt: Date.now(),
     };
     saveImportJob(job);
     extract(job);
   };
+
+  // AI 相談から記録を頼まれたら、文の欄に入れて読み取る（2026-11-24 ユーザーの要望）。
+  // 前の読み取りの一覧が残っている・読み取り中なら、それが終わってから
+  const handledRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!request || handledRequest.current === request.id || drafts !== null || reading) return;
+    handledRequest.current = request.id;
+    setText(request.text);
+    read(request.text);
+    // read は描画のたびに変わるので、頼まれたとき・前の一覧が片付いたときだけ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request, drafts, reading]);
 
   // 前に閉じたときの続き: 一覧まで進んでいればそのまま出し、読み取りの途中なら読み取り直す
   const restored = useRef(false);
@@ -222,7 +242,7 @@ export function AiImport({ today, accounts, categories, aliases, balances }: Pro
             <Button
               mode="contained"
               icon="text-recognition"
-              onPress={read}
+              onPress={() => read()}
               loading={reading}
               disabled={reading || (files.attachments.length === 0 && text.trim() === '')}
             >

@@ -35,13 +35,15 @@ type Options = {
   restoreInput: (text: string, images?: string[]) => void;
   /** 送れたあと（今日の使用量を読み直すなど） */
   onSent: () => void;
+  /** この画面で返事を受け取ったとき（元の名前に戻した返事。記録を頼まれていたら入力に移る） */
+  onReply?: (shown: string) => void;
 };
 
 /**
  * AI 相談の送信。返事を待つ間の質問、混み合いのときの送り直し（画面を開いている間は30秒ごと・最大10分。
  * 最初に失敗したら端末に送り直し待ちとして置き、そのあとやアプリを閉じている間はバックグラウンドで送り直す）
  */
-export function useChatSender({ conversationId, restoreInput, onSent }: Options) {
+export function useChatSender({ conversationId, restoreInput, onSent, onReply }: Options) {
   const queryClient = useQueryClient();
   // 返事を待っている間の質問（保存は返事と一緒にする）
   const [pending, setPending] = useState<ChatItem | null>(null);
@@ -96,6 +98,7 @@ export function useChatSender({ conversationId, restoreInput, onSent }: Options)
       queryClient.invalidateQueries({ queryKey: aiKeys.conversations() });
       if (!conversationId) router.setParams({ c: id });
       onSent();
+      onReply?.(restoreText(reply.text, aliases));
       // 使えなくなったモデルからサーバーが自動で切り替えたときは、表示のモデルも読み直す
       if (reply.model !== model) queryClient.invalidateQueries({ queryKey: aiKeys.status() });
       finish();

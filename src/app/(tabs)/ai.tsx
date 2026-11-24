@@ -12,6 +12,7 @@ import { QueriesState } from '@/components/QueryState';
 import { useAccountBalances, useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { buildAliases, maskText } from '@/features/ai/anonymize';
 import { buildChatSystem } from '@/features/ai/chatContext';
+import { extractRecordRequest } from '@/features/ai/recordRequest';
 import { AiImport } from '@/features/ai/components/AiImport';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
 import { dataUriToJpegBase64, toJpegBase64 } from '@/features/ai/image';
@@ -83,6 +84,8 @@ export default function AiChatScreen() {
   // 質問に添える画像（横幅 1024px の JPEG の base64。2026-11-24 ユーザーの要望）
   const [images, setImages] = useState<string[]>([]);
   const [imageError, setImageError] = useState<string | null>(null);
+  // AI 相談で記録を頼まれたときの文（入力に移って読み取る）
+  const [recordRequest, setRecordRequest] = useState<{ id: number; text: string } | null>(null);
   // スマホの画像のボタンのメニュー（選ぶ・撮る・貼る）
   const [imageMenu, setImageMenu] = useState(false);
 
@@ -134,6 +137,13 @@ export default function AiChatScreen() {
       setImages(restored ?? []);
     },
     onSent: () => usage.refetch(),
+    // 返事に記録の囲みがあれば、入力に移って読み取る
+    onReply: (shown) => {
+      const text = extractRecordRequest(shown);
+      if (!text) return;
+      setRecordRequest({ id: Date.now(), text });
+      setMode('import');
+    },
   });
 
   const stored: ChatItem[] = conversationId ? (conversation.data?.messages ?? []) : [];
@@ -319,6 +329,7 @@ export default function AiChatScreen() {
             categories={categories.data!}
             aliases={aliases}
             balances={balanceMap}
+            request={recordRequest}
           />
         </View>
         <View
