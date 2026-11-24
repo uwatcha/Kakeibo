@@ -11,7 +11,7 @@ import { SectionCard } from '@/components/SectionCard';
 import { ACCOUNT_KIND_INFO, isLiability, PERSON_KINDS } from '@/features/accounts/accountKinds';
 import { cardStatements } from '@/features/accounts/cardStatements';
 import { useAccountBalance, useAccounts, useCardSettings } from '@/features/accounts/hooks';
-import { settleTransfer } from '@/features/accounts/settle';
+import { settleAdjustment } from '@/features/accounts/settle';
 import { useCategories } from '@/features/categories/hooks';
 import { TransactionDayList } from '@/features/transactions/components/TransactionDayList';
 import { useAccountTransactions } from '@/features/transactions/hooks';
@@ -60,11 +60,8 @@ export default function AccountHistoryScreen() {
         )
       : null;
 
-  // 貸し借りの相手の残高を 0 にする振替（相手と、その相手との記録でよく使う口座を入れて記録の画面を開く）
-  const settle =
-    PERSON_KINDS.includes(account.kind) && !account.is_archived
-      ? settleTransfer(id, balance.data, transactions.data, accounts.data!)
-      : null;
+  // 貸し借りの相手の残高を 0 にする残高調整（自分の口座は動かさない）
+  const settle = PERSON_KINDS.includes(account.kind) && !account.is_archived ? settleAdjustment(balance.data) : null;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -89,7 +86,12 @@ export default function AccountHistoryScreen() {
             onPress={() =>
               router.push({
                 pathname: '/transaction/[id]',
-                params: { id: 'new', transferFrom: settle.from, transferTo: settle.to, amount: String(settle.amount) },
+                params: {
+                  id: 'new',
+                  adjustAccount: id,
+                  adjustDirection: settle.direction,
+                  amount: String(settle.amount),
+                },
               })
             }
           >

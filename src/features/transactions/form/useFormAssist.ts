@@ -33,6 +33,8 @@ type Options = {
   presetAccountId?: string;
   /** ホームの「足りなくなる口座」の振替の候補から開いたときの振替 */
   presetTransfer?: { from?: string; to?: string; amount?: string };
+  /** 貸し借りの相手の「0円にする」から開いたときの残高調整（相手の口座だけを動かす） */
+  presetAdjustment?: { account?: string; direction?: string; amount?: string };
 };
 
 /**
@@ -51,6 +53,7 @@ export function useFormAssist({
   setValue,
   presetAccountId,
   presetTransfer,
+  presetAdjustment,
 }: Options) {
   // カテゴリをどこから入れたか
   const categorySource = useRef<'user' | 'payee' | 'account' | null>(null);
@@ -70,6 +73,7 @@ export function useFormAssist({
   const preset = useRef<Account | null>(null);
   const initialized = useRef(false);
   const { from: transferFrom, to: transferTo, amount: transferAmount } = presetTransfer ?? {};
+  const { account: adjustAccount, direction: adjustDirection, amount: adjustAmount } = presetAdjustment ?? {};
   useEffect(() => {
     if (!isNew || !accounts || initialized.current) return;
     initialized.current = true;
@@ -88,8 +92,28 @@ export function useFormAssist({
         setValue('toAccountId', transferTo);
         if (transferAmount) setValue('amount', transferAmount);
       }
+      if (adjustAccount && (adjustDirection === 'increase' || adjustDirection === 'decrease')) {
+        setValue('type', 'adjustment');
+        setValue('adjustmentDirection', adjustDirection);
+        // 残高調整の口座の欄は1つ（fromAccountId）。保存のときに向きで振り分ける（normalizeAccounts）
+        setValue('fromAccountId', adjustAccount);
+        setValue('toAccountId', null);
+        if (adjustAmount) setValue('amount', adjustAmount);
+      }
     });
-  }, [isNew, accounts, presetAccountId, transferFrom, transferTo, transferAmount, getValues, setValue]);
+  }, [
+    isNew,
+    accounts,
+    presetAccountId,
+    transferFrom,
+    transferTo,
+    transferAmount,
+    adjustAccount,
+    adjustDirection,
+    adjustAmount,
+    getValues,
+    setValue,
+  ]);
 
   /** 種類を変える。カテゴリの種類が変わるならカテゴリを外し、新規ならその種類で前回使った口座を入れ直す */
   const changeType = (next: TransactionType) => {

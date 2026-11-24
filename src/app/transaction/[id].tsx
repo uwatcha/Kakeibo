@@ -84,6 +84,8 @@ export default function TransactionEditScreen() {
     transferFrom?: string;
     transferTo?: string;
     amount?: string;
+    adjustAccount?: string;
+    adjustDirection?: string;
   }>();
   const { id } = params;
   const isNew = id === 'new';
@@ -144,6 +146,7 @@ export default function TransactionEditScreen() {
     setValue,
     presetAccountId: params.accountId,
     presetTransfer: { from: params.transferFrom, to: params.transferTo, amount: params.amount },
+    presetAdjustment: { account: params.adjustAccount, direction: params.adjustDirection, amount: params.amount },
   });
 
   // 編集: 保存済みの記録をフォームに入れる
