@@ -130,6 +130,8 @@ function useInvalidateAfterWrite() {
       queryClient.invalidateQueries({ queryKey: transactionKeys.all }),
       queryClient.invalidateQueries({ queryKey: accountKeys.all }),
       queryClient.invalidateQueries({ queryKey: ['reports'] }),
+      // 記録の確認（自動で追加・内容の入力など）の件数も変わる
+      queryClient.invalidateQueries({ queryKey: ['emailImport'] }),
     ]);
 }
 

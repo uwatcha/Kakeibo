@@ -185,7 +185,9 @@ export default function TransactionEditScreen() {
       } else {
         // 支払いから分けた立て替えを、ほかの種類に変えたら、元の支払いとのつながりを外す
         const unsplit = transaction.data?.split_from_id && values.type !== 'advance' ? { split_from_id: null } : {};
-        await update.mutateAsync({ id, values: { ...row, ...unsplit } });
+        // 自動で追加した記録は、開いて保存したら確認したとみなす（2026-11-24 改善要望）
+        const reviewed = needsReview ? { auto_reviewed: true } : {};
+        await update.mutateAsync({ id, values: { ...row, ...unsplit, ...reviewed } });
       }
       // 内訳の立て替えの行は、別の立て替えの記録にする（支払いでなくなった・行を消したら、作ってあったものを消す）
       const advances = advanceItems(values).map((a) => ({ id: a.id, ...advanceRow(row, savedId, a) }));
@@ -208,6 +210,9 @@ export default function TransactionEditScreen() {
       // Snackbar で知らせる
     }
   };
+
+  /** メール・写真から自動で追加して、まだ確認していない記録（記録の確認の「自動で追加」に出ているもの） */
+  const needsReview = !!transaction.data?.auto_source && !transaction.data.auto_reviewed;
 
   const onConfirm = async () => {
     try {
@@ -445,7 +450,7 @@ export default function TransactionEditScreen() {
           loading={isSubmitting}
           disabled={saving}
         >
-          保存
+          {needsReview ? '確認して保存' : '保存'}
         </Button>
       </KeyboardAwareScrollView>
 
