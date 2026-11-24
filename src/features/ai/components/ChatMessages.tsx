@@ -54,6 +54,9 @@ function RetryRow({ label, onCancel }: { label: string; onCancel: () => void }) 
   );
 }
 
+/** 一番下からこれ以内なら、一番下を見ているとみなす */
+const BOTTOM_SLACK = 80;
+
 const jpeg = (data: string) => ({ uri: `data:image/jpeg;base64,${data}` });
 
 /** 質問に添えた画像の小さな絵。押すと大きく出す */
@@ -89,7 +92,7 @@ function CopyButton({ text, role }: { text: string; role: 'user' | 'model' }) {
   );
 }
 
-/** AI 相談のやりとりの一覧。追加されたら一番下までスクロールする */
+/** AI 相談のやりとりの一覧。追加されたら一番下までスクロールする（上へ遡っている間は戻さない） */
 export function ChatMessages({
   items,
   header,
@@ -102,6 +105,12 @@ export function ChatMessages({
 }: Props) {
   const theme = useTheme();
   const listRef = useRef<FlatList<ChatItem>>(null);
+  /**
+   * 一番下までスクロールするのは、やりとりが増えたときと、一番下を見ているときだけ（2026-11-24: 高さが変わるたびに
+   * 下へ戻していたので、上へ遡ると、表示の外の吹き出しを描き直すたびに一番下に戻された）
+   */
+  const shownKey = useRef('');
+  const atBottom = useRef(true);
   // 大きく出している画像
   const [viewing, setViewing] = useState<string | null>(null);
   return (
@@ -116,7 +125,17 @@ export function ChatMessages({
             {header}
           </Text>
         }
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        onContentSizeChange={() => {
+          // 数と先頭のやりとりで見分ける（ほかの会話に切り替えたときも一番下へ）
+          const shown = `${items.length}:${items[0]?.id ?? ''}`;
+          if (shown === shownKey.current && !atBottom.current) return;
+          shownKey.current = shown;
+          listRef.current?.scrollToEnd({ animated: true });
+        }}
+        onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
+          atBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < BOTTOM_SLACK;
+        }}
+        scrollEventThrottle={100}
         renderItem={({ item }) => (
           <View>
             <Bubble role={item.role}>
