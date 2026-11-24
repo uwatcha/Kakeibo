@@ -23,10 +23,16 @@ const modeOf = (url: string | null): Mode => (url && /^kakeibo-quick:\/\/photo/.
 function useQuickUrl() {
   const [state, setState] = useState<{ mode: Mode; nonce: number } | null>(null);
   useEffect(() => {
-    Linking.getInitialURL().then((url) => setState({ mode: modeOf(url), nonce: Date.now() }));
+    Linking.getInitialURL().then((url) => {
+      // adb logcat の ReactNativeJS で動きを追うためのログ（URL は決まった2つだけ）
+      console.info(`[quick] initial ${modeOf(url)}`);
+      setState({ mode: modeOf(url), nonce: Date.now() });
+    });
     // アプリ本体の URL（kakeibo://）の知らせも届くので、ウィジェットの URL のときだけやり直す
     const subscription = Linking.addEventListener('url', ({ url }) => {
-      if (/^kakeibo-quick:/i.test(url)) setState({ mode: modeOf(url), nonce: Date.now() });
+      if (!/^kakeibo-quick:/i.test(url)) return;
+      console.info(`[quick] url ${modeOf(url)}`);
+      setState({ mode: modeOf(url), nonce: Date.now() });
     });
     return () => subscription.remove();
   }, []);

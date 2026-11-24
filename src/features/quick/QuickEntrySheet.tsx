@@ -32,7 +32,11 @@ import { RADIUS, SPACING } from '@/theme';
 const OTHER = 'other';
 
 /** この画面を閉じてホーム画面に戻る（QuickAddActivity が閉じる） */
-export const closeQuick = () => BackHandler.exitApp();
+export const closeQuick = () => {
+  // adb logcat の ReactNativeJS で動きを追うためのログ
+  console.info('[quick] close');
+  BackHandler.exitApp();
+};
 
 /**
  * ウィジェットの「記録」から出す、ホーム画面の上の入力シート（要件 REQ-15）。
@@ -166,9 +170,9 @@ export function QuickEntrySheet() {
                 <SegmentedButtons
                   value={value}
                   onValueChange={(v) => {
-                  Keyboard.dismiss();
-                  onChange(v);
-                }}
+                    Keyboard.dismiss();
+                    onChange(v);
+                  }}
                   buttons={[
                     { value: 'increase', label: '残高を増やす', icon: 'plus' },
                     { value: 'decrease', label: '残高を減らす', icon: 'minus' },

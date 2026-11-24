@@ -26,6 +26,9 @@ const PERMISSION_TIMEOUT_MS = 8000;
 
 class CameraNotOpened extends Error {}
 
+/** 実機・エミュレーターで動きを追うためのログ（adb logcat の ReactNativeJS に出る。個人の値は出さない） */
+const trace = (step: string) => console.info(`[quick-photo] ${step}`);
+
 /** 決まった時間で返ってこなければ失敗にする */
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -156,13 +159,16 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
     };
     (async () => {
       // 許可の確認も画面に結び付いているので、前面に出てから
+      trace(`start ${AppState.currentState}`);
       await waitUntilActive();
+      trace('active');
       let allowed: boolean;
       try {
         allowed = await cameraAllowed();
       } catch (e) {
         return finish(`${e instanceof Error ? e.message : String(e)}。もう一度ウィジェットを押してください`);
       }
+      trace(`allowed ${allowed}`);
       if (!allowed) return finish('カメラを使う許可がありません');
       setPhase({ kind: 'camera' });
       let shot: ImagePicker.ImagePickerResult;
@@ -172,8 +178,11 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
         if (stale()) return;
         const launch = launchCamera();
         previousLaunch.current = launch.catch(() => undefined);
+        trace('launch');
         shot = await launch;
+        trace(`result canceled=${shot.canceled} stale=${stale()}`);
       } catch (e) {
+        trace(`launch error ${e instanceof Error ? e.message : String(e)}`);
         return finish(
           `カメラを開けませんでした。もう一度ウィジェットを押してください（${e instanceof Error ? e.message : String(e)}）`,
         );
