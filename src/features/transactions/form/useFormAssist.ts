@@ -35,6 +35,8 @@ type Options = {
   presetTransfer?: { from?: string; to?: string; amount?: string };
   /** 貸し借りの相手の「0円にする」から開いたときの残高調整（相手の口座だけを動かす） */
   presetAdjustment?: { account?: string; direction?: string; amount?: string };
+  /** 明細の照らし合わせの「記録にない」行から開いたときの日付・金額・内容（口座は presetAccountId、向きは out = 出金） */
+  presetRecord?: { date?: string; amount?: string; payee?: string; direction?: string };
 };
 
 /**
@@ -54,6 +56,7 @@ export function useFormAssist({
   presetAccountId,
   presetTransfer,
   presetAdjustment,
+  presetRecord,
 }: Options) {
   // カテゴリをどこから入れたか
   const categorySource = useRef<'user' | 'payee' | 'account' | null>(null);
@@ -74,6 +77,7 @@ export function useFormAssist({
   const initialized = useRef(false);
   const { from: transferFrom, to: transferTo, amount: transferAmount } = presetTransfer ?? {};
   const { account: adjustAccount, direction: adjustDirection, amount: adjustAmount } = presetAdjustment ?? {};
+  const { date: recordDate, amount: recordAmount, payee: recordPayee, direction: recordDirection } = presetRecord ?? {};
   useEffect(() => {
     if (!isNew || !accounts || initialized.current) return;
     initialized.current = true;
@@ -100,6 +104,16 @@ export function useFormAssist({
         setValue('toAccountId', null);
         if (adjustAmount) setValue('amount', adjustAmount);
       }
+      // 明細にあって記録にない行: 出金なら支払い、入金なら収入として、明細の口座・日付・金額・内容を入れる
+      if (preset.current && (recordDirection === 'out' || recordDirection === 'in')) {
+        const next = recordDirection === 'out' ? 'expense' : 'income';
+        setValue('type', next);
+        setValue(next === 'expense' ? 'fromAccountId' : 'toAccountId', preset.current.id);
+        setValue(next === 'expense' ? 'toAccountId' : 'fromAccountId', null);
+        if (recordDate) setValue('date', recordDate);
+        if (recordAmount) setValue('amount', recordAmount);
+        if (recordPayee) setValue('payee', recordPayee);
+      }
     });
   }, [
     isNew,
@@ -111,6 +125,10 @@ export function useFormAssist({
     adjustAccount,
     adjustDirection,
     adjustAmount,
+    recordDate,
+    recordAmount,
+    recordPayee,
+    recordDirection,
     getValues,
     setValue,
   ]);

@@ -10,7 +10,13 @@ export type UnnotifiedImport = {
   raw_payee: string | null;
   subject: string | null;
   transaction_id: string | null;
-  transaction: { payee: string | null; amount: number; type: string; needs_payee: boolean } | null;
+  transaction: {
+    payee: string | null;
+    amount: number;
+    type: string;
+    needs_payee: boolean;
+    account_guessed?: boolean;
+  } | null;
 };
 
 /** クレジットカードの速報（店名なし）で入れた記録の、通知での呼び名 */
@@ -24,7 +30,8 @@ function unnamedNotification(i: UnnotifiedImport, what: string, transactionId: s
   const source = i.kind === 'photo' ? '写真' : 'メール';
   const raw = i.raw_payee?.trim();
   return {
-    title: i.transaction?.type === 'income' ? '内容が分からない収入を記録しました' : '内容が分からない支払いを記録しました',
+    title:
+      i.transaction?.type === 'income' ? '内容が分からない収入を記録しました' : '内容が分からない支払いを記録しました',
     body: `${what}。${source}から店名・名目を読み取れませんでした${raw ? `（${source}の名目: ${raw}）` : ''}。押して内容を入れてください`,
     data: { transactionId },
   };
@@ -49,7 +56,9 @@ function billNotification(i: UnnotifiedImport): { title: string; body: string; d
   }
   return {
     title: `${name}の請求額が確定しました${month}`,
-    body: i.transaction_id ? 'メールのリンクから金額を確かめて、予定の金額を直してください' : 'メールのリンクから金額を確かめてください',
+    body: i.transaction_id
+      ? 'メールのリンクから金額を確かめて、予定の金額を直してください'
+      : 'メールのリンクから金額を確かめてください',
     data,
   };
 }
@@ -72,6 +81,14 @@ export function importNotification(
     case 'recorded':
       if (!i.transaction_id) return null;
       if (i.transaction?.needs_payee && i.kind !== 'card_quick') return unnamedNotification(i, what, i.transaction_id);
+      // 支払い方法が分からず現金にした記録は、開いて口座を確かめてもらう（2026-11-24 改善要望）
+      if (i.transaction?.account_guessed) {
+        return {
+          title: '支払いを記録しました（口座を確かめてください）',
+          body: `${what}・支払い方法が分からないので現金にしました`,
+          data: { transactionId: i.transaction_id },
+        };
+      }
       return {
         title: i.transaction?.type === 'income' ? '収入を記録しました' : '支払いを記録しました',
         body: what,

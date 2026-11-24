@@ -63,6 +63,8 @@ export function BackgroundRunner() {
       router.push({ pathname: '/accounts/[id]', params: { id: data.accountId } });
     } else if (data.screen === 'accounts') {
       router.push('/accounts');
+    } else if (data.screen === 'reconcile') {
+      router.push('/reconcile');
     }
     Notifications.clearLastNotificationResponse();
   }, [session, response, queryClient]);

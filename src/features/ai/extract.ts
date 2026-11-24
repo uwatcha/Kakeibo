@@ -38,13 +38,19 @@ export type ImportDraft = {
   duplicateOf?: string | null;
   /** レシートの品目の内訳（支払いで2品目以上のときだけ。調整の行は保存のときに合計との差で作る。2026-11-02） */
   items?: TransactionItem[];
+  /**
+   * ポイントで払った分（2026-11-24 改善要望: 「ポイント＋残高」の支払いを全額で記録して、残高がずれた）。
+   * あれば amount は口座から出た額（合計 − ポイント）、listPrice は本来の金額（合計）
+   */
+  pointsUsed?: number;
+  listPrice?: number;
 };
 
 export type PhotoSource = 'receipt' | 'screen' | 'price' | 'other';
 
 type AccountLike = { id: string; kind: AccountKind; isArchived: boolean; isReserved?: boolean };
 
-/** 読み取りの指示。口座は置き換えた名前で渡し、カテゴリは名前（大分類 / 小分類）で選ばせる */
+/** 読み取りの指示。口座は名前で渡し（貸し借りの相手は置き換える）、カテゴリは名前（大分類 / 小分類）で選ばせる */
 export function extractPrompt(
   today: string,
   accounts: readonly AccountLike[],
@@ -64,7 +70,7 @@ export function extractPrompt(
     'あなたは家計簿の入力係です。添付の写真（レシート・明細・値段の表示など）やファイル（CSV・JSON・テキスト）から、お金の記録を読み取ってください。',
     `今日は ${today} です。年が書かれていない日付は、今日より後にならない一番近い年にしてください。`,
     '次の形の JSON の配列だけを返してください。読み取れる記録がなければ空の配列 [] を返す。',
-    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull","from_name":"書かれている出金元の名前かnull","to_name":"書かれている入金先の名前かnull","items":[{"name":"品名","amount":整数の円,"category":"カテゴリかnull"}]}]',
+    '[{"date":"YYYY-MM-DD","type":"expense|income|transfer","amount":整数の円,"payee":"店名や内容","category":"下の一覧の名前かnull","from":"下の口座の名前かnull","to":"下の口座の名前かnull","source":"receipt|screen|price|other","payment":"書かれている支払い方法かnull","from_name":"書かれている出金元の名前かnull","to_name":"書かれている入金先の名前かnull","points":ポイントで払った額の整数の円かnull,"items":[{"name":"品名","amount":整数の円,"category":"カテゴリかnull"}]}]',
     '- expense は支払い（from が払った口座）、income は収入（to が入った口座）、transfer は自分の口座どうしの移動（from と to）',
     '- レシート1枚は合計額（実際に払った額）で1件にする。明細やCSVは1行1件',
     '- レシートに品目が2つ以上書かれていれば、items に品目ごとの内訳を入れる: [{"name":"品名","amount":税込の整数の円,"category":"下の一覧の名前かnull"}]。品目1つずつ、下の「カテゴリの判断基準」に沿って品名からカテゴリを決める（同じレシートでも品目ごとに違ってよい。店の種類やレシート全体で決めない）。品目ごとの割引（「20円引」など）はその品目の金額から引く。合計にかかる割引・ポイント値引き・消費税の端数のずれは items に入れない（合計との差は家計簿の側で「割引・調整」にする）。品目が1つ・読めないなら items は省く',
@@ -72,9 +78,10 @@ export function extractPrompt(
     '- レジ袋（有料のレジ袋代）は品目に入れない。国が有料にしたもので、買い物として買ったものではないので、合計との差として家計簿の側で「割引・調整」に入る（2026-11-02 ユーザーの指定）',
     '- 品名の頭や後ろの印（「*」「※」「軽」など）は取り、略した品名は分かる範囲で読みやすくする（例: 「昔ながらのコロッケ（肉」→「昔ながらのコロッケ（肉）」）',
     '- 返金・キャンセルなど符号がマイナスの行は、記録にしない',
+    '- points: ポイント（PayPay ポイント・楽天ポイント・T ポイントなど）で一部を払ったと金額が書かれていれば、その額。amount はポイントの分も含めた合計のまま。ポイントで払った額が書かれていなければ null（「ポイント＋残高」とだけあって額が分からないときも null）。ポイントがたまった（付与）額は入れない',
     '- 文や表に「内容」「摘要」などとして書かれていれば、payee はその文字をそのまま使う（言い換えたり、口座の名前を足したりしない）',
     '- 口座が分からなければ null',
-    '- from_name・to_name: 画像や文に書かれている、お金が出た口座・入った口座やサービスの名前をそのまま（例: 銀行名、電子マネー・ポイントの名前、証券口座、「NISA」）。チャージ・入金・振込の明細なら、明細の口座が出金元、チャージ先・振込先が入金先。下の「口座」の一覧の名前は置き換えた名前なので、ここには書かれている名前を入れる。どちらか分からないとき・候補が2つ以上あるときは null（「AまたはB」のようにしない）',
+    '- from_name・to_name: 画像や文に書かれている、お金が出た口座・入った口座やサービスの名前をそのまま（例: 銀行名、電子マネー・ポイントの名前、証券口座、「NISA」）。チャージ・入金・振込の明細なら、明細の口座が出金元、チャージ先・振込先が入金先。ここには、下の「口座」の一覧の名前ではなく、書かれている名前をそのまま入れる。どちらか分からないとき・候補が2つ以上あるときは null（「AまたはB」のようにしない）',
     '- source: レシートは receipt、セルフレジ・券売機などの決済完了の画面は screen、自販機などの値段の表示は price、それ以外（明細・CSV など）は other',
     '- payment: レシートや画面に書かれている支払い方法をそのまま（例: 「現金」「クレジット」「◯◯カード」「交通系IC Suica」「PayPay」）。現金のレシートでお預り・お釣りが書かれていれば「現金」。書かれていなければ null',
     '- 自販機などの値段の表示は、買った商品の値段を金額にし、内容は「自販機（商品名）」のようにする。日付は写真から分からなければ今日',
@@ -85,10 +92,10 @@ export function extractPrompt(
       .join('、')}`,
     `支出のカテゴリ: ${names('expense')}`,
     `収入のカテゴリ: ${names('income')}`,
-    ...categoryGuideLines(
-      usable.filter((c) => c.kind === 'expense').map((c) => categoryLabel(c.id, usable) ?? c.name),
-    ),
-    ...(userRules?.trim() ? ['# 自分で決めたルール（ほかの指示と食い違うときは、こちらを優先する）', userRules.trim()] : []),
+    ...categoryGuideLines(usable.filter((c) => c.kind === 'expense').map((c) => categoryLabel(c.id, usable) ?? c.name)),
+    ...(userRules?.trim()
+      ? ['# 自分で決めたルール（ほかの指示と食い違うときは、こちらを優先する）', userRules.trim()]
+      : []),
   ].join('\n');
 }
 
@@ -119,10 +126,14 @@ export function toDrafts(
     const account = (v: unknown) => (typeof v === 'string' ? (accountByAlias.get(v) ?? null) : null);
     const category = typeof r.category === 'string' ? (categoryByName.get(r.category) ?? null) : null;
     // 品目の内訳（支払いで、品目が2つ以上のときだけ。品目の割引はその品目の金額から引いてある）
+    const paid =
+      type === 'expense' && typeof r.points === 'number' && r.points > 0 && r.points < amount
+        ? amount - Math.round(r.points)
+        : amount;
     const items =
       type === 'expense' && Array.isArray(r.items)
         ? toItemRows(
-            amount,
+            paid,
             (r.items as Record<string, unknown>[])
               .filter((it) => it && typeof it.amount === 'number')
               .map((it, n) => ({
@@ -138,7 +149,9 @@ export function toDrafts(
       key: String(i),
       date,
       type,
-      amount,
+      // ポイントで一部を払ったら、口座から出た額（品目の合計との差は「割引・調整」になる）
+      amount: paid,
+      ...(paid !== amount && { pointsUsed: amount - paid, listPrice: amount }),
       payee: typeof r.payee === 'string' && r.payee.trim() !== '' ? r.payee.trim().slice(0, 100) : null,
       // 内訳があれば、いちばん金額の大きい品目のカテゴリを記録のカテゴリにする
       categoryId: type === 'transfer' ? null : hasItems ? (mainCategory(items) ?? category) : category,
@@ -224,7 +237,9 @@ export function assignNamedAccounts(
     }
     // 振替で同じ口座どうしになったら、入金先は決めない
     if (d.type === 'transfer' && fromAccountId && fromAccountId === toAccountId) toAccountId = d.toAccountId;
-    return fromAccountId === d.fromAccountId && toAccountId === d.toAccountId ? d : { ...d, fromAccountId, toAccountId };
+    return fromAccountId === d.fromAccountId && toAccountId === d.toAccountId
+      ? d
+      : { ...d, fromAccountId, toAccountId };
   });
 }
 
@@ -258,6 +273,8 @@ export function draftToRow(d: ImportDraft, fallback: FallbackAccounts, today: st
     from_account_id: fromAccountId,
     to_account_id: toAccountId,
     is_confirmed: isConfirmedOnSave(d.date, today),
+    list_price: d.listPrice ?? null,
+    points_used: d.pointsUsed ?? null,
     ...(d.type === 'expense' && d.items?.length ? { items: d.items } : {}),
   };
 }

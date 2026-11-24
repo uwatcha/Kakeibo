@@ -703,6 +703,7 @@ export type Database = {
       }
       transactions: {
         Row: {
+          account_guessed: boolean
           amount: number
           auto_reviewed: boolean
           auto_salary: boolean
@@ -730,6 +731,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_guessed?: boolean
           amount: number
           auto_reviewed?: boolean
           auto_salary?: boolean
@@ -757,6 +759,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          account_guessed?: boolean
           amount?: number
           auto_reviewed?: boolean
           auto_salary?: boolean

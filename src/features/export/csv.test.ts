@@ -27,6 +27,7 @@ describe('transactionsToCsv', () => {
       auto_salary: false,
       auto_source: null,
       auto_reviewed: true,
+      account_guessed: false,
       needs_payee: false,
       raw_payee: null,
       statement_checked: false,

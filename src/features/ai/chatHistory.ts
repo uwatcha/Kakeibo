@@ -20,7 +20,10 @@ export function toAiMessages(history: readonly HistoryItem[]): AiMessage[] {
     const sent = isLast ? images : images.slice(0, Math.max(0, left));
     if (!isLast) left -= sent.length;
     const dropped = images.length - sent.length;
-    const text = dropped > 0 ? `${m.sent}\n（ほかに画像が${dropped}枚ありましたが、古いので省きました）` : m.sent;
+    const text =
+      dropped > 0
+        ? `${m.sent}\n（ほかに画像が${dropped}枚ありましたが、古いので省きました。その中身は今は見えません）`
+        : m.sent;
     out.unshift({
       role: m.role,
       text,

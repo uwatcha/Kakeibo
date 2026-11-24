@@ -33,11 +33,21 @@ export default function AccountHistoryScreen() {
   const [view, setView] = useState<'history' | 'statements'>('history');
 
   const headerRight = () => (
-    <IconButton
-      icon="pencil"
-      accessibilityLabel="口座を編集"
-      onPress={() => router.push({ pathname: '/accounts/[id]', params: { id } })}
-    />
+    <View style={styles.headerButtons}>
+      {/* 貸し借りの相手には明細がないので出さない */}
+      {account && !PERSON_KINDS.includes(account.kind) && (
+        <IconButton
+          icon="file-compare"
+          accessibilityLabel="明細と照らし合わせる"
+          onPress={() => router.push({ pathname: '/reconcile', params: { accountId: id } })}
+        />
+      )}
+      <IconButton
+        icon="pencil"
+        accessibilityLabel="口座を編集"
+        onPress={() => router.push({ pathname: '/accounts/[id]', params: { id } })}
+      />
+    </View>
   );
 
   if (!account || !categories.data || balance.data === undefined || !transactions.data) {
@@ -171,6 +181,7 @@ export default function AccountHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerButtons: { flexDirection: 'row' },
   container: { flex: 1 },
   summary: { marginHorizontal: SPACING.screen, marginTop: 4, paddingHorizontal: 20, paddingVertical: 14 },
   bold: { fontWeight: '700' },

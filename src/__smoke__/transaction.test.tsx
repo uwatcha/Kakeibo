@@ -83,6 +83,7 @@ const base = {
   is_confirmed: true,
   auto_source: 'email',
   auto_reviewed: false,
+  account_guessed: false,
   needs_payee: false,
   raw_payee: 'ラーメン',
   auto_salary: false,

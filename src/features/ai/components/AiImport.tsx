@@ -23,7 +23,7 @@ import {
   toDrafts,
 } from '../extract';
 import { clearImportJob, type ImportJob, loadImportJob, saveImportJob } from '../importJob';
-import { defaultCashAccount, matchNamedAccount, matchPaymentAccount, matchStoreAccount } from '../payment';
+import { matchNamedAccount, matchPaymentAccount, matchStoreAccount } from '../payment';
 import { useAttachments } from '../useAttachments';
 import { ImportReview } from './ImportReview';
 
@@ -81,13 +81,13 @@ export function AiImport({ today, accounts, categories, aliases, balances, reque
       // 重複は前後1日まで見るので、その分だけ広く読む
       const dates = found.map((d) => d.date).sort();
       const existing = await fetchDateAmountsBetween(addDays(dates[0], -1), addDays(dates[dates.length - 1], 1));
-      // 支払いの口座: 書かれた支払い方法から決め、分からないセルフレジの画面・自販機は現金とみなす
-      const cash = defaultCashAccount(accounts);
+      // 支払いの口座: 書かれた支払い方法から決める。分からなければ現金とみなさず、確認の欄で選んでもらう
+      // （2026-11-24 改善要望: 現金と決めつけて、財布の残高がずれた）
       const marked = assignNamedAccounts(
         assignPaymentAccounts(
           markDuplicates(found, existing),
           (payment) => matchPaymentAccount(payment, accounts),
-          cash,
+          null,
           (payee) => matchStoreAccount(payee, accounts),
         ),
         // 振替・収入の口座: 書かれた出金元・入金先の名前から

@@ -48,6 +48,37 @@ describe('toDrafts', () => {
   it('配列でなければ空', () => {
     expect(toDrafts({ records: 1 }, accounts, categories, aliases)).toEqual([]);
   });
+
+  it('ポイントで一部を払った支払いは、口座から出た額を金額にし、本来の金額とポイントを残す', () => {
+    const [draft] = toDrafts(
+      [{ date: '2026-11-16', type: 'expense', amount: 100, points: 40, payee: '自販機' }],
+      accounts,
+      categories,
+      aliases,
+    );
+    expect(draft).toMatchObject({ amount: 60, pointsUsed: 40, listPrice: 100 });
+    expect(draftToRow(draft, { payFrom: 'card', payTo: null }, '2026-11-24')).toMatchObject({
+      amount: 60,
+      list_price: 100,
+      points_used: 40,
+    });
+  });
+
+  it('ポイントが合計以上・収入のポイントは使わない', () => {
+    const drafts = toDrafts(
+      [
+        { date: '2026-11-16', type: 'expense', amount: 100, points: 100 },
+        { date: '2026-11-16', type: 'income', amount: 100, points: 10, to: '銀行A' },
+      ],
+      accounts,
+      categories,
+      aliases,
+    );
+    expect(drafts.map((d) => [d.amount, d.pointsUsed])).toEqual([
+      [100, undefined],
+      [100, undefined],
+    ]);
+  });
 });
 
 const blank = { duplicate: false, source: 'other' as const, payment: null, note: null };

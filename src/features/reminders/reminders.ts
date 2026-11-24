@@ -10,10 +10,10 @@ import { nextOccurrences } from './occurrences';
  * 設定はこの端末に置き（通知は端末で出すので）、先の回を端末の予約通知に入れておく（アプリを閉じていても届く）。
  * アプリを開いた・設定を変えたときに予約し直す
  */
-export type ReminderKind = 'auto' | 'unconfirmed' | 'balance' | 'adjust';
+export type ReminderKind = 'auto' | 'unconfirmed' | 'balance' | 'adjust' | 'reconcile';
 
 /** 通知を押したときに開くもの（BackgroundRunner が見る） */
-type ReminderTarget = { tab: string } | { screen: 'home' | 'accounts' };
+type ReminderTarget = { tab: string } | { screen: 'home' | 'accounts' | 'reconcile' };
 
 export const REMINDERS: { kind: ReminderKind; label: string; body: string; target: ReminderTarget }[] = [
   {
@@ -39,6 +39,12 @@ export const REMINDERS: { kind: ReminderKind; label: string; body: string; targe
     label: '残高のズレの修正',
     body: '残高がずれている口座は、口座の画面で今の残高に直しましょう',
     target: { screen: 'accounts' },
+  },
+  {
+    kind: 'reconcile',
+    label: '明細の照らし合わせ',
+    body: '通帳や決済アプリの取引履歴の画面を読み取って、記録の漏れ・重複を確かめましょう',
+    target: { screen: 'reconcile' },
   },
 ];
 

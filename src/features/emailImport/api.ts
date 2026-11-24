@@ -158,11 +158,21 @@ export async function markReviewed(ids: readonly string[]) {
 
 /** 通知していないもの（バックグラウンドで通知する）。記録の内容と金額も */
 export async function fetchUnnotified(): Promise<
-  (EmailImport & { transaction: { payee: string | null; amount: number; type: string; needs_payee: boolean } | null })[]
+  (EmailImport & {
+    transaction: {
+      payee: string | null;
+      amount: number;
+      type: string;
+      needs_payee: boolean;
+      account_guessed: boolean;
+    } | null;
+  })[]
 > {
   const { data, error } = await supabase
     .from('email_imports')
-    .select('*, transaction:transactions!email_imports_transaction_id_fkey(payee, amount, type, needs_payee)')
+    .select(
+      '*, transaction:transactions!email_imports_transaction_id_fkey(payee, amount, type, needs_payee, account_guessed)',
+    )
     .eq('notified', false)
     .neq('status', 'new')
     .neq('status', 'pending_ai')
@@ -241,7 +251,9 @@ export async function fetchNotOnStatement(): Promise<Transaction[]> {
     .select('duplicate_of, transaction_id')
     .gte('date', addDays(from, -STATEMENT_GRACE_DAYS));
   if (importError) throw importError;
-  const matched = new Set(imports.flatMap((i) => [i.duplicate_of, i.transaction_id]).filter((id): id is string => !!id));
+  const matched = new Set(
+    imports.flatMap((i) => [i.duplicate_of, i.transaction_id]).filter((id): id is string => !!id),
+  );
   return notOnStatement(data, watched, matched);
 }
 

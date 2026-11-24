@@ -53,20 +53,13 @@ describe('anonymize', () => {
   const context = buildContext(source, aliases);
 
   it('口座・相手・収入元・内容・メモの中身は材料に出さない', () => {
-    for (const secret of [
-      MAIL_NAMES.bank,
-      SAMPLE.friend,
-      '父',
-      SAMPLE.employer,
-      'セブンイレブン',
-      `${SAMPLE.friend}と行った`,
-    ]) {
+    for (const secret of [SAMPLE.friend, '父', SAMPLE.employer, 'セブンイレブン', `${SAMPLE.friend}と行った`]) {
       expect(context).not.toContain(secret);
     }
   });
 
-  it('置き換え後の名前で材料を作る（同じ内容は同じ名前）', () => {
-    expect(context).toContain('銀行A（銀行・実質残高に含む）: 31,000円');
+  it('置き換え後の名前で材料を作る（同じ内容は同じ名前。自分の口座は名前のまま）', () => {
+    expect(context).toContain(`${MAIL_NAMES.bank}（銀行・実質残高に含む）: 31,000円`);
     expect(context).toContain('相手A');
     expect(context).toContain('相手B');
     expect(context).toContain('収入元A');
@@ -77,8 +70,8 @@ describe('anonymize', () => {
 
   it('質問の中の名前を置き換え、返事の中の名前を元に戻す', () => {
     const masked = maskText(`${SAMPLE.friend}への貸しはいつ返ってくる？${MAIL_NAMES.bank}は足りる？`, aliases);
-    expect(masked).toBe('相手Aへの貸しはいつ返ってくる？銀行Aは足りる？');
-    expect(restoreText('相手Aから9,000円が戻る予定です。銀行Aは10/27に不足します', aliases)).toBe(
+    expect(masked).toBe(`相手Aへの貸しはいつ返ってくる？${MAIL_NAMES.bank}は足りる？`);
+    expect(restoreText(`相手Aから9,000円が戻る予定です。${MAIL_NAMES.bank}は10/27に不足します`, aliases)).toBe(
       `${SAMPLE.friend}から9,000円が戻る予定です。${MAIL_NAMES.bank}は10/27に不足します`,
     );
   });

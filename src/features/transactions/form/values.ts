@@ -179,5 +179,7 @@ export function toTransactionRow(values: FormValues, categories: readonly Catego
     employer_id: values.type === 'income' && isSalaryCategory(values.categoryId, categories) ? values.employerId : null,
     related_transaction_id: values.type === 'advance' ? values.relatedTransactionId : null,
     is_confirmed: isConfirmedOnSave(values.date, today),
+    // 記録の画面で保存したら、口座は人が確かめたもの
+    account_guessed: false,
   } satisfies Omit<TransactionInsert, 'user_id'>;
 }

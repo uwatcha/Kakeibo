@@ -27,7 +27,6 @@ import { supabase } from '@/lib/supabase';
 import { SPACING } from '@/theme';
 import { useEmailImportSettings } from '@/features/emailImport/hooks';
 
-
 export default function SettingsScreen() {
   const theme = useTheme();
   const { session } = useAuth();
@@ -133,6 +132,7 @@ export default function SettingsScreen() {
           {/* 端末の写真を見る機能なので、Web 版（PC）では出さない */}
           {Platform.OS !== 'web' && navItem('写真からの記録', 'image-search-outline', '/photo-import')}
           {/* 通知は端末で出すので、Web 版（PC）では出さない */}
+          {navItem('明細の照らし合わせ', 'file-compare', '/reconcile')}
           {Platform.OS !== 'web' && navItem('確認の通知', 'bell-ring-outline', '/reminders')}
         </SectionCard>
         <SectionCard title="データ">

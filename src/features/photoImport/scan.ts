@@ -3,7 +3,13 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import { fetchAccountBalances, fetchAccounts } from '@/features/accounts/api';
 import { buildAliases } from '@/features/ai/anonymize';
 import { AiError, extractRecords } from '@/features/ai/api';
-import { assignPaymentAccounts, extractPrompt, type ImportDraft, markDuplicates, toDrafts } from '@/features/ai/extract';
+import {
+  assignPaymentAccounts,
+  extractPrompt,
+  type ImportDraft,
+  markDuplicates,
+  toDrafts,
+} from '@/features/ai/extract';
 import { toJpegBase64 } from '@/features/ai/image';
 import { defaultCashAccount, matchPaymentAccount, matchStoreAccount } from '@/features/ai/payment';
 import { fetchCategories } from '@/features/categories/api';
@@ -164,12 +170,16 @@ export async function recordPhoto(
         .insert({
           type: 'expense',
           amount: draft.amount,
+          list_price: draft.listPrice ?? null,
+          points_used: draft.pointsUsed ?? null,
           date: draft.date,
           payee: draft.payee,
           category_id: draft.categoryId,
           from_account_id: draft.fromAccountId,
           // 店名が読めなかったら「内容の入力」に出し、通知で知らせる（2026-11-24 改善要望）
           needs_payee: !draft.payee?.trim(),
+          // 支払い方法が分からず現金にしたものは、記録の確認で「口座を確かめてください」と出す（2026-11-24 改善要望）
+          account_guessed: draft.note === '現金と判断',
           auto_source: 'photo',
           auto_reviewed: false,
           is_confirmed: isConfirmedOnSave(draft.date, today),

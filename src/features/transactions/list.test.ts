@@ -18,6 +18,7 @@ function txn(overrides: Partial<Transaction>): Transaction {
     split_from_id: null,
     auto_source: null,
     auto_reviewed: true,
+    account_guessed: false,
     needs_payee: false,
     raw_payee: null,
     from_account_id: 'wallet',

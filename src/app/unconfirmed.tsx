@@ -93,7 +93,15 @@ export default function ReviewScreen() {
     <ListRow
       key={t.id}
       title={t.payee || TRANSACTION_RULES[t.type].label}
-      subtitle={`${formatDay(t.date)}・${describeAccounts(t, accounts.data!)}`}
+      subtitle={
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          {`${formatDay(t.date)}・${describeAccounts(t, accounts.data!)}`}
+          {/* 写真で支払い方法が分からず現金にしたもの */}
+          {t.account_guessed && !t.auto_reviewed && (
+            <Text style={{ color: theme.colors.error }}>・口座を確かめてください</Text>
+          )}
+        </Text>
+      }
       icon={TRANSACTION_RULES[t.type].icon}
       onPress={() => openTransaction(t.id)}
       right={

@@ -84,6 +84,7 @@ function RootNavigator() {
         <Stack.Screen name="auto-rules" options={{ headerShown: true, title: '自動入力のルール' }} />
         <Stack.Screen name="photo-import" options={{ headerShown: true, title: '写真からの記録' }} />
         <Stack.Screen name="reminders" options={{ headerShown: true, title: '確認の通知' }} />
+        <Stack.Screen name="reconcile" options={{ headerShown: true, title: '明細の照らし合わせ' }} />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="(auth)" />
