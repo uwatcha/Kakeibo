@@ -1,8 +1,17 @@
-import { StyleSheet } from 'react-native';
-import Markdown from 'react-native-markdown-display';
+import { StyleSheet, Text } from 'react-native';
+import Markdown, { type RenderRules } from 'react-native-markdown-display';
 import { useTheme } from 'react-native-paper';
 
 import { RADIUS } from '@/theme';
+
+/** 文を長押しで選んでコピーできるようにする（2026-11-24 ユーザーの要望。段落・見出し・箇条書きの1行ごとに選べる） */
+const rules: RenderRules = {
+  textgroup: (node, children, _parent, styles) => (
+    <Text key={node.key} style={styles.textgroup} selectable>
+      {children}
+    </Text>
+  ),
+};
 
 /** AI の返事を Markdown（見出し・太字・箇条書き・表・コード）として表示する。色と大きさはアプリのテーマに合わせる */
 export function MarkdownText({ children }: { children: string }) {
@@ -45,5 +54,9 @@ export function MarkdownText({ children }: { children: string }) {
     hr: { backgroundColor: theme.colors.outlineVariant, marginVertical: 8 },
     link: { color: theme.colors.primary },
   });
-  return <Markdown style={style}>{children}</Markdown>;
+  return (
+    <Markdown style={style} rules={rules}>
+      {children}
+    </Markdown>
+  );
 }
