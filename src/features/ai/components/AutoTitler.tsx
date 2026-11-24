@@ -31,7 +31,8 @@ export function AutoTitler({ conversations, aliases }: { conversations: readonly
           const { messages } = await fetchConversation(c.id);
           if (messages.length === 0) continue;
           const { title } = await generateTitle(
-            messages.map((m) => ({ role: m.role, text: m.sent })),
+            // 前に送った置き換えではなく、今の置き換えで置き換え直す
+            messages.map((m) => ({ role: m.role, text: maskText(m.shown, aliases) })),
             c.title_generated_at ? maskText(c.title, aliases) : undefined,
           );
           if (title) await saveGeneratedTitle(c.id, restoreText(title, aliases));

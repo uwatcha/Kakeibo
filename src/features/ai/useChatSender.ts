@@ -6,7 +6,7 @@ import { startBackgroundTask } from '@/features/background/backgroundTask';
 
 import { type Aliases, restoreText } from './anonymize';
 import { AiError, appendExchange, createConversation, fetchConversation, type Question, sendAiChat } from './api';
-import { toAiMessages } from './chatHistory';
+import { remaskHistory, toAiMessages } from './chatHistory';
 import { aiKeys } from './hooks';
 import { addPending, takePending } from './pendingSend';
 import { titleFrom } from './retention';
@@ -76,7 +76,8 @@ export function useChatSender({ conversationId, restoreInput, onSent, onReply }:
     tries: number,
   ) => {
     const { aliases, system, model } = context();
-    const messages = toAiMessages(history);
+    // 前のやりとりも今の置き換えにそろえる（材料の口座の名前とずれないように）
+    const messages = toAiMessages(remaskHistory(history, aliases));
     try {
       const reply = await sendAiChat(system, messages);
       // 送り直し待ちにしていた質問を、バックグラウンドですでに送っていたら保存しない（その会話を開き直す）

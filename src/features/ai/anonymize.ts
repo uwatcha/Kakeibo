@@ -82,6 +82,13 @@ function letters(index: number): string {
   return out;
 }
 
+/**
+ * 名前の並びに左右されない順（id の文字の順）。口座の並び順（名前順）は端末によって変わることがあり、
+ * 同じ口座がスマホと PC で別の「電子マネーA・B」になっていた（2026-11-24。PayPay と Suica を取り違えた）
+ */
+const byId = <T extends { id: string }>(items: readonly T[]) =>
+  [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
 export function buildAliases(source: AiSource): Aliases {
   const toReal = new Map<string, string>();
   const toAlias = new Map<string, string>();
@@ -92,7 +99,7 @@ export function buildAliases(source: AiSource): Aliases {
 
   const accountAlias = new Map<string, string>();
   const counts = new Map<string, number>();
-  for (const a of source.accounts) {
+  for (const a of byId(source.accounts)) {
     const prefix = KIND_ALIAS[a.kind];
     const n = counts.get(prefix) ?? 0;
     counts.set(prefix, n + 1);
@@ -102,7 +109,7 @@ export function buildAliases(source: AiSource): Aliases {
   }
 
   const employerAlias = new Map<string, string>();
-  source.employers.forEach((e, i) => {
+  byId(source.employers).forEach((e, i) => {
     const alias = `収入元${letters(i)}`;
     employerAlias.set(e.id, alias);
     remember(e.name, alias);
@@ -135,7 +142,7 @@ function replaceAll(text: string, map: ReadonlyMap<string, string>): string {
 }
 
 /** 自分で打った文の中の名前を、置き換え後の名前にする（「父」のような1文字の名前も、送らないことを優先して置き換える） */
-export function maskText(text: string, aliases: Aliases): string {
+export function maskText(text: string, aliases: Pick<Aliases, 'toAlias'>): string {
   return replaceAll(text, aliases.toAlias);
 }
 

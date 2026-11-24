@@ -1,4 +1,4 @@
-import { MAX_SENT_IMAGES, toAiMessages } from './chatHistory';
+import { MAX_SENT_IMAGES, remaskHistory, toAiMessages } from './chatHistory';
 
 describe('toAiMessages', () => {
   it('画像は JPEG として付ける', () => {
@@ -22,5 +22,24 @@ describe('toAiMessages', () => {
     expect(out[2].files).toHaveLength(12);
     expect(out[0].files).toHaveLength(MAX_SENT_IMAGES);
     expect(out[0].text).toContain('ほかに画像が2枚');
+  });
+});
+
+describe('remaskHistory', () => {
+  it('保存した置き換えではなく、今の置き換えで前のやりとりを置き換え直す', () => {
+    const aliases = {
+      toAlias: new Map([
+        ['口座P', '電子マネーB'],
+        ['口座S', '電子マネーD'],
+      ]),
+    };
+    const history = [
+      { role: 'user' as const, shown: '口座Pの記録を見て', sent: '電子マネーDの記録を見て' },
+      { role: 'model' as const, shown: '口座Pは 102円です', sent: '電子マネーDは 102円です' },
+    ];
+    expect(remaskHistory(history, aliases).map((m) => m.sent)).toEqual([
+      '電子マネーBの記録を見て',
+      '電子マネーBは 102円です',
+    ]);
   });
 });

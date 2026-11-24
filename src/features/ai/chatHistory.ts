@@ -1,3 +1,4 @@
+import { type Aliases, maskText } from './anonymize';
 import type { AiMessage } from './api';
 
 /**
@@ -27,4 +28,16 @@ export function toAiMessages(history: readonly HistoryItem[]): AiMessage[] {
     });
   }
   return out;
+}
+
+/**
+ * 前のやりとりを、今の置き換えで置き換え直す（保存した sent ではなく、元の名前の shown から）。
+ * 置き換えの名前は送るたびに今の口座・記録から作り直すので、保存した sent のままだと、前のやりとりと今の材料で
+ * 同じ口座が別の名前になることがある（2026-11-24。PayPay の記録を Suica のものと読んだ）
+ */
+export function remaskHistory<T extends HistoryItem & { shown: string }>(
+  history: readonly T[],
+  aliases: Pick<Aliases, 'toAlias'>,
+): T[] {
+  return history.map((m) => ({ ...m, sent: maskText(m.shown, aliases) }));
 }

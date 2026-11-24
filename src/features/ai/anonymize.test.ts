@@ -26,7 +26,7 @@ const source: AiSource = {
   accounts: [
     { id: 'bank', name: MAIL_NAMES.bank, kind: 'bank', balance: 31000, includeInAvailable: true },
     { id: 'kenta', name: SAMPLE.friend, kind: 'receivable', balance: 9000, includeInAvailable: true },
-    { id: 'father', name: '父', kind: 'payable', balance: -50000, includeInAvailable: true },
+    { id: 'parent', name: '父', kind: 'payable', balance: -50000, includeInAvailable: true },
   ],
   categories: [category('food', '食費'), category('salary', '給与・アルバイト', 'income')],
   employers: [{ id: 'emp', name: SAMPLE.employer, payday: 25, payday_shift: 'before', is_archived: false }],
@@ -53,7 +53,14 @@ describe('anonymize', () => {
   const context = buildContext(source, aliases);
 
   it('口座・相手・収入元・内容・メモの中身は材料に出さない', () => {
-    for (const secret of [MAIL_NAMES.bank, SAMPLE.friend, '父', SAMPLE.employer, 'セブンイレブン', `${SAMPLE.friend}と行った`]) {
+    for (const secret of [
+      MAIL_NAMES.bank,
+      SAMPLE.friend,
+      '父',
+      SAMPLE.employer,
+      'セブンイレブン',
+      `${SAMPLE.friend}と行った`,
+    ]) {
       expect(context).not.toContain(secret);
     }
   });
@@ -79,5 +86,10 @@ describe('anonymize', () => {
   it('1文字の名前も置き換える', () => {
     expect(maskText('父に返す', aliases)).toBe('相手Bに返す');
     expect(restoreText('相手Bに返します', aliases)).toBe('父に返します');
+  });
+
+  it('口座の番号は並び順ではなく id で決める（端末で並び順が変わっても同じ名前）', () => {
+    const shuffled = buildAliases({ ...source, accounts: [...source.accounts].reverse() });
+    for (const a of source.accounts) expect(shuffled.account(a.id)).toBe(aliases.account(a.id));
   });
 });
