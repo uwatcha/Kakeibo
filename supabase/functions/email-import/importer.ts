@@ -390,6 +390,12 @@ export class Importer {
   }
 
   /** ほかのメールで記録済みの同じ利用（kinds のメールで、まだほかの行と結び付いていない記録） */
+  /**
+   * 同じ利用のもう一方のメール（デビットカードと連携サービス、カードの速報と詳細）で入れた記録を探す。
+   * free = まだこの種類のメールがまとまっていない記録、taken = この種類のメールがもうまとまっている記録
+   * （同じお知らせが2通届いたときの2通目）。写真など、ほかの種類がまとまっていても free とみなす
+   * （2026-11-24: レシートの写真をまとめた記録に銀行のメールがまとまらず、同じ支払いがもう1件入っていた）
+   */
   private async sameUse(kinds: EmailKind[], row: ImportRow, days: number, filter?: (r: ImportRow) => boolean) {
     const { data } = await this.db
       .from('email_imports')
@@ -401,16 +407,19 @@ export class Importer {
       .gte('date', addDays(row.date!, -days))
       .lte('date', addDays(row.date!, days))
       .not('transaction_id', 'is', null);
+    let taken: ImportRow | undefined;
     for (const candidate of ((data ?? []) as ImportRow[]).filter((r) => !filter || filter(r))) {
       const { count } = await this.db
         .from('email_imports')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', this.userId)
         .eq('status', 'merged')
+        .eq('kind', row.kind!)
         .eq('transaction_id', candidate.transaction_id!);
-      if (!count) return candidate;
+      if (!count) return { free: candidate, taken: undefined };
+      taken ??= candidate;
     }
-    return undefined;
+    return { free: undefined, taken };
   }
 
   private async insert(row: ImportRow, values: Record<string, unknown>) {
@@ -429,6 +438,18 @@ export class Importer {
       .single();
     if (error) throw error;
     await this.setStatus(row.id, 'recorded', { transaction_id: data.id });
+  }
+
+  /** 写真から入った・写真をまとめた記録か */
+  private async hasPhoto(transactionId: string) {
+    const { count } = await this.db
+      .from('email_imports')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', this.userId)
+      .eq('kind', 'photo')
+      .eq('transaction_id', transactionId);
+    const { data } = await this.db.from('transactions').select('auto_source').eq('id', transactionId).maybeSingle();
+    return !!count || data?.auto_source === 'photo';
   }
 
   private async fill(transactionId: string, raw: string | null) {
@@ -481,9 +502,10 @@ export class Importer {
     switch (row.kind) {
       case 'debit_mail': {
         // 連携サービス の「サンプルデビット」で先に入れた記録があれば、そこに店名を入れる
-        const bankMail = await this.sameUse(['bank_out'], row, MATCH_DAYS, (r) => isDebitCardName(r.raw_payee));
+        const { free: bankMail } = await this.sameUse(['bank_out'], row, MATCH_DAYS, (r) => isDebitCardName(r.raw_payee));
         if (bankMail) {
-          await this.fill(bankMail.transaction_id!, row.raw_payee);
+          // レシートの写真をまとめた記録なら、店名・カテゴリ・内訳は写真のまま（2026-11-02 ユーザーの指定）
+          if (!(await this.hasPhoto(bankMail.transaction_id!))) await this.fill(bankMail.transaction_id!, row.raw_payee);
           await this.setStatus(row.id, 'merged', { transaction_id: bankMail.transaction_id });
           return;
         }
@@ -494,9 +516,15 @@ export class Importer {
       }
       case 'bank_out': {
         if (isDebitCardName(row.raw_payee)) {
-          const debitMail = await this.sameUse(['debit_mail'], row, MATCH_DAYS);
+          const { free: debitMail, taken } = await this.sameUse(['debit_mail'], row, MATCH_DAYS);
           if (debitMail) {
             await this.setStatus(row.id, 'merged', { transaction_id: debitMail.transaction_id });
+            return;
+          }
+          // 連携サービスから同じ出金のお知らせが2通届くことがある（2026-11-24）。2通目は記録せず重複に
+          // （本当に同じ額の利用が2回あったときは、記録の確認の「重複」から記録できる）
+          if (taken && !force) {
+            await this.setStatus(row.id, 'duplicate', { duplicate_of: taken.transaction_id });
             return;
           }
           if (await duplicate('from_account_id', true)) return;
@@ -568,10 +596,14 @@ export class Importer {
         return;
       }
       case 'card_detail': {
-        const quick = await this.sameUse(['card_quick'], row, 0);
+        const { free: quick, taken } = await this.sameUse(['card_quick'], row, 0);
         if (quick) {
           await this.fill(quick.transaction_id!, row.raw_payee);
           await this.setStatus(row.id, 'merged', { transaction_id: quick.transaction_id });
+          return;
+        }
+        if (taken && !force) {
+          await this.setStatus(row.id, 'duplicate', { duplicate_of: taken.transaction_id });
           return;
         }
         if (await duplicate('from_account_id', true)) return;
