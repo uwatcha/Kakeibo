@@ -23,6 +23,10 @@ const PREVIOUS_TIMEOUT_MS = 1500;
 const CAMERA_OPEN_TIMEOUT_MS = 5000;
 /** カメラの許可を求めて返ってくるのを待つ上限 */
 const PERMISSION_TIMEOUT_MS = 8000;
+/** カメラが出なかったときに、もう一度開くまでの間（新しい画面が前に出きるのを待つ） */
+const REOPEN_MS = 1000;
+/** 撮らずに閉じた結果が来てから、新しくウィジェットが押された知らせを待つ間 */
+const CANCEL_GRACE_MS = 800;
 
 class CameraNotOpened extends Error {}
 
@@ -113,16 +117,28 @@ function waitUntilActive(): Promise<void> {
  */
 async function launchCamera(): Promise<ImagePicker.ImagePickerResult> {
   await waitUntilActive();
-  for (const wait of [...RETRY_MS, null]) {
+  let reopened = false;
+  for (let i = 0; ; i++) {
     try {
       return await launchOnce();
     } catch (e) {
-      // 開く操作はできたのにカメラが出なかったときは、もう一度開くとカメラが2つ出ることがあるので、やり直さない
-      if (wait === null || e instanceof CameraNotOpened) throw e;
+      if (e instanceof CameraNotOpened) {
+        /**
+         * カメラが出なかった。前の画面を閉じたあとに新しくできた画面では、この画面が前に出きる前に開くと、
+         * 閉じた前の画面から開こうとして何も起きない（2026-11-24 エミュレーターで確かめた: 3回目以降に開かなかった）。
+         * 少し待って1回だけ開き直す（前の画面からは開いていないので、カメラが2つ出ることはない）
+         */
+        if (reopened || AppState.currentState !== 'active') throw e;
+        reopened = true;
+        trace('reopen');
+        await new Promise((resolve) => setTimeout(resolve, REOPEN_MS));
+        continue;
+      }
+      const wait = RETRY_MS[i];
+      if (wait === undefined) throw e;
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
-  throw new Error('unreachable');
 }
 
 type Phase = { kind: 'camera' } | { kind: 'reading' } | { kind: 'done'; message: string };
@@ -189,7 +205,15 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
       }
       if (stale()) return;
       const asset = shot.assets?.[0];
-      if (shot.canceled || !asset) return closeQuick();
+      if (shot.canceled || !asset) {
+        /**
+         * カメラを開いたままホーム画面に戻ってもう一度押すと、上のカメラが閉じられて「撮らずに閉じた」が先に戻り、
+         * 新しく押された知らせ（URL）はそのあとに届く。すぐ閉じると新しい回のカメラも開けない（2026-11-24）ので、少し待つ
+         */
+        await new Promise((resolve) => setTimeout(resolve, CANCEL_GRACE_MS));
+        if (stale()) return;
+        return closeQuick();
+      }
       // 小さくして置くまでの1〜2秒だけ出す
       setPhase({ kind: 'reading' });
       const takenAt = Date.now();
