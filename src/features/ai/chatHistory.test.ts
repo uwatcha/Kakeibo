@@ -11,16 +11,16 @@ describe('toAiMessages', () => {
     expect(toAiMessages([{ role: 'model', sent: 'はい', images: null }])).toEqual([{ role: 'model', text: 'はい' }]);
   });
 
-  it('新しいほうから上限まで。古い画像は印だけ', () => {
-    const old = Array.from({ length: 4 }, (_, i) => `old${i}`);
-    const recent = Array.from({ length: MAX_SENT_IMAGES - 2 }, (_, i) => `new${i}`);
+  it('最後の質問の画像は全部。前の画像は新しいほうから上限まで、古い画像は印だけ', () => {
+    const old = Array.from({ length: MAX_SENT_IMAGES + 2 }, (_, i) => `old${i}`);
+    const latest = Array.from({ length: 12 }, (_, i) => `new${i}`);
     const out = toAiMessages([
       { role: 'user', sent: '前', images: old },
       { role: 'model', sent: '答え' },
-      { role: 'user', sent: '今', images: recent },
+      { role: 'user', sent: '今', images: latest },
     ]);
-    expect(out[2].files).toHaveLength(MAX_SENT_IMAGES - 2);
-    expect(out[0].files).toHaveLength(2);
+    expect(out[2].files).toHaveLength(12);
+    expect(out[0].files).toHaveLength(MAX_SENT_IMAGES);
     expect(out[0].text).toContain('ほかに画像が2枚');
   });
 });

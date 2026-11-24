@@ -265,8 +265,8 @@ Deno.serve(async (req) => {
         if (!settings?.model || !(settings.gemini_api_key || settings.anthropic_api_key)) {
           return json({ error: 'API キーを登録してください' }, 400);
         }
-        // AI入力は1回に10件まで（アプリの useAttachments の MAX_FILES と同じ）
-        const files = ((body.files ?? []) as { mimeType: string; data: string }[]).slice(0, 10);
+        // AI入力の画像・ファイルの数に上限はない（2026-11-24 ユーザーの指定）
+        const files = (body.files ?? []) as { mimeType: string; data: string }[];
         const text = String(body.text ?? '').slice(0, 200_000);
         const system = String(body.system ?? '');
         const { out, model: used } = await generateAny(

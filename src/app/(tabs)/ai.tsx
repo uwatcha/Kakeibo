@@ -12,7 +12,6 @@ import { QueriesState } from '@/components/QueryState';
 import { useAccountBalances, useAccounts, useBalanceMap } from '@/features/accounts/hooks';
 import { buildAliases, maskText } from '@/features/ai/anonymize';
 import { buildChatSystem } from '@/features/ai/chatContext';
-import { MAX_IMAGES_PER_MESSAGE } from '@/features/ai/chatHistory';
 import { AiImport } from '@/features/ai/components/AiImport';
 import { AutoTitler } from '@/features/ai/components/AutoTitler';
 import { dataUriToJpegBase64, toJpegBase64 } from '@/features/ai/image';
@@ -87,15 +86,8 @@ export default function AiChatScreen() {
   // スマホの画像のボタンのメニュー（選ぶ・撮る・貼る）
   const [imageMenu, setImageMenu] = useState(false);
 
-  /** 画像を足す（1回に添えられる数まで） */
-  const appendImages = (added: string[]) => {
-    setImages((list) => {
-      if (list.length + added.length > MAX_IMAGES_PER_MESSAGE) {
-        setImageError(`1回に添えられる画像は${MAX_IMAGES_PER_MESSAGE}枚までです`);
-      }
-      return [...list, ...added].slice(0, MAX_IMAGES_PER_MESSAGE);
-    });
-  };
+  /** 画像を足す（枚数の上限はない。2026-11-24 ユーザーの指定） */
+  const appendImages = (added: string[]) => setImages((list) => [...list, ...added]);
 
   // Web 版: コピーした画像を Cmd+V（Ctrl+V）で貼れる（相談を開いているときだけ。文の貼り付けはそのまま。2026-11-24）
   useEffect(() => {
@@ -268,24 +260,18 @@ export default function AiChatScreen() {
         setImageError('カメラを使う許可がありません');
         return;
       }
-      const room = MAX_IMAGES_PER_MESSAGE - images.length;
-      if (room <= 0) {
-        setImageError(`1回に添えられる画像は${MAX_IMAGES_PER_MESSAGE}枚までです`);
-        return;
-      }
       const result = camera
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             quality: 0.8,
             allowsMultipleSelection: true,
-            selectionLimit: room,
+            selectionLimit: 0,
             orderedSelection: true,
           });
       if (result.canceled || !result.assets?.length) return;
-      const picked = await Promise.all(result.assets.slice(0, room).map((a) => toJpegBase64(a.uri, a.width)));
-      setImages((list) => [...list, ...picked].slice(0, MAX_IMAGES_PER_MESSAGE));
-      if (result.assets.length > room) setImageError(`1回に添えられる画像は${MAX_IMAGES_PER_MESSAGE}枚までです`);
+      const picked = await Promise.all(result.assets.map((a) => toJpegBase64(a.uri, a.width)));
+      appendImages(picked);
     } catch {
       setImageError('画像を読み込めませんでした');
     }

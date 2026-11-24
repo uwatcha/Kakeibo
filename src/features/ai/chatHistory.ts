@@ -1,21 +1,23 @@
 import type { AiMessage } from './api';
 
-/** 1回に AI に送る画像の数（新しいものから。古い画像は「画像あり」の印だけにして、送る量を抑える） */
+/**
+ * 前の質問の画像を AI に送る数（新しいものから。古い画像は「画像あり」の印だけにして、送る量を抑える）。
+ * 今送る質問の画像は、枚数にかかわらず全部送る（添える枚数の上限はない。2026-11-24 ユーザーの指定）
+ */
 export const MAX_SENT_IMAGES = 8;
-/** 1つの質問に添えられる画像の数 */
-export const MAX_IMAGES_PER_MESSAGE = 4;
 
 type HistoryItem = { role: 'user' | 'model'; sent: string; images?: string[] | null };
 
-/** 会話を AI に送る形にする。画像は新しいほうから MAX_SENT_IMAGES 枚まで付け、それより古い画像は文に印だけ残す */
+/** 会話を AI に送る形にする。最後の質問の画像は全部、それより前は新しいほうから MAX_SENT_IMAGES 枚まで付け、古い画像は文に印だけ残す */
 export function toAiMessages(history: readonly HistoryItem[]): AiMessage[] {
   let left = MAX_SENT_IMAGES;
   const out: AiMessage[] = [];
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i];
     const images = m.images ?? [];
-    const sent = images.slice(0, Math.max(0, left));
-    left -= sent.length;
+    const isLast = i === history.length - 1;
+    const sent = isLast ? images : images.slice(0, Math.max(0, left));
+    if (!isLast) left -= sent.length;
     const dropped = images.length - sent.length;
     const text = dropped > 0 ? `${m.sent}\n（ほかに画像が${dropped}枚ありましたが、古いので省きました）` : m.sent;
     out.unshift({

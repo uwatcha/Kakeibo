@@ -7,8 +7,6 @@ import { toJpegBase64 } from './image';
 
 /** 写真・PDF などは base64 で送る。大きすぎると送れないので、この大きさまで */
 const MAX_BASE64 = 8_000_000;
-/** 1回に読み取るファイルの数（Edge Function ai-chat の extract も同じ数まで受け取る） */
-export const MAX_FILES = 10;
 /** テキストのファイルは、この文字数まで */
 const MAX_TEXT = 150_000;
 
@@ -27,10 +25,8 @@ export function useAttachments() {
 
   const add = (...next: Attachment[]) => {
     setError(null);
-    setAttachments((list) => {
-      if (list.length + next.length > MAX_FILES) setError(`1回に読み取れるのは${MAX_FILES}件までです`);
-      return [...list, ...next].slice(0, MAX_FILES);
-    });
+    // 枚数の上限はない（2026-11-24 ユーザーの指定）
+    setAttachments((list) => [...list, ...next]);
   };
 
   /**
@@ -49,7 +45,7 @@ export function useAttachments() {
             mediaTypes: ['images'],
             quality: 0.8,
             allowsMultipleSelection: true,
-            selectionLimit: MAX_FILES,
+            selectionLimit: 0,
             orderedSelection: true,
           });
       if (result.canceled || !result.assets?.length) return;
