@@ -17,6 +17,8 @@ const CLOSE_AFTER_MS = 2500;
 const ACTIVE_TIMEOUT_MS = 3000;
 /** カメラを開けなかったときに、やり直すまでの間 */
 const RETRY_MS = [500, 1500];
+/** 前に開いたカメラが片付く（閉じた結果が戻る）のを待つ上限 */
+const PREVIOUS_TIMEOUT_MS = 1500;
 
 /** 画面が前面に出る（AppState が active になる）まで待つ。出なくても ACTIVE_TIMEOUT_MS で進む */
 function waitUntilActive(): Promise<void> {
@@ -63,13 +65,22 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
   const theme = useTheme();
   const [phase, setPhase] = useState<Phase>({ kind: 'camera' });
   const started = useRef<number | null>(null);
+  // 前に開いたカメラ（閉じた結果が戻るまで）
+  const previousLaunch = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     if (started.current === nonce) return;
     started.current = nonce;
+    /**
+     * もっと新しくウィジェットが押された。カメラを開いたままホーム画面に戻ってもう一度押すと、この画面は singleTask
+     * なので上のカメラが閉じられ、前の回は「撮らずに閉じた」として戻ってくる。そこで画面を閉じると、新しい回の
+     * カメラまで消えていた（2026-11-24）。古い回の結果は何もしない
+     */
+    const stale = () => started.current !== nonce;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // 画面は少しで閉じるので、失敗は通知にも残す（2026-11-24 ユーザーの要望）
     const finish = (message: string) => {
+      if (stale()) return;
       setPhase({ kind: 'done', message });
       notifyQuickPhotoFailure(message);
       timer = setTimeout(closeQuick, CLOSE_AFTER_MS);
@@ -79,14 +90,21 @@ export function QuickPhoto({ nonce }: { nonce: number }) {
       await waitUntilActive();
       const permission = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
       if (!permission?.granted) return finish('カメラを使う許可がありません');
+      setPhase({ kind: 'camera' });
       let shot: ImagePicker.ImagePickerResult;
       try {
-        shot = await launchCamera();
+        // 前の回のカメラが閉じた結果を受け取り終えてから開く（同時に開くと結果の受け取りが混ざる）
+        await Promise.race([previousLaunch.current, new Promise((r) => setTimeout(r, PREVIOUS_TIMEOUT_MS))]);
+        if (stale()) return;
+        const launch = launchCamera();
+        previousLaunch.current = launch.catch(() => undefined);
+        shot = await launch;
       } catch (e) {
         return finish(
           `カメラを開けませんでした。もう一度ウィジェットを押してください（${e instanceof Error ? e.message : String(e)}）`,
         );
       }
+      if (stale()) return;
       const asset = shot.assets?.[0];
       if (shot.canceled || !asset) return closeQuick();
       // 小さくして置くまでの1〜2秒だけ出す
